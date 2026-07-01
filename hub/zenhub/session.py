@@ -7,6 +7,7 @@ crashing the Hub.
 """
 from __future__ import annotations
 
+import getpass
 import os
 import shutil
 import socket
@@ -39,6 +40,24 @@ def _run(argv: list[str], ok: str) -> str:
     return ok
 
 
+def _run_get(argv: list[str], fallback: str) -> str:
+    """Run a read-only 'get' helper; return its first output line, never raise."""
+    exe = argv[0]
+    path = HW_BIN / exe
+    if path.exists():
+        argv = [str(path), *argv[1:]]
+    elif shutil.which(exe) is None:
+        return fallback
+    try:
+        res = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+    except Exception:
+        return fallback
+    if res.returncode != 0:
+        return fallback
+    out = res.stdout.strip()
+    return out.splitlines()[0] if out else fallback
+
+
 # ── Functions Control actions (spec §5 — real toggles only) ──────────────────
 
 def set_brightness(percent: int) -> str:
@@ -54,6 +73,62 @@ def toggle_second_screen(on: bool) -> str:
 
 def set_power_profile(profile: str) -> str:
     return _run(["powerprofilesctl", "set", profile], f"power profile → {profile}")
+
+
+def get_brightness_status() -> str:
+    """Current synced backlight level, for the FUNCTIONS live-status column."""
+    return _run_get(["backlight-sync", "get"], "n/a")
+
+
+def get_second_screen_status() -> str:
+    """Current eDP-2 (bottom panel) on/off state."""
+    return _run_get(["duo-screen-toggle", "status"], "n/a")
+
+
+def get_power_profile_status() -> str:
+    """Current power-profiles-daemon profile."""
+    return _run_get(["powerprofilesctl", "get"], "n/a")
+
+
+# ── System Status (read-only identity + basic health checks) ─────────────────
+
+def get_user_identity() -> tuple[str, str]:
+    """Return (username, uid) for display. Never raises."""
+    try:
+        name = getpass.getuser()
+    except Exception:
+        name = os.environ.get("USER", "unknown")
+    return name, str(os.getuid())
+
+
+def check_network() -> bool:
+    """Best-effort: is there an active, connected network link."""
+    if shutil.which("nmcli"):
+        try:
+            res = subprocess.run(["nmcli", "-t", "-f", "STATE", "general"],
+                                  capture_output=True, text=True, timeout=3)
+            return res.returncode == 0 and res.stdout.strip().lower() == "connected"
+        except Exception:
+            pass
+    try:
+        res = subprocess.run(["ip", "-o", "addr", "show", "scope", "global"],
+                              capture_output=True, text=True, timeout=3)
+        return res.returncode == 0 and bool(res.stdout.strip())
+    except Exception:
+        return False
+
+
+def check_audio() -> bool:
+    """Best-effort: is a sound card present and visible to ALSA."""
+    try:
+        return bool(Path("/proc/asound/cards").read_text().strip())
+    except OSError:
+        return False
+
+
+def check_frank() -> bool:
+    """Is frankd reachable over its IPC socket (spec §6)."""
+    return FrankClient().is_alive()
 
 
 # ── Overseer ledger (visible: timestamps only — spec §6) ─────────────────────
@@ -81,6 +156,16 @@ class FrankClient:
 
     def __init__(self, path: str = FRANK_SOCK):
         self.path = path
+
+    def is_alive(self) -> bool:
+        """Connectivity-only check: is frankd listening at all."""
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.connect(self.path)
+            return True
+        except OSError:
+            return False
 
     def _send(self, line: str) -> str | None:
         try:

@@ -5,8 +5,8 @@ install/04, install/05). Off-device, calls return a clear status string.
 """
 from __future__ import annotations
 
-from .. import labels, session
-from ..app import MenuScreen
+from .. import labels, session, theme
+from ..app import MenuScreen, Launch
 from ..ui import MenuItem
 
 
@@ -34,13 +34,33 @@ def _power_screen():
     return MenuScreen(labels.FN_POWER_PROFILE, items)
 
 
+def _theme_screen():
+    def _pal(name):
+        def action(app):
+            theme.set_palette(name)
+            theme.init(app.stdscr)
+            app.status_message = f"palette → {name} (restart Hub to fully apply)"
+        return action
+    items = [
+        MenuItem("AMBER PHOSPHOR", _pal(theme.PALETTE_AMBER)),
+        MenuItem("GREEN PHOSPHOR", _pal(theme.PALETTE_GREEN)),
+        MenuItem("SOUND (mixer)", lambda a: Launch(["alsamixer"]), hint="alsamixer"),
+    ]
+    return MenuScreen(labels.FN_THEME, items)
+
+
 def screen():
     items = [
-        MenuItem(labels.FN_BRIGHTNESS, lambda a: _brightness_screen()),
+        MenuItem(labels.FN_BRIGHTNESS, lambda a: _brightness_screen(),
+                 status=session.get_brightness_status),
         MenuItem(f"{labels.FN_SECOND_SCREEN} · ON",
-                 _set_status(lambda: session.toggle_second_screen(True))),
+                 _set_status(lambda: session.toggle_second_screen(True)),
+                 status=session.get_second_screen_status),
         MenuItem(f"{labels.FN_SECOND_SCREEN} · OFF",
                  _set_status(lambda: session.toggle_second_screen(False))),
-        MenuItem(labels.FN_POWER_PROFILE, lambda a: _power_screen()),
+        MenuItem(labels.FN_POWER_PROFILE, lambda a: _power_screen(),
+                 status=session.get_power_profile_status),
+        MenuItem(labels.FN_THEME, lambda a: _theme_screen(),
+                 status=lambda: theme.get_palette().upper()),
     ]
     return MenuScreen(labels.FUNCTIONS, items)

@@ -54,8 +54,9 @@ def _load():
 def screen():
     items: list[MenuItem] = []
     for bucket, games in _load().items():
+        items.append(MenuItem("", enabled=False))  # gap above the section title
         items.append(MenuItem(f"— {bucket.upper()} —", enabled=False))
+        items.append(MenuItem("", enabled=False))  # gap below the section title
         for name, argv in games:
-            items.append(MenuItem(name, (lambda av: (lambda a: Launch(av)))(argv),
-                                  hint=argv[0]))
+            items.append(MenuItem(name, (lambda av: (lambda a: Launch(av)))(argv)))
     return MenuScreen(labels.RECREATION, items)

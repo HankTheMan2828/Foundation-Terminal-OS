@@ -21,13 +21,21 @@ so approving them is a single-file edit. Current drafts:
 | Programs           | `PROGRAMS`            | `UTILITIES`           |
 | Recreation         | `RECREATION`          | `LEISURE SUBSYSTEM`   |
 | Functions Control  | `FUNCTIONS`           | `SYSTEMS CONTROL`     |
-| Settings           | `CONFIGURATION`       | `SETTINGS`            |
+| System Status (was Settings) | `SYSTEM STATUS` | — |
 | Log                | `LOGS`                | `RECORDS`             |
 | Personal Notes     | `PERSONAL FILE`       | `OPERATOR JOURNAL`    |
 | AI Chat            | `ASSISTANT`           | `ADVISORY`            |
 
 Sub-labels (Log split, Notes split, etc.) are also in `labels.py`. **Status:
 🟨 awaiting sign-off — tell me a set and I'll lock it.**
+
+**✅ Settings → System Status, approved and applied.** The user decided the
+old Settings/Configuration area shouldn't exist as an operator-facing settings
+surface at all — resource limits and user/auth actions (`passwd`) are removed
+outright. What's left under `SYSTEM STATUS`: NETWORK (still launches `nmtui`),
+a read-only USER line (username + uid), and a FUNCTIONS list of basic
+functioning/not-functioning checks (network, audio, the Frank overseer).
+THEME & SOUND moved to `FUNCTIONS` alongside the other real hardware toggles.
 
 ## 2. Recreation game list (spec §5, §10)
 

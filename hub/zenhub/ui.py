@@ -45,7 +45,7 @@ def draw_chrome(win, title: str, subtitle: str = "", *, scanlines: bool = True) 
     if subtitle:
         _center(win, 2, subtitle, theme.attr(theme.PAIR_DIM, dim=True))
     try:
-        win.hline(3, 2, curses.ACS_HLINE, w - 4, )
+        win.hline(3, 1, curses.ACS_HLINE, w - 2)
     except curses.error:
         pass
     return (5, 4)
@@ -75,11 +75,15 @@ class MenuItem:
     """One selectable row. `action` gets the App; return value drives navigation."""
 
     def __init__(self, label: str, action: Optional[Callable] = None,
-                 *, hint: str = "", enabled: bool = True):
+                 *, hint: str = "", enabled: bool = True,
+                 status: Optional[Callable[[], str]] = None):
         self.label = label
         self.action = action
         self.hint = hint
         self.enabled = enabled
+        # Optional live status, e.g. current brightness — right-aligned in the
+        # row, re-evaluated on every draw so it never goes stale.
+        self.status = status
 
 
 class Menu:
@@ -88,6 +92,11 @@ class Menu:
     def __init__(self, items: list[MenuItem]):
         self.items = items
         self.index = 0
+        if items and not items[0].enabled:
+            for i, item in enumerate(items):
+                if item.enabled:
+                    self.index = i
+                    break
 
     def move(self, delta: int) -> None:
         n = len(self.items)
@@ -115,6 +124,10 @@ class Menu:
 
     def draw(self, win, top: int, left: int) -> None:
         h, w = win.getmaxyx()
+        # Mirror the left margin on the right so the highlight bar is
+        # symmetric inside the border (content starts at `left`, so the
+        # left margin is `left - 1` blank columns after the border).
+        width = max(0, w - 2 * left)
         for row, item in enumerate(self.items):
             y = top + row
             if y >= h - 2:
@@ -131,9 +144,15 @@ class Menu:
                 marker = "  "
             text = f"{marker}{item.label}"
             if item.hint:
-                text = f"{text}".ljust(28) + item.hint
+                text = text.ljust(28) + item.hint
+            status = item.status() if item.status else ""
+            if status:
+                gap = max(1, width - len(text) - len(status))
+                line = text + (" " * gap) + status
+            else:
+                line = text
             try:
-                win.addstr(y, left, text[: w - left - 2].ljust(min(40, w - left - 2)), a)
+                win.addstr(y, left, line[:width].ljust(width), a)
             except curses.error:
                 pass
 
