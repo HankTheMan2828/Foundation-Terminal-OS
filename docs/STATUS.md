@@ -12,12 +12,12 @@ Legend: ✅ working · 🟨 skeleton/partial · ⬜ stub/placeholder · ⏸ defe
 | # | Item | State | Notes |
 |---|------|-------|-------|
 | 1 | Base Arch install, linux-lts, minimal packages | 🟨 | `install/00`,`install/01`, `install/packages.txt`. Scripts written; not run on hardware yet. |
-| 2 | Verify second-screen on chosen kernel | ⬜ | Cannot verify off-device. `install/01` documents the pin + verification steps for you to run. |
+| 2 | Verify second-screen on chosen kernel | ⬜ | Cannot verify off-device. Device-specific; gate now lives in `profiles/zenbook-duo-2024/install.sh`, not the generic core. |
 | 3 | cage + kitty kiosk, boot past any DM | 🟨 | `install/02`, `system/.../getty autologin`, `zenhub-session`. |
 | 4 | Plymouth text theme, GRUB cleanup | 🟨 | `install/03`, `theme/plymouth/`. |
 | 5 | Custom curses TUI shell (nav skeleton) | ✅ | `hub/zenhub` runs now: `python3 -m zenhub`. All 7 areas navigable. |
-| 6 | Zenbook hardware scripts | 🟨 | `hardware/` scripts ported to wlr-randr; keyboard-detach event hook present. Not hardware-tested. |
-| 7 | Fix NOPASSWD sudo → polkit | 🟨 | `system/etc/polkit-1/rules.d/50-zenbook-backlight.rules` + scoped helper. |
+| 6 | Zenbook hardware scripts | 🟨 | Moved to `profiles/zenbook-duo-2024/hardware/`, ported to wlr-randr; keyboard-detach event hook present. Not hardware-tested. Applied only via `HARDWARE_PROFILE=zenbook-duo-2024` — see `docs/PROFILES.md`. |
+| 7 | Fix NOPASSWD sudo → polkit | 🟨 | `profiles/zenbook-duo-2024/system/etc/polkit-1/rules.d/50-zenbook-backlight.rules` + scoped helper. |
 | 8 | Home Hub sub-areas | 🟨 | All screens exist; Functions/Settings/Programs/Notes/Log wired to real actions or clear stubs; Recreation reads a config list; AI Chat offline-gated. |
 | 9 | Frank: rules → Mistral → enforcement → ledger | 🟨 | Rule engine ✅ + unit-tested. Enforcement state machine ✅ + tested. Mistral client 🟨 offline-safe. Ledger 🟨. Daemon wiring 🟨 with stub data sources. **Operator has zero power over Frank:** read-only IPC ✅ tested, no sensitivity knob, root `frank-enforcer` applies lockouts (session vs. machine reboot semantics ✅ tested), machine locks survive reboot. The root locker's VT/DRM takeover is `TODO(hardware)`. |
 | 10 | Sound + CRT visual pass | ⬜ | `sounds/`, `theme/` have structure + hooks; assets are placeholders. |

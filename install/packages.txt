@@ -1,10 +1,15 @@
-# Package set for the Terminal OS (spec §1 minimal). Grouped by purpose.
-# Consumed by install/00-base-packages.sh. One package per line; # = comment.
+# Package set for the generic Terminal OS core (spec §1 minimal). No specific
+# device is assumed here — see profiles/$HARDWARE_PROFILE/packages.txt for
+# anything a hardware profile adds on top (00-base-packages.sh installs both).
+# Grouped by purpose. One package per line; # = comment.
 
 # --- kernel (spec §1: linux-lts, pinned) ---
 linux-lts
 linux-lts-headers
 linux-firmware
+# CPU microcode is vendor-specific; a profile targeting an AMD device should
+# add amd-ucode instead. intel-ucode is a reasonable generic default since
+# it's a no-op on non-Intel CPUs, but move it to a profile if that stops being true.
 intel-ucode
 
 # --- kiosk display stack (spec §2) ---
@@ -17,12 +22,9 @@ seatd           # seat management for cage without logind session juggling
 grub
 plymouth        # text theme only; real boot log stays visible
 
-# --- hardware glue (spec §7, Zenbook Duo) ---
-iio-sensor-proxy  # rotation
-libwacom          # bottom-panel digitizer quirks
-brightnessctl     # backlight helper (scoped via polkit, not NOPASSWD sudo)
-power-profiles-daemon
-bluez             # detachable BT keyboard
+# --- generic hardware helpers (harmless no-ops if the machine lacks the device) ---
+power-profiles-daemon  # backs the Functions Control power-profile toggle
+bluez                   # Bluetooth peripherals in general
 bluez-utils
 
 # --- the Hub + Frank runtime (spec §4, §6) ---

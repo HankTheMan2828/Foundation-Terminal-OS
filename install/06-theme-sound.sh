@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 08 — CRT visual theme + retro soundscape (spec §8, §10, §11.10).
+# 06 — CRT visual theme + retro soundscape (spec §8, §10, §11.10).
 source "$(dirname "$0")/common.sh"
 require_root
 c_step "Theme + sound"

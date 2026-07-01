@@ -1,9 +1,13 @@
 # Zenbook Duo Terminal OS
 
-A fully console-based Arch Linux system for the 2024 Asus Zenbook Duo
-(UX8406MA). No desktop environment, no window-manager chrome, no typed shell
-commands in normal use. The machine is navigated like a Fallout&nbsp;4 terminal
-or an Aperture Science console: **highlight an option, press Enter.**
+A fully console-based Arch Linux system. The core targets no specific device
+— any x86_64 machine that can run Arch and a Wayland compositor works. It
+ships with one hardware profile, for the 2024 Asus Zenbook Duo (UX8406MA),
+which is where the project started; see [`docs/PROFILES.md`](docs/PROFILES.md)
+for how that's kept separate from the core, and how to add another. No desktop
+environment, no window-manager chrome, no typed shell commands in normal use.
+The machine is navigated like a Fallout&nbsp;4 terminal or an Aperture Science
+console: **highlight an option, press Enter.**
 
 Login drops straight into a custom curses TUI (the "Home Hub") that *is* the
 login shell — there is no bash prompt to fall back to. An always-on
@@ -28,9 +32,10 @@ This is **not** a disk image. It is a set of:
 - **The Home Hub** (`hub/`) — the curses TUI that serves as the login shell.
 - **Frank** (`frank/`) — the overseer daemon: rule engine, enforcement,
   ledger, optional Mistral commentary.
-- **Hardware ports** (`hardware/`) — Zenbook Duo glue (display topology,
-  brightness sync, keyboard detach, rotation, battery limit) reimplemented
-  against `wlr-randr`/`cage` instead of GNOME.
+- **Hardware profiles** (`profiles/`) — optional, per-device glue (display
+  topology, brightness sync, keyboard detach, rotation, battery limit),
+  applied only when selected. The core never depends on one existing. See
+  [`docs/PROFILES.md`](docs/PROFILES.md).
 - **Theme + sound** (`theme/`, `sounds/`) — amber/green CRT phosphor look and
   the retro soundscape.
 - **Docs** (`docs/`) — the full build spec, architecture, and the running list
@@ -38,11 +43,17 @@ This is **not** a disk image. It is a set of:
 
 ## Target hardware
 
-- Asus Zenbook Duo 2024 (**UX8406MA**), Intel Meteor Lake
-- Dual eDP panels: `eDP-1` (top/primary), `eDP-2` (bottom/secondary)
-- Detachable Bluetooth keyboard
-- Kernel: `linux-lts`, pinned (see `install/01-kernel-lts.sh` for the
-  second-screen i915 regression rationale)
+The core (`install/00`–`06`) assumes nothing beyond "x86_64 machine that can
+run Arch Linux and a Wayland kiosk compositor." Device-specific hardware is
+opt-in via a profile:
+
+- **`zenbook-duo-2024`** — Asus Zenbook Duo 2024 (UX8406MA), Intel Meteor
+  Lake, dual eDP panels (`eDP-1` top, `eDP-2` bottom), detachable Bluetooth
+  keyboard, plus the manual kernel-regression gate that only applies to this
+  device. See [`profiles/zenbook-duo-2024/README.md`](profiles/zenbook-duo-2024/README.md).
+
+With no profile selected you get the generic kiosk core with no laptop-specific
+services, udev rules, or polkit grants installed.
 
 ## Quick start (on the target machine)
 
@@ -52,11 +63,15 @@ This is **not** a disk image. It is a set of:
 ```sh
 git clone <this-repo> /opt/zenbook-terminal-os
 cd /opt/zenbook-terminal-os
-sudo ./install/run-all.sh        # or run install/NN-*.sh individually
+sudo ./install/run-all.sh        # generic core only
+
+# or, building a release for a specific device:
+HARDWARE_PROFILE=zenbook-duo-2024 sudo -E ./install/run-all.sh
 ```
 
 Each install script is idempotent and prints what it will do. Read
-[`docs/INSTALL.md`](docs/INSTALL.md) before running anything.
+[`docs/INSTALL.md`](docs/INSTALL.md) and [`docs/PROFILES.md`](docs/PROFILES.md)
+before running anything.
 
 ## Try the Home Hub without installing
 
@@ -84,11 +99,11 @@ locked until you sign off.
 
 ```
 docs/        Spec, architecture, install guide, open decisions, status
-install/     Ordered, idempotent installer scripts + package lists
+install/     Ordered, idempotent installer scripts + package lists (generic core)
 system/      Files copied onto the target root (/etc, /usr/local, ...)
 hub/         zenhub — the curses login-shell TUI (Home Hub)
 frank/       frankd — the overseer daemon (rules, enforcement, ledger, AI)
-hardware/    Zenbook Duo hardware glue ported to wlr-randr/cage
+profiles/    Optional per-device hardware profiles (e.g. zenbook-duo-2024)
 theme/       kitty/foot config, CRT palettes, Plymouth text theme
 sounds/      Retro soundscape assets + playback hooks
 ```

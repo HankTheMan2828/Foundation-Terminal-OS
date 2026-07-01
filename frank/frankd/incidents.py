@@ -21,7 +21,7 @@ class IncidentStore:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        # 0600 — owner (frank) only. Enforced again by install/07-frank.sh.
+        # 0600 — owner (frank) only. Enforced again by install/05-frank.sh.
         if not self.path.exists():
             self.path.touch(mode=0o600)
 

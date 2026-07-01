@@ -1,0 +1,6 @@
+# Packages this profile adds on top of the generic core (install/packages.txt).
+# Consumed by profiles/zenbook-duo-2024/install.sh. One package per line; # = comment.
+
+iio-sensor-proxy  # rotation (dual-panel/tablet-mode sensing)
+libwacom          # bottom-panel digitizer quirks
+brightnessctl     # backlight helper (scoped via polkit, not NOPASSWD sudo)

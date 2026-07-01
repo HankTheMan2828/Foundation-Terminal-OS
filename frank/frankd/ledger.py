@@ -6,8 +6,10 @@ deliberate design choice: the operator must not be able to reason about what
 tripped a flag.
 
 There are two stores and they must never be confused:
-  * ledger.timestamps  — this file. Timestamps only. Readable for display,
-    piped to eDP-2 on keyboard detach.
+  * ledger.timestamps  — this file. Timestamps only. Readable for display;
+    some hardware profiles pipe it to a second panel on keyboard detach
+    (see profiles/zenbook-duo-2024/), but that delivery mechanism is optional
+    and lives outside this module.
   * incidents.db       — the full detail (what/why/content). frank:frank 0600.
     Never surfaced through any interface. Written by incidents.py, not here.
 

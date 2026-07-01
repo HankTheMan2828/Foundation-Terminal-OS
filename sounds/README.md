@@ -7,7 +7,7 @@ of visual/keypress feedback. **v1 status: wired, assets are placeholders.**
   (the login shell) if present. Plays ambient hum on loop and responds to event
   cues (warning buzz, select blip) written to a small control fifo.
 - `assets/` — `.wav` cues. Currently silent placeholders / `.gitkeep`; drop real
-  audio here and `install/08-theme-sound.sh` copies them to
+  audio here and `install/06-theme-sound.sh` copies them to
   `/usr/share/zenhub/sounds/`.
 
 The dedicated sound + visual pass is spec §11.10 — after the subsystems are

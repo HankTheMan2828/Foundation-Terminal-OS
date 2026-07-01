@@ -3,6 +3,14 @@
 > This is the authoritative specification as provided. It is preserved verbatim
 > as the source of truth. Implementation notes and decisions derived from it
 > live in the other files in `docs/`.
+>
+> **Implementation note:** the spec below was written around one device (§1,
+> §7). The build keeps every device-specific requirement (kernel gate,
+> `hardware/*`, polkit rule, systemd units for display/battery/ledger-on-detach)
+> isolated in `profiles/zenbook-duo-2024/`, applied only when
+> `HARDWARE_PROFILE=zenbook-duo-2024` is set. Everything else in this spec
+> (§2–§6, §8–§10) is implemented as generic core with no device assumption.
+> See [`PROFILES.md`](PROFILES.md).
 
 ## Vision
 

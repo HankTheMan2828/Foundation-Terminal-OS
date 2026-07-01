@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 06 — install zenhub and make it the operator's LOGIN SHELL (spec §4, §11.8).
+# 04 — install zenhub and make it the operator's LOGIN SHELL (spec §4, §11.8).
 source "$(dirname "$0")/common.sh"
 require_root
 c_step "Home Hub: install zenhub, set as login shell"

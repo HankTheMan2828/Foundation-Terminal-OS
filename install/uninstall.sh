@@ -28,6 +28,12 @@ if is_arch; then
 fi
 c_ok "stopped Frank services (this is the root/rescue recovery path, not an in-session one)"
 
+# 3b) Reverse a hardware profile's changes, if one was applied.
+if [[ -n "$HARDWARE_PROFILE" && -x "$PROFILE_DIR/uninstall.sh" ]]; then
+  c_info "reversing hardware profile: $HARDWARE_PROFILE"
+  "$PROFILE_DIR/uninstall.sh"
+fi
+
 # 4) Optionally purge incident data.
 if [[ $PURGE -eq 1 ]]; then
   rm -rf /var/lib/frank && c_warn "purged /var/lib/frank (incident data gone)"

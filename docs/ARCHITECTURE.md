@@ -38,6 +38,8 @@ exposing a shell.
 
 ## Processes on a running system
 
+Generic core (present regardless of hardware profile):
+
 | Unit / process                | Scope      | Runs as | Purpose |
 |-------------------------------|------------|---------|---------|
 | `getty@tty1` (autologin)      | system     | root→operator | drops into the session |
@@ -45,9 +47,15 @@ exposing a shell.
 | `python -m zenhub`            | user login | operator | Home Hub TUI (the shell) |
 | `frankd.service`              | system     | `frank`  | overseer daemon — decides (§6) |
 | `frank-enforcer.service`      | system     | **root** | applies lockouts the operator can't bypass (§6) |
+| `zenhub-sound.service`        | user login | operator | ambient hum + event sounds |
+
+Added by the `zenbook-duo-2024` hardware profile only (see
+[`PROFILES.md`](PROFILES.md)) — absent on a generic-core install:
+
+| Unit / process                | Scope      | Runs as | Purpose |
+|-------------------------------|------------|---------|---------|
 | `frank-ledger.service`        | system     | `frank`  | pipes timestamp ledger to eDP-2 on keyboard detach |
 | `duo-hardware.service`        | system     | root/polkit | display/rotation/brightness/battery glue |
-| `zenhub-sound.service`        | user login | operator | ambient hum + event sounds |
 
 Frank runs as its **own system user** (`frank`), not as `operator`. This is the
 core of the §6 config-protection model: the `operator` account has no read/write
@@ -182,17 +190,29 @@ Everything the user "does" that isn't navigation is a `launch()` into a real
 program (ranger, btop, nethack, …). The Hub is glue + chrome + the Frank-facing
 surfaces; it does not reimplement those tools.
 
-## Hardware glue (Zenbook Duo)
+## Hardware glue is a profile, not core
 
-Ported from `alesya-h/zenbook-duo-2024-ux8406ma-linux`, GNOME parts replaced:
+None of the above (boot chain, Hub, Frank) depends on any specific device.
+Device-specific glue lives entirely under `profiles/<name>/` and is only
+applied when `HARDWARE_PROFILE` is set (see [`PROFILES.md`](PROFILES.md)).
+The Hub calls into hardware helpers only through `hub/zenhub/session.py`'s
+`HW_BIN` indirection, which degrades gracefully to "not available" when no
+profile — or a different one — is installed; nothing in the core branches on
+device identity.
 
-- `hardware/duo-watch-displays` — was GNOME session watcher; now drives
-  `wlr-randr` against cage.
-- `hardware/duo-screen-toggle` — was `gnome-monitor-config`; now `wlr-randr`.
-- `hardware/duo-keyboard-detach` — udev-driven; emits a single event consumed by
-  **both** display topology and Frank's ledger service.
-- `hardware/backlight-sync` — syncs eDP-1/eDP-2 brightness via
+The one shipped profile, `zenbook-duo-2024`, is ported from
+`alesya-h/zenbook-duo-2024-ux8406ma-linux` with GNOME parts replaced:
+
+- `duo-watch-displays` — was GNOME session watcher; now drives `wlr-randr`
+  against cage.
+- `duo-screen-toggle` — was `gnome-monitor-config`; now `wlr-randr`.
+- `duo-keyboard-detach` — udev-driven; emits a single event consumed by
+  **both** display topology and Frank's ledger service (`frank-ledger.service`,
+  itself part of this profile — see below).
+- `backlight-sync` — syncs eDP-1/eDP-2 brightness via
   `backlight=card1-eDP-2-backlight`; privilege via scoped **polkit** rule, not
   the original blanket `NOPASSWD /usr/bin/env` hole.
 - Battery limiter, rotation (iio-sensor-proxy), libwacom digitizer files port
   directly (GNOME-agnostic).
+
+See `profiles/zenbook-duo-2024/README.md` for the full file-by-file mapping.

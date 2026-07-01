@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 07 — install Frank as an ISOLATED system daemon (spec §6, §11.9).
+# 05 — install Frank as an ISOLATED system daemon (spec §6, §11.9).
 # The operator must not be able to read Frank's config/logs, edit thresholds
 # (beyond the one sensitivity knob via IPC), or kill the process.
 source "$(dirname "$0")/common.sh"
@@ -43,14 +43,16 @@ install -Dm0755 -o root -g root "$REPO_ROOT/system/usr/local/bin/frank-enforcer"
 install -Dm0755 -o root -g root "$REPO_ROOT/system/usr/local/bin/frank-locker" /usr/local/bin/frank-locker
 
 # --- services ---
+# frank-ledger.service is NOT installed here: it pipes the ledger to a second
+# display on keyboard detach, which only exists as a concept on hardware
+# profiles that have one. A profile providing that feature installs its own
+# frank-ledger.service (see profiles/zenbook-duo-2024/system/etc/systemd/system/).
 install_file "etc/systemd/system/frankd.service" "/etc/systemd/system/frankd.service" 0644
-install_file "etc/systemd/system/frank-ledger.service" "/etc/systemd/system/frank-ledger.service" 0644
 install_file "etc/systemd/system/frank-enforcer.service" "/etc/systemd/system/frank-enforcer.service" 0644
 if is_arch; then
   systemctl daemon-reload
   systemctl enable --now frankd.service 2>/dev/null || true
   systemctl enable --now frank-enforcer.service 2>/dev/null || true
-  systemctl enable frank-ledger.service 2>/dev/null || true
 fi
 
 # --- verify isolation (spec §6 / docs/INSTALL.md §4) ---
