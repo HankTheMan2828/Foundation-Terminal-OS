@@ -2,7 +2,11 @@
 
 Instructions for future working sessions. Each § below is a self-contained
 spec: a session prompt will name one section; read GLOBAL CONSTRAINTS plus
-that section and build exactly that. Decisions behind all of this:
+that section and build exactly that. Each section carries a **recommended
+Claude model** (set in the model picker before starting the chat) sized to
+the session's difficulty — judgment-heavy/novel architecture → Fable 5,
+deep single-domain reasoning → Opus 4.8, well-scoped pattern-following
+builds → Sonnet 5. Decisions behind all of this:
 `docs/OPEN-QUESTIONS.md` §10 (in-house mandate, hybrid model, redundancy
 cuts) and `docs/USERS.md` (multi-user model). Update `docs/STATUS.md` row 12
 as items land.
@@ -47,6 +51,9 @@ as items land.
 
 ## §1 NOTES SUITE  ← build first
 
+**Recommended model:** Fable 5 — foundational session; the editor widget's
+buffer/cursor/wrap logic is subtle and everything later reuses it.
+
 **Goal:** the full in-house notes system (a key aspect of the OS) and, with
 it, THE system text editor. Decided: "Full in-house notes suite" — built-in
 curses editor + note browser: dated journal, tagged notes, search by tag and
@@ -76,6 +83,10 @@ Build:
 
 ## §2 FILE MANAGER (native Hub screen)
 
+**Recommended model:** Sonnet 5 — well-scoped screen following existing
+patterns; the one sharp edge (path-scoping guard, destructive-op confirms)
+is spelled out below.
+
 **Goal:** retire ranger. A native PROGRAMS → FILE MANAGER screen scoped to
 the account's own data space.
 
@@ -95,6 +106,10 @@ Build:
 
 ## §3 SYSTEM MONITOR (native Hub screen)
 
+**Recommended model:** Sonnet 5 — /proc parsing is formulaic and the spec is
+tight. (Haiku 4.5 is a viable budget option if the session stays strictly to
+spec.)
+
 **Goal:** retire btop. A native PROGRAMS → SYSTEM MONITOR screen.
 
 Build:
@@ -112,6 +127,10 @@ Build:
    fixture text.
 
 ## §4 ZENMEDIA (separate in-house program)
+
+**Recommended model:** Fable 5 — opens with a real architecture decision
+(playback backend) and the likely ctypes/ALSA work is the trickiest code in
+the queue.
 
 **Goal:** the ONE media player (cmus+mpv were both dropped for it). A
 standalone in-house TUI program at top-level `media/zenmedia/`, launched by
@@ -136,6 +155,12 @@ Build:
    never do it). Tests for playlist/library logic.
 
 ## §5 GAMES (separate in-house programs — may span several chats)
+
+**Recommended models:** zenarcade → Sonnet 5 (classic game loops,
+well-trodden); chess → Opus 4.8 (minimax/eval correctness rewards deep
+single-domain reasoning); roguelike → Fable 5 for the design-doc session,
+then Sonnet 5 for the implementation sessions that follow the approved
+design.
 
 **Goal:** replace the open-source game packages (nethack, crawl, nsnake,
 vitetris, ninvaders, gnuchess, 2048, nudoku) with in-house terminal games.
