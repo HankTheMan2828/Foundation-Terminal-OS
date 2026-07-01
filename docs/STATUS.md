@@ -42,3 +42,6 @@ Search the tree for `TODO(hardware)`, `TODO(frank)`, `TODO(approval)`:
 - ⏸ Disk encryption / USB-boot tamper resistance.
 - ⏸ Local-model Frank fallback (interface exists, no implementation).
 - ⏸ Idle screensaver (explicitly none — terminal just sits).
+- ⏸ **Portability tiers 2 and 3** (console-mode backend for low-power hardware;
+  a from-scratch embedded/pre-MMU port). No code yet — design note only. See
+  "Future portability tiers" in `docs/PROFILES.md`.

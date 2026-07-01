@@ -69,3 +69,33 @@ device check to core code, that's a signal the feature belongs in
 `hub/zenhub/session.py`'s hardware-helper indirection (call an external
 binary, degrade gracefully if it's missing) rather than as a branch in the
 core.
+
+## Future portability tiers (not built yet)
+
+Hardware profiles solve *device* portability (which laptop). They don't touch
+*capability-class* portability (how powerful the machine has to be) — the core
+still assumes an MMU-capable CPU, a GPU/DRM driver for the Wayland compositor,
+and enough RAM to run systemd + CPython. That's fine for engineer-grade
+workstations; it's overkill for a fleet of cheap deployment hardware, which is
+the likely long-run majority case. Planned, not started:
+
+- **Tier 2 — console-mode backend.** `zenhub` is a plain `curses` app; it does
+  not need Wayland/`cage`/a GPU at all. Add an alternative to
+  `install/02-cage-kiosk.sh` (e.g. `install/02-console-kiosk.sh`) that has
+  `zenhub-session` exec the Hub directly on the Linux console/tty instead of
+  `cage → kitty → zenhub`, selectable the same way hardware profiles are
+  (an env var, e.g. `KIOSK_BACKEND=console`). Same Python code, same Hub,
+  same Frank — this drops the GPU/DRM requirement and runs on cheap SBCs,
+  thin clients, and old x86 hardware. Optionally pair with a lighter base
+  (Alpine/musl + openrc) if RAM is tight enough that systemd's footprint
+  matters. This is the tier that actually matches "hardware a company would
+  deploy at scale" — no code reuse issue, just a second boot-chain option.
+- **Tier 3 — sub-MMU / embedded rewrite.** Genuinely ultra-low-power hardware
+  (no MMU, kilobytes-to-low-megabytes of RAM — e.g. 8086-class) can't run
+  Linux, systemd, or CPython at all. This would share zero code with the core:
+  a bare-metal or RTOS program in C, driving BIOS/serial text output directly,
+  with Frank's rule engine, enforcement state machine, and ledger reimplemented
+  from scratch in a language with no GC. Treat this as a separate project that
+  borrows only the UX philosophy (highlight-and-Enter terminal), not a fork of
+  this repo — there is no shared codebase to fork from. Worth doing only if a
+  concrete deployment target for it materializes; speculative work otherwise.
