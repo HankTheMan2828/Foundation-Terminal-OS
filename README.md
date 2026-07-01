@@ -56,6 +56,14 @@ opt-in via a profile:
 With no profile selected you get the generic kiosk core with no laptop-specific
 services, udev rules, or polkit grants installed.
 
+Hardware profiles solve *which device*, not *how powerful a device*: the core
+still assumes an MMU-capable CPU, a GPU/DRM driver for the Wayland compositor,
+and enough RAM for systemd + CPython — workstation-class hardware. Two lower
+capability tiers are planned but not yet built: a console-mode backend that
+drops the Wayland/GPU requirement for cheap SBCs and thin clients, and a
+from-scratch embedded port for sub-MMU hardware. See "Future portability
+tiers" in [`docs/PROFILES.md`](docs/PROFILES.md).
+
 ## Quick start (on the target machine)
 
 > Do a minimal Arch base install first (`pacstrap` base + `linux-lts`), boot
