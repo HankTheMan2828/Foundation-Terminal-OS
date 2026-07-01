@@ -124,7 +124,10 @@ class Menu:
 
     def draw(self, win, top: int, left: int) -> None:
         h, w = win.getmaxyx()
-        width = max(0, w - left - 2)  # flush to the content box's right edge
+        # Mirror the left margin on the right so the highlight bar is
+        # symmetric inside the border (content starts at `left`, so the
+        # left margin is `left - 1` blank columns after the border).
+        width = max(0, w - 2 * left)
         for row, item in enumerate(self.items):
             y = top + row
             if y >= h - 2:
