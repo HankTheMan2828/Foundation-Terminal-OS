@@ -16,7 +16,7 @@ HUB_SUBTITLE = "OPERATOR CONSOLE — AUTHORIZED USE ONLY"
 PROGRAMS = "PROGRAMS"
 RECREATION = "RECREATION"
 FUNCTIONS = "FUNCTIONS"
-SETTINGS = "CONFIGURATION"
+STATUS = "SYSTEM STATUS"
 LOGS = "LOGS"
 NOTES = "PERSONAL FILE"
 ASSISTANT = "ASSISTANT"
@@ -32,12 +32,19 @@ PROG_EDITOR = "TEXT EDITOR"
 FN_BRIGHTNESS = "DISPLAY BRIGHTNESS"
 FN_SECOND_SCREEN = "SECOND PANEL"
 FN_POWER_PROFILE = "POWER PROFILE"
+FN_THEME = "THEME & SOUND"
 
-# ── Settings / Configuration ─────────────────────────────────────────────────
-SET_RESOURCE = "RESOURCE LIMITS"
-SET_NETWORK = "NETWORK"
-SET_AUTH = "USER / AUTH"
-SET_THEME = "THEME & SOUND"
+# ── System Status (network config + read-only identity/health, no admin
+# knobs — resource limits and user/auth actions were dropped at the user's
+# explicit direction; see docs/OPEN-QUESTIONS.md §1) ─────────────────────────
+STATUS_NETWORK = "NETWORK"
+STATUS_USER_HEADING = "USER"
+STATUS_FUNCTIONS_HEADING = "FUNCTIONS"
+STATUS_CHECK_NETWORK = "NETWORK"
+STATUS_CHECK_AUDIO = "AUDIO"
+STATUS_CHECK_FRANK = "OVERSEER (FRANK)"
+STATUS_FUNCTIONING = "FUNCTIONING"
+STATUS_NOT_FUNCTIONING = "NOT FUNCTIONING"
 # NOTE: there is intentionally no overseer/Frank setting. The operator has no
 # power over Frank, ever — nothing to expose here.
 

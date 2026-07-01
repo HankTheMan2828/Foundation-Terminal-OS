@@ -80,12 +80,15 @@ before finalizing.
   2048-likes). Specific title list TBD.
 - **Functions Control** — real, functional system toggles only. No
   cosmetic/fake elements. Covers: brightness (including synced dual-panel
-  brightness), second-screen on/off, power profile switching.
-- **Settings** — system resource limits, network configuration, user/auth
-  settings, theme/sound customization, and overseer (Frank) sensitivity tuning
-  for detection thresholds only. Frank's core config, logs, and functions are
-  explicitly excluded from Settings and unreachable by any user from within the
-  running OS.
+  brightness), second-screen on/off, power profile switching, theme/sound
+  customization.
+- **System Status** (formerly "Settings" — the user decided a settings surface
+  shouldn't exist here at all) — network configuration (`nmtui`) plus a
+  read-only readout: logged-in user (name + uid), and a functioning/not
+  status list for the basics (network, audio, the Frank overseer). No resource
+  limits, no user/auth actions, no overseer sensitivity tuning — Frank's core
+  config, logs, and functions remain explicitly excluded and unreachable by
+  any user from within the running OS.
 - **Log** — two distinct, separate sections:
   - Real system logs (journalctl, kernel, auth) — raw and unmodified
   - Frank's own incident log — see Section 6, this is heavily restricted

@@ -7,6 +7,7 @@ crashing the Hub.
 """
 from __future__ import annotations
 
+import getpass
 import os
 import shutil
 import socket
@@ -56,6 +57,47 @@ def set_power_profile(profile: str) -> str:
     return _run(["powerprofilesctl", "set", profile], f"power profile → {profile}")
 
 
+# ── System Status (read-only identity + basic health checks) ─────────────────
+
+def get_user_identity() -> tuple[str, str]:
+    """Return (username, uid) for display. Never raises."""
+    try:
+        name = getpass.getuser()
+    except Exception:
+        name = os.environ.get("USER", "unknown")
+    return name, str(os.getuid())
+
+
+def check_network() -> bool:
+    """Best-effort: is there an active, connected network link."""
+    if shutil.which("nmcli"):
+        try:
+            res = subprocess.run(["nmcli", "-t", "-f", "STATE", "general"],
+                                  capture_output=True, text=True, timeout=3)
+            return res.returncode == 0 and res.stdout.strip().lower() == "connected"
+        except Exception:
+            pass
+    try:
+        res = subprocess.run(["ip", "-o", "addr", "show", "scope", "global"],
+                              capture_output=True, text=True, timeout=3)
+        return res.returncode == 0 and bool(res.stdout.strip())
+    except Exception:
+        return False
+
+
+def check_audio() -> bool:
+    """Best-effort: is a sound card present and visible to ALSA."""
+    try:
+        return bool(Path("/proc/asound/cards").read_text().strip())
+    except OSError:
+        return False
+
+
+def check_frank() -> bool:
+    """Is frankd reachable over its IPC socket (spec §6)."""
+    return FrankClient().is_alive()
+
+
 # ── Overseer ledger (visible: timestamps only — spec §6) ─────────────────────
 
 def read_overseer_ledger(limit: int = 200) -> list[str]:
@@ -81,6 +123,16 @@ class FrankClient:
 
     def __init__(self, path: str = FRANK_SOCK):
         self.path = path
+
+    def is_alive(self) -> bool:
+        """Connectivity-only check: is frankd listening at all."""
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.connect(self.path)
+            return True
+        except OSError:
+            return False
 
     def _send(self, line: str) -> str | None:
         try:

@@ -45,7 +45,7 @@ def draw_chrome(win, title: str, subtitle: str = "", *, scanlines: bool = True) 
     if subtitle:
         _center(win, 2, subtitle, theme.attr(theme.PAIR_DIM, dim=True))
     try:
-        win.hline(3, 2, curses.ACS_HLINE, w - 4, )
+        win.hline(3, 1, curses.ACS_HLINE, w - 2)
     except curses.error:
         pass
     return (5, 4)
