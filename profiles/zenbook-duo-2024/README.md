@@ -1,7 +1,7 @@
 # Hardware profile: zenbook-duo-2024
 
 The device-specific glue for the Asus Zenbook Duo 2024 (**UX8406MA**), Intel
-Meteor Lake. This is what the generic Terminal OS core (`hub/`, `frank/`,
+Meteor Lake. This is what the generic Foundation TerminalOS core (`hub/`, `frank/`,
 `install/00`–`06`) becomes a *release* for this laptop, per
 [`../../docs/PROFILES.md`](../../docs/PROFILES.md).
 

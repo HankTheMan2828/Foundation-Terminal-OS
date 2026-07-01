@@ -338,11 +338,15 @@ class LoginScreen(Screen):
                        theme.attr(theme.PAIR_WARN))
             return
         self.menu.draw(win, top, left)
+        h, w = win.getmaxyx()
         if self.notice:
-            h, w = win.getmaxyx()
             win.addstr(top + len(self.menu.items) + 1, left,
                        self.notice[: w - left - 2],
                        theme.attr(theme.PAIR_ACCENT, bold=True))
+        else:
+            win.addstr(top + len(self.menu.items) + 1, left,
+                       f"— {labels.TAGLINE} —"[: w - left - 2],
+                       theme.attr(theme.PAIR_DIM, dim=True))
 
     def status_text(self):
         return labels.LOGIN_HINT

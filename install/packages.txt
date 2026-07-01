@@ -1,4 +1,4 @@
-# Package set for the generic Terminal OS core (spec §1 minimal). No specific
+# Package set for the generic Foundation TerminalOS core (spec §1 minimal). No specific
 # device is assumed here — see profiles/$HARDWARE_PROFILE/packages.txt for
 # anything a hardware profile adds on top (00-base-packages.sh installs both).
 # Grouped by purpose. One package per line; # = comment.

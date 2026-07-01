@@ -4,6 +4,10 @@
 > as the source of truth. Implementation notes and decisions derived from it
 > live in the other files in `docs/`.
 >
+> **Naming note (2026-07-01):** the system's official name is now
+> **Foundation TerminalOS** — *"From the Foundation."* The title above is the
+> spec's original working name, kept because this document is verbatim.
+>
 > **Implementation note:** the spec below was written around one device (§1,
 > §7). The build keeps every device-specific requirement (kernel gate,
 > `hardware/*`, polkit rule, systemd units for display/battery/ledger-on-detach)

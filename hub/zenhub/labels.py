@@ -9,9 +9,13 @@ the alternate drafts were dropped. Future edits are ordinary changes, not
 pending decisions.
 """
 
+# ── Official branding (operator-decided 2026-07-01) ──────────────────────────
+BRAND = "FOUNDATION TERMINALOS"
+TAGLINE = "FROM THE FOUNDATION"
+
 # ── Login (the terminal's front door — docs/USERS.md) ────────────────────────
 LOGIN_TITLE = "TERMINAL // ACCESS"
-LOGIN_SUBTITLE = "IDENTIFY YOURSELF — ALL ACCESS IS RECORDED"
+LOGIN_SUBTITLE = f"{BRAND} — ALL ACCESS IS RECORDED"
 LOGIN_REGISTER = "NEW OPERATOR REGISTRATION"
 LOGIN_PASSWORD_FOR = "AUTHENTICATION — {user}"
 LOGIN_PASSWORD_PROMPT = "PASSWORD"
@@ -34,7 +38,7 @@ REG_HINT = "type   ↵ confirm   Esc cancel"
 
 # ── Top-level Home Hub ────────────────────────────────────────────────────────
 HUB_TITLE = "TERMINAL // MAIN"
-HUB_SUBTITLE = "OPERATOR CONSOLE — AUTHORIZED USE ONLY"
+HUB_SUBTITLE = f"{BRAND} — AUTHORIZED USE ONLY"
 
 # Order here is the order shown on the Home Hub.
 PROGRAMS = "PROGRAMS"

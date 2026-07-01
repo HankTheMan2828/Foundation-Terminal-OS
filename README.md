@@ -1,4 +1,6 @@
-# Terminal OS
+# Foundation TerminalOS
+
+*From the Foundation.*
 
 A fully console-based Arch Linux system. This is the parent project: a
 generic core that targets no specific device — any x86_64 machine that can
@@ -31,7 +33,7 @@ in-house; the few remaining open-source stand-ins are marked for replacement.
 This is **not** a disk image. It is a set of:
 
 - **Install scripts** (`install/`) — run in order on a fresh, minimal Arch
-  base to turn it into the Terminal OS.
+  base to turn it into Foundation TerminalOS.
 - **System files** (`system/`) — configs, systemd units, polkit rules, and
   udev rules that get copied onto the target under `/`.
 - **The Home Hub** (`hub/`) — the curses TUI that serves as the login shell.

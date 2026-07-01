@@ -171,6 +171,14 @@ What was decided vs. what's still open:
   means adding a second concrete class behind the same `Sifter`/
   `OverseerBrain` Protocol, not adapting the existing one.
 
+## 9b. Official naming — ✅ DECIDED (2026-07-01)
+
+The system's official name is **Foundation TerminalOS**, tagline **"From the
+Foundation."** Applied to README, package descriptions, and the UI branding
+constants (`labels.BRAND` / `labels.TAGLINE` — the Hub and login subtitles
+carry the brand; the login screen shows the tagline). The repo/install path
+`/opt/terminal-os` is plumbing, not branding, and stays.
+
 ## 10. In-house applications mandate + web integration (2026-07-01 session)
 
 The operator's finalized vision, decided in one pass:

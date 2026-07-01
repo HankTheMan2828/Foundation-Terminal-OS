@@ -1,4 +1,4 @@
-# Build Queue — In-House Application Sessions
+# Foundation TerminalOS — Build Queue: In-House Application Sessions
 
 Instructions for future working sessions. Each § below is a self-contained
 spec: a session prompt will name one section; read GLOBAL CONSTRAINTS plus
