@@ -51,12 +51,16 @@ def _theme_screen():
 
 def screen():
     items = [
-        MenuItem(labels.FN_BRIGHTNESS, lambda a: _brightness_screen()),
+        MenuItem(labels.FN_BRIGHTNESS, lambda a: _brightness_screen(),
+                 status=session.get_brightness_status),
         MenuItem(f"{labels.FN_SECOND_SCREEN} · ON",
-                 _set_status(lambda: session.toggle_second_screen(True))),
+                 _set_status(lambda: session.toggle_second_screen(True)),
+                 status=session.get_second_screen_status),
         MenuItem(f"{labels.FN_SECOND_SCREEN} · OFF",
                  _set_status(lambda: session.toggle_second_screen(False))),
-        MenuItem(labels.FN_POWER_PROFILE, lambda a: _power_screen()),
-        MenuItem(labels.FN_THEME, lambda a: _theme_screen()),
+        MenuItem(labels.FN_POWER_PROFILE, lambda a: _power_screen(),
+                 status=session.get_power_profile_status),
+        MenuItem(labels.FN_THEME, lambda a: _theme_screen(),
+                 status=lambda: theme.get_palette().upper()),
     ]
     return MenuScreen(labels.FUNCTIONS, items)

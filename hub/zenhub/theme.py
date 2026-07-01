@@ -36,6 +36,10 @@ def set_palette(name: str) -> None:
         _active_palette = name
 
 
+def get_palette() -> str:
+    return _active_palette
+
+
 def _rgb(r: int, g: int, b: int) -> tuple[int, int, int]:
     # curses wants 0..1000
     return (r * 1000 // 255, g * 1000 // 255, b * 1000 // 255)

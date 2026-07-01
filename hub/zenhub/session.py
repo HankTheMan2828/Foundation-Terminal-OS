@@ -40,6 +40,24 @@ def _run(argv: list[str], ok: str) -> str:
     return ok
 
 
+def _run_get(argv: list[str], fallback: str) -> str:
+    """Run a read-only 'get' helper; return its first output line, never raise."""
+    exe = argv[0]
+    path = HW_BIN / exe
+    if path.exists():
+        argv = [str(path), *argv[1:]]
+    elif shutil.which(exe) is None:
+        return fallback
+    try:
+        res = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+    except Exception:
+        return fallback
+    if res.returncode != 0:
+        return fallback
+    out = res.stdout.strip()
+    return out.splitlines()[0] if out else fallback
+
+
 # ── Functions Control actions (spec §5 — real toggles only) ──────────────────
 
 def set_brightness(percent: int) -> str:
@@ -55,6 +73,21 @@ def toggle_second_screen(on: bool) -> str:
 
 def set_power_profile(profile: str) -> str:
     return _run(["powerprofilesctl", "set", profile], f"power profile → {profile}")
+
+
+def get_brightness_status() -> str:
+    """Current synced backlight level, for the FUNCTIONS live-status column."""
+    return _run_get(["backlight-sync", "get"], "n/a")
+
+
+def get_second_screen_status() -> str:
+    """Current eDP-2 (bottom panel) on/off state."""
+    return _run_get(["duo-screen-toggle", "status"], "n/a")
+
+
+def get_power_profile_status() -> str:
+    """Current power-profiles-daemon profile."""
+    return _run_get(["powerprofilesctl", "get"], "n/a")
 
 
 # ── System Status (read-only identity + basic health checks) ─────────────────
