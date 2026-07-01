@@ -1,0 +1,44 @@
+# Package set for the Terminal OS (spec §1 minimal). Grouped by purpose.
+# Consumed by install/00-base-packages.sh. One package per line; # = comment.
+
+# --- kernel (spec §1: linux-lts, pinned) ---
+linux-lts
+linux-lts-headers
+linux-firmware
+intel-ucode
+
+# --- kiosk display stack (spec §2) ---
+cage            # Wayland kiosk compositor
+kitty           # terminal (foot is an alternative)
+wlr-randr       # multi-monitor control (replaces gnome-monitor-config)
+seatd           # seat management for cage without logind session juggling
+
+# --- boot (spec §3) ---
+grub
+plymouth        # text theme only; real boot log stays visible
+
+# --- hardware glue (spec §7, Zenbook Duo) ---
+iio-sensor-proxy  # rotation
+libwacom          # bottom-panel digitizer quirks
+brightnessctl     # backlight helper (scoped via polkit, not NOPASSWD sudo)
+power-profiles-daemon
+bluez             # detachable BT keyboard
+bluez-utils
+
+# --- the Hub + Frank runtime (spec §4, §6) ---
+python
+# (zenhub and frankd are pure-stdlib; no pip deps required for offline mode)
+
+# --- Programs area tools (spec §5) ---
+ranger          # file manager
+cmus            # audio player
+mpv             # media
+btop            # system monitor
+neovim          # text editor
+networkmanager  # nmtui network config
+
+# --- optional: AI features (spec §5, §6) need python-requests when a key is set ---
+python-requests
+
+# --- Recreation defaults (spec §5; final list TODO(approval), see recreation.toml) ---
+nethack

@@ -1,0 +1,12 @@
+# Apply the battery charge limit at boot and after resume (spec §7).
+[Unit]
+Description=Zenbook Duo battery charge limit
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/zenhub/duo-battery-limit 80
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

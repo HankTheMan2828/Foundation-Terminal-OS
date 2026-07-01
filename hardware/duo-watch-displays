@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# duo-watch-displays — keep display topology sane in the cage session.
+# Reimplements the community project's GNOME "duo watch-displays" against
+# wlr-randr instead of the GNOME session watcher (spec §7).
+#
+# Runs for the lifetime of the graphical session. It reacts to keyboard
+# detach/attach state (written by the udev hook) and applies the matching
+# eDP-2 layout. This is intentionally simple: no polling of GNOME; it watches
+# the state marker file.
+set -euo pipefail
+
+STATE_FILE="${DUO_KBD_STATE:-/run/zenhub/keyboard_state}"
+TOGGLE=/usr/local/lib/zenhub/duo-screen-toggle
+last=""
+
+# Baseline: keyboard attached -> single-panel; detached -> second panel on.
+while true; do
+  state="$(cat "$STATE_FILE" 2>/dev/null || echo attached)"
+  if [[ "$state" != "$last" ]]; then
+    case "$state" in
+      detached) "$TOGGLE" on  2>/dev/null || true ;;
+      attached) "$TOGGLE" off 2>/dev/null || true ;;
+    esac
+    last="$state"
+  fi
+  # inotifywait would be tighter; a short sleep keeps deps minimal.
+  # TODO(hardware): switch to `inotifywait -e modify "$STATE_FILE"` if installed.
+  sleep 1
+done

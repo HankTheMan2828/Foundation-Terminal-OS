@@ -1,0 +1,38 @@
+# Frank — the overseer daemon (spec §6). Runs as the isolated `frank` user.
+# Hardened so the operator session cannot read its data or interfere.
+[Unit]
+Description=Frank overseer daemon
+After=multi-user.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=frank
+Group=frank
+ExecStart=/usr/bin/python -m frankd.daemon
+Restart=always
+RestartSec=2
+
+# Runtime dir for the IPC socket (/run/frank), owned by frank.
+RuntimeDirectory=frank
+RuntimeDirectoryMode=0755
+StateDirectory=frank
+StateDirectoryMode=0700
+
+# Isolation / hardening (spec §6 config protection). The operator has no path
+# to this process; these also limit blast radius.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/frank /run/frank
+ProtectHome=read-only
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# frankd reads shell history / process / network signals; it needs to see the
+# operator's home read-only and system process info. Kept minimal.
+
+[Install]
+WantedBy=multi-user.target

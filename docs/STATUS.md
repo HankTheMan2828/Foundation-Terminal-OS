@@ -1,0 +1,44 @@
+# Status — what's real vs. stubbed
+
+Honest tracking of the scaffold against the spec's build order (§11). Updated as
+work lands. This is a skeleton pass: the structure is end-to-end and the two
+testable cores (Home Hub nav, Frank rule engine) actually run; most leaf
+behaviors are stubs with clear TODOs.
+
+Legend: ✅ working · 🟨 skeleton/partial · ⬜ stub/placeholder · ⏸ deferred
+
+## Build order (§11)
+
+| # | Item | State | Notes |
+|---|------|-------|-------|
+| 1 | Base Arch install, linux-lts, minimal packages | 🟨 | `install/00`,`install/01`, `install/packages.txt`. Scripts written; not run on hardware yet. |
+| 2 | Verify second-screen on chosen kernel | ⬜ | Cannot verify off-device. `install/01` documents the pin + verification steps for you to run. |
+| 3 | cage + kitty kiosk, boot past any DM | 🟨 | `install/02`, `system/.../getty autologin`, `zenhub-session`. |
+| 4 | Plymouth text theme, GRUB cleanup | 🟨 | `install/03`, `theme/plymouth/`. |
+| 5 | Custom curses TUI shell (nav skeleton) | ✅ | `hub/zenhub` runs now: `python3 -m zenhub`. All 7 areas navigable. |
+| 6 | Zenbook hardware scripts | 🟨 | `hardware/` scripts ported to wlr-randr; keyboard-detach event hook present. Not hardware-tested. |
+| 7 | Fix NOPASSWD sudo → polkit | 🟨 | `system/etc/polkit-1/rules.d/50-zenbook-backlight.rules` + scoped helper. |
+| 8 | Home Hub sub-areas | 🟨 | All screens exist; Functions/Settings/Programs/Notes/Log wired to real actions or clear stubs; Recreation reads a config list; AI Chat offline-gated. |
+| 9 | Frank: rules → Mistral → enforcement → ledger | 🟨 | Rule engine ✅ + unit-tested. Enforcement state machine ✅ + tested. Mistral client 🟨 offline-safe. Ledger 🟨. Daemon wiring 🟨 with stub data sources. |
+| 10 | Sound + CRT visual pass | ⬜ | `sounds/`, `theme/` have structure + hooks; assets are placeholders. |
+| 11 | Soak testing | ⬜ | Not started; needs hardware. |
+
+## What actually runs today (no hardware needed)
+
+- `cd hub && python3 -m zenhub` — the Home Hub nav skeleton.
+- `cd frank && python3 -m pytest` — Frank rule engine + enforcement tests.
+- `python3 -m frankd.rules --selftest` — dumps how sample events are classified.
+
+## Known gaps / TODO markers
+
+Search the tree for `TODO(hardware)`, `TODO(frank)`, `TODO(approval)`:
+
+- `TODO(hardware)` — needs the physical Zenbook to verify/finish.
+- `TODO(frank)` — real data-source collectors and Mistral prompt tuning.
+- `TODO(approval)` — waiting on your decision in `OPEN-QUESTIONS.md`.
+
+## Deferred (spec §9)
+
+- ⏸ Disk encryption / USB-boot tamper resistance.
+- ⏸ Local-model Frank fallback (interface exists, no implementation).
+- ⏸ Idle screensaver (explicitly none — terminal just sits).

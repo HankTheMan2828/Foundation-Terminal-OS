@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frankd"
+version = "0.1.0"
+description = "Frank — the overseer daemon for Zenbook Duo Terminal OS"
+requires-python = ">=3.10"
+# Core (rules, enforcement, ledger, ipc) is pure-stdlib so it runs and is fully
+# unit-testable offline with no external services (spec §6: rule layer is the
+# primary, always-on mechanism). The Mistral commentary layer is optional.
+dependencies = []
+
+[project.optional-dependencies]
+ai = ["requests>=2.28"]   # Mistral commentary; absent -> offline fallback lines
+test = ["pytest>=7"]
+
+[project.scripts]
+frankd = "frankd.daemon:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["frankd*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

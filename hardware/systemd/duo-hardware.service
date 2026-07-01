@@ -1,0 +1,17 @@
+# Display/rotation topology watcher for the cage session (spec §7).
+# Replaces the GNOME session watcher; runs as the operator alongside the kiosk
+# so it can talk to wlr-randr in the Wayland session.
+[Unit]
+Description=Zenbook Duo display topology watcher (cage/wlr-randr)
+After=multi-user.target
+
+[Service]
+Type=simple
+# Runs in the operator's graphical session context; WAYLAND_DISPLAY is provided
+# by the cage session environment. Started by the session, or as a user service.
+ExecStart=/usr/local/lib/zenhub/duo-watch-displays
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

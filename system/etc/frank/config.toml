@@ -1,0 +1,23 @@
+# Frank configuration (spec §6). Installed root:frank 0640 — the operator
+# CANNOT read or edit this. The ONLY operator-tunable value is `sensitivity`,
+# and even that is changed only via the narrow IPC (Settings > Overseer
+# Sensitivity), never by editing this file (spec §5, §6).
+
+# Detection sensitivity, 1 (lenient) .. 5 (strict). Default 3 (balanced).
+# See docs/OPEN-QUESTIONS.md §5. This is the one exposed knob.
+sensitivity = 3
+
+# Daily reset time-of-day (spec §6): resets the visible ledger + Frank's working
+# AI context + working escalation memory. Does NOT affect active lockouts.
+reset_hour = 4
+
+[enforcement]
+# Cross this cumulative escalation weight -> lockout. Severity weights are:
+# minor=1, elevated=2, serious=4. With threshold 4: minor gets several warnings,
+# serious skips straight to a lockout (spec §6).
+warning_threshold = 4
+
+# The ABSOLUTE ceiling on any lockout, in seconds (spec §6). Frank may extend an
+# active lockout up to this for severe violations but can NEVER exceed it. It
+# always eventually expires. 3600 = 1 hour.
+hard_ceiling_seconds = 3600

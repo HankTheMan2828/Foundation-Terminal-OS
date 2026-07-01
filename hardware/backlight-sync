@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# backlight-sync — set/sync brightness across BOTH eDP panels (spec §2, §7).
+#
+# Uses brightnessctl, authorized by the SCOPED polkit rule (install/05), NOT the
+# old blanket NOPASSWD sudo hole. The bottom panel exposes a separate backlight
+# device (backlight=card1-eDP-2-backlight per the community project); we drive
+# both so brightness stays synced.
+#
+# Usage: backlight-sync set <percent>   |   backlight-sync get
+set -euo pipefail
+
+TOP_BL="${DUO_TOP_BACKLIGHT:-intel_backlight}"
+BOTTOM_BL="${DUO_BOTTOM_BACKLIGHT:-card1-eDP-2-backlight}"
+cmd="${1:-get}"
+
+have() { [[ -d "/sys/class/backlight/$1" ]]; }
+
+case "$cmd" in
+  set)
+    pct="${2:?usage: backlight-sync set <percent>}"
+    for dev in "$TOP_BL" "$BOTTOM_BL"; do
+      if have "$dev"; then
+        brightnessctl -d "$dev" set "${pct}%" >/dev/null
+      fi
+    done
+    echo "brightness set to ${pct}% on available panels"
+    ;;
+  get)
+    for dev in "$TOP_BL" "$BOTTOM_BL"; do
+      if have "$dev"; then
+        printf '%s: %s%%\n' "$dev" "$(brightnessctl -d "$dev" -m | cut -d, -f4)"
+      fi
+    done
+    ;;
+  *)
+    echo "usage: $0 set <percent> | get" >&2; exit 2 ;;
+esac
+# TODO(hardware): verify device names with `ls /sys/class/backlight/` on the
+# actual UX8406MA and adjust the defaults above if they differ.

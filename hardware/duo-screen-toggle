@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# duo-screen-toggle — enable/disable the bottom panel (eDP-2) via wlr-randr.
+# Replaces the community project's gnome-monitor-config approach (spec §2, §7).
+#
+# Usage: duo-screen-toggle on|off
+#
+# Runs inside the cage/Wayland session (needs WAYLAND_DISPLAY). The Hub's
+# Functions Control > Second Panel calls this.
+set -euo pipefail
+
+BOTTOM="${DUO_BOTTOM_OUTPUT:-eDP-2}"
+TOP="${DUO_TOP_OUTPUT:-eDP-1}"
+action="${1:-}"
+
+if ! command -v wlr-randr >/dev/null 2>&1; then
+  echo "wlr-randr not found (are we in the cage session?)" >&2; exit 1
+fi
+
+case "$action" in
+  on)
+    # Position eDP-2 directly below eDP-1 (stacked dual-panel layout).
+    # TODO(hardware): confirm eDP-1 native height for the --pos offset on device.
+    wlr-randr --output "$BOTTOM" --on --pos 0,1920
+    ;;
+  off)
+    wlr-randr --output "$BOTTOM" --off
+    ;;
+  status)
+    wlr-randr | awk -v o="$BOTTOM" '$1==o{f=1} f&&/Enabled/{print o": "$2; f=0}'
+    ;;
+  *)
+    echo "usage: $0 on|off|status" >&2; exit 2 ;;
+esac

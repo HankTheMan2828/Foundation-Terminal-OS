@@ -1,0 +1,24 @@
+# Zenbook Duo udev rules (spec §7).
+#
+# 1) Keyboard detach/attach -> emit a SINGLE state change consumed by both
+#    display topology (duo-watch-displays) and Frank's ledger screen (spec §6).
+# 2) Backlight naming note for the second panel.
+#
+# TODO(hardware): the detachable BT keyboard's VID:PID must be filled in from
+# the actual unit (`udevadm monitor` while docking/undocking). Placeholders are
+# marked; replace 0b05:XXXX with the real ids before relying on this.
+
+# --- keyboard attached (add) ---
+ACTION=="add", SUBSYSTEM=="input", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="XXXX", \
+  RUN+="/usr/local/lib/zenhub/duo-keyboard-detach attached"
+
+# --- keyboard detached (remove) ---
+ACTION=="remove", SUBSYSTEM=="input", ENV{ID_VENDOR_ID}=="0b05", ENV{ID_MODEL_ID}=="XXXX", \
+  RUN+="/usr/local/lib/zenhub/duo-keyboard-detach detached"
+
+# --- bottom panel backlight (spec §7: backlight=card1-eDP-2-backlight) ---
+# Ensure the operator's group can drive the eDP-2 backlight sysfs (scoped;
+# brightness writes are still gated by the polkit rule for the CLI path).
+ACTION=="add", SUBSYSTEM=="backlight", KERNEL=="card1-eDP-2-backlight", \
+  RUN+="/bin/chgrp video /sys/class/backlight/card1-eDP-2-backlight/brightness", \
+  RUN+="/bin/chmod g+w /sys/class/backlight/card1-eDP-2-backlight/brightness"

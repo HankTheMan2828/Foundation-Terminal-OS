@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Secrets — NEVER commit API keys (spec §6; loaded from root-owned files on target)
+secrets.env
+aichat.env
+*.key
+
+# Local scratch
+*.log
+.venv/

@@ -1,0 +1,21 @@
+# Frank ledger screen (spec §6): pipes the TIMESTAMP-ONLY ledger to the second
+# panel (eDP-2) when the keyboard is detached, and blanks it when reattached.
+# Triggered by the keyboard detach udev event (hardware/udev/90-zenbook-duo.rules
+# -> duo-keyboard-detach), NOT started at boot. The unit is a oneshot the
+# hardware hook (re)starts on state change.
+[Unit]
+Description=Frank timestamp ledger on eDP-2 (keyboard-detach triggered)
+After=frankd.service
+
+[Service]
+Type=oneshot
+User=frank
+Group=frank
+# The helper turns eDP-2 on and renders the timestamps-only ledger to it, or
+# turns it off, based on the KEYBOARD_STATE passed by the udev hook.
+ExecStart=/usr/local/lib/zenhub/duo-keyboard-detach ledger-refresh
+RemainAfterExit=no
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

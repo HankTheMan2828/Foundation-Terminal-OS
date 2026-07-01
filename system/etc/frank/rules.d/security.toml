@@ -1,0 +1,77 @@
+# Frank rules — SECURITY / RESOURCE track (spec §6).
+#
+# [TODO(approval)] These are DELIBERATELY CONSERVATIVE FIRST DRAFTS so the
+# engine is testable. The real pattern lists and thresholds are yours to define
+# for your actual usage — see docs/OPEN-QUESTIONS.md §3.
+#
+# Schema (see frankd/rules.py):
+#   id         unique string
+#   track      "security"
+#   severity   "minor" | "elevated" | "serious"   (tier model below)
+#   patterns   list of regex, matched case-insensitively against event text
+#   sources    optional list: shell|process|filesystem|network|browser
+#   description frank-only; never shown to the operator
+#
+# Tier -> action (via enforcement.py, adjusted by sensitivity §5):
+#   minor     accrues several warnings (status bar) before a session lockout
+#   elevated  fewer warnings before a session lockout
+#   serious   immediate whole-machine lockout, full-screen banner
+
+[[rule]]
+id = "sec-pipe-to-shell"
+track = "security"
+severity = "serious"
+description = "Remote payload piped directly into a shell interpreter."
+patterns = [
+  "(curl|wget|fetch)\\s+\\S+.*\\|\\s*(ba|z|da)?sh\\b",
+]
+sources = ["shell"]
+
+[[rule]]
+id = "sec-exploit-tooling"
+track = "security"
+severity = "elevated"
+description = "Known offensive/exploit tooling invocation."
+patterns = [
+  "\\bmsfconsole\\b", "\\bmeterpreter\\b", "\\bsqlmap\\b",
+  "\\bnmap\\b", "\\bhydra\\b", "\\bmimikatz\\b", "\\bnc\\b\\s+-l",
+]
+sources = ["shell", "process"]
+
+[[rule]]
+id = "sec-reverse-shell-port"
+track = "security"
+severity = "serious"
+description = "Connection to a common reverse-shell / C2 port."
+patterns = [":4444\\b", ":1337\\b", ":9001\\b"]
+sources = ["network"]
+
+[[rule]]
+id = "sec-credential-exposure"
+track = "security"
+severity = "elevated"
+description = "Handling of credential / private-key material."
+patterns = [
+  "id_rsa\\b", "\\.pem\\b", "AKIA[0-9A-Z]{16}", "-----BEGIN [A-Z ]*PRIVATE KEY-----",
+  "\\bpassword\\s*=", "\\bAWS_SECRET",
+]
+
+[[rule]]
+id = "sec-destructive-command"
+track = "security"
+severity = "elevated"
+description = "Potentially destructive filesystem/disk command."
+patterns = ["rm\\s+-rf\\s+/(?!home)", "mkfs\\.", "dd\\s+if=\\S+\\s+of=/dev/"]
+sources = ["shell"]
+
+# Runaway resource usage is a resource-track security signal (spec §6). The
+# threshold check lives with the collector/rule; here we flag the sustained
+# high-CPU marker the process collector can emit.
+[[rule]]
+id = "res-runaway-cpu"
+track = "security"
+severity = "minor"
+description = "Sustained high CPU by a single process (see meta.cpu)."
+# Matches the collector's high-cpu marker; tune in the collector, not here.
+patterns = ["__RUNAWAY_CPU__"]
+sources = ["process"]

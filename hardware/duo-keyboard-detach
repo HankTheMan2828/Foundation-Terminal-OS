@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# duo-keyboard-detach — the single keyboard detach/attach hook (spec §7).
+#
+# Reused for TWO purposes (spec §6, §7):
+#   1) display topology: undocked keyboard -> ensure the second panel is usable
+#   2) Frank's ledger:   undocked keyboard -> eDP-2 shows the TIMESTAMP-ONLY
+#      ledger; redocked  -> eDP-2 goes back off.
+#
+# Invoked by udev (hardware/udev/90-zenbook-duo.rules) with an action, and by
+# frank-ledger.service as `ledger-refresh`. The detach STATE is read from the
+# marker udev writes, so both callers agree on current state.
+set -euo pipefail
+
+STATE_FILE="${DUO_KBD_STATE:-/run/zenhub/keyboard_state}"   # "attached"|"detached"
+BOTTOM="${DUO_BOTTOM_OUTPUT:-eDP-2}"
+LEDGER="${FRANK_LEDGER:-/var/lib/frank/ledger.timestamps}"
+TOGGLE=/usr/local/lib/zenhub/duo-screen-toggle
+
+mkdir -p "$(dirname "$STATE_FILE")"
+
+read_state() { cat "$STATE_FILE" 2>/dev/null || echo attached; }
+
+set_state() {  # attached|detached (called by the udev hook)
+  echo "$1" > "$STATE_FILE"
+  systemctl start frank-ledger.service 2>/dev/null || "$0" ledger-refresh
+}
+
+# Render the timestamp-only ledger to eDP-2. The ledger holds ONLY timestamps by
+# design (spec §6); this script must never print anything else from Frank.
+render_ledger() {
+  "$TOGGLE" on 2>/dev/null || true
+  # A tiny standalone renderer avoids pulling in the whole Hub. Timestamps only.
+  # TODO(hardware): direct this to the eDP-2 framebuffer/output in the running
+  # cage session. For now it writes to the ledger console sink if configured.
+  if [[ -r "$LEDGER" ]]; then
+    tail -n 100 "$LEDGER" > "${DUO_LEDGER_SINK:-/run/zenhub/ledger.render}" 2>/dev/null || true
+  fi
+}
+
+blank_ledger() {
+  "$TOGGLE" off 2>/dev/null || true
+  : > "${DUO_LEDGER_SINK:-/run/zenhub/ledger.render}" 2>/dev/null || true
+}
+
+case "${1:-ledger-refresh}" in
+  attached)  set_state attached ;;
+  detached)  set_state detached ;;
+  ledger-refresh)
+    if [[ "$(read_state)" == "detached" ]]; then render_ledger; else blank_ledger; fi
+    ;;
+  *) echo "usage: $0 attached|detached|ledger-refresh" >&2; exit 2 ;;
+esac

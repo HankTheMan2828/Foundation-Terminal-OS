@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# zenhub-sound — per-session retro soundscape daemon (spec §8).
+#
+# Started by zenhub-session (the login shell). Plays an ambient hum loop and
+# responds to one-shot cues written to a control fifo by the Hub. Degrades to a
+# no-op if no audio player or assets are present (v1: assets are placeholders).
+set -euo pipefail
+
+SND_DIR="${ZENHUB_SND_DIR:-/usr/share/zenhub/sounds}"
+FIFO="${ZENHUB_SND_FIFO:-/run/user/$(id -u)/zenhub-sound.fifo}"
+
+player() {  # pick whatever's installed
+  for p in paplay aplay ffplay mpv; do command -v "$p" >/dev/null 2>&1 && { echo "$p"; return; }; done
+}
+PLAYER="$(player || true)"
+[[ -z "$PLAYER" ]] && exec sleep infinity   # no audio stack -> silent no-op
+
+play() { [[ -f "$SND_DIR/$1" ]] && "$PLAYER" "$SND_DIR/$1" >/dev/null 2>&1 || true; }
+
+# Ambient hum loop in the background.
+( while true; do play hum.wav; sleep 1; done ) &
+HUM=$!
+trap 'kill "$HUM" 2>/dev/null || true' EXIT
+
+play boot-chime.wav
+
+# Control fifo: the Hub echoes cue names ("warn", "select", ...) into it.
+mkdir -p "$(dirname "$FIFO")"
+[[ -p "$FIFO" ]] || mkfifo "$FIFO"
+while read -r cue < "$FIFO"; do
+  case "$cue" in
+    select) play select.wav ;;
+    back)   play back.wav ;;
+    warn)   play warn.wav ;;
+    alert)  play alert.wav ;;
+    lock)   play lock.wav ;;
+    *) : ;;
+  esac
+done

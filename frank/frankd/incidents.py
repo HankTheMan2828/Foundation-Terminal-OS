@@ -1,0 +1,43 @@
+"""The frank-only detail store (spec §6).
+
+Holds the FULL detail of every finding — what was flagged, why, the matched
+content, the AI commentary. This is the opposite of the visible ledger: it is
+never surfaced to any user through any interface. File is frank:frank 0600.
+
+Separate from ledger.py on purpose. The ledger holds timestamps only; this holds
+everything. The two are never merged in code so the boundary can't be blurred by
+accident.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+from .model import Finding
+
+
+class IncidentStore:
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        # 0600 — owner (frank) only. Enforced again by install/07-frank.sh.
+        if not self.path.exists():
+            self.path.touch(mode=0o600)
+
+    def record(self, finding: Finding, reaction_kind: str, commentary: str) -> None:
+        """Append full detail. NEVER read back into any user-facing surface."""
+        entry = {
+            "ts": time.time(),
+            "rule_id": finding.rule_id,
+            "track": finding.track.value,
+            "severity": finding.severity.name,
+            "source": finding.event.source.value,
+            "matched": finding.matched,          # content — frank-only
+            "event_text": finding.event.text,    # content — frank-only
+            "description": finding.description,
+            "reaction": reaction_kind,
+            "commentary": commentary,
+        }
+        with self.path.open("a") as fh:
+            fh.write(json.dumps(entry) + "\n")

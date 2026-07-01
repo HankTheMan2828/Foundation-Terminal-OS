@@ -1,0 +1,25 @@
+# Recreation game list (spec §5). Data, not code — add/remove a game by editing
+# this file; the Recreation screen reads it live. Final title list is
+# [TODO(approval)] — see docs/OPEN-QUESTIONS.md §2.
+#
+# Each bucket maps to a genre; each game has a display name and an argv `exec`.
+
+[bucket.roguelikes]
+games = [
+  { name = "NetHack",        exec = ["nethack"] },
+  { name = "Dungeon Crawl",  exec = ["crawl"] },
+]
+
+[bucket.arcade]
+games = [
+  { name = "Snake",     exec = ["nsnake"] },
+  { name = "Tetris",    exec = ["vitetris"] },
+  { name = "Invaders",  exec = ["ninvaders"] },
+]
+
+[bucket."puzzle / strategy"]
+games = [
+  { name = "Chess",   exec = ["gnuchess"] },
+  { name = "2048",    exec = ["2048"] },
+  { name = "Sudoku",  exec = ["nudoku"] },
+]

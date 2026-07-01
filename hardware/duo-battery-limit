@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# duo-battery-limit — cap charge threshold to preserve battery health.
+# GNOME-agnostic; ports directly from the community project (spec §7).
+#
+# Usage: duo-battery-limit [percent]   (default 80)
+set -euo pipefail
+
+LIMIT="${1:-${DUO_CHARGE_LIMIT:-80}}"
+# Asus laptops expose this via the asus-nb-wmi / platform sysfs node.
+for node in \
+  /sys/class/power_supply/BAT*/charge_control_end_threshold \
+  /sys/class/power_supply/BAT*/charge_control_end_thresold; do
+  if [[ -w "$node" ]]; then
+    echo "$LIMIT" > "$node" && echo "charge limit -> ${LIMIT}% ($node)"
+    exit 0
+  fi
+done
+echo "no charge-threshold sysfs node found (check asus-nb-wmi module)" >&2
+# TODO(hardware): confirm the exact node name on the UX8406MA.
+exit 1

@@ -1,0 +1,24 @@
+// Scoped backlight authorization (spec §7).
+//
+// Replaces the community project's blanket `NOPASSWD: /usr/bin/env` sudo rule —
+// a broad privilege-escalation hole. Here the operator (group `video`) may set
+// display brightness WITHOUT a password, and NOTHING ELSE. This authorizes only
+// the brightness action, not arbitrary command execution.
+//
+// brightnessctl ships an action id for exactly this; we allow only it.
+
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.brightnessctl.set-brightness" &&
+        subject.isInGroup("video")) {
+        return polkit.Result.YES;
+    }
+});
+
+// Also allow logind's session brightness control for the operator's active
+// local session (used by some helpers), still scoped to brightness only.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.login1.set-brightness" &&
+        subject.local && subject.active && subject.isInGroup("video")) {
+        return polkit.Result.YES;
+    }
+});
