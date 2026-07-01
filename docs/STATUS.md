@@ -20,13 +20,16 @@ Legend: ✅ working · 🟨 skeleton/partial · ⬜ stub/placeholder · ⏸ defe
 | 7 | Fix NOPASSWD sudo → polkit | 🟨 | `system/etc/polkit-1/rules.d/50-zenbook-backlight.rules` + scoped helper. |
 | 8 | Home Hub sub-areas | 🟨 | All screens exist; Functions/Settings/Programs/Notes/Log wired to real actions or clear stubs; Recreation reads a config list; AI Chat offline-gated. |
 | 9 | Frank: rules → Mistral → enforcement → ledger | 🟨 | Rule engine ✅ + unit-tested. Enforcement state machine ✅ + tested. Mistral client 🟨 offline-safe. Ledger 🟨. Daemon wiring 🟨 with stub data sources. **Operator has zero power over Frank:** read-only IPC ✅ tested, no sensitivity knob, root `frank-enforcer` applies lockouts (session vs. machine reboot semantics ✅ tested), machine locks survive reboot. The root locker's VT/DRM takeover is `TODO(hardware)`. |
+| 9b | Frank AI layer: sorting/sifting + Overseer (this session) | 🟨 | Raw base-log store (`eventlog.py`) ✅ + tested. Sorting Frank (`triage.py`) ✅ + tested: stats aggregation offline, content sift via a pluggable `ai.Sifter` (offline no-op without a key, same philosophy as Mistral commentary). The Overseer (`overseer.py`) ✅ + tested: periodic check-in + immediate SERIOUS-finding trigger, both feeding synthetic Findings through the **same** `Enforcer.process()` as the rule engine — no parallel enforcement path, so the hard ceiling/scope invariants apply unchanged. Model choice for the sift/overseer roles is `TODO(approval)` — see `docs/OPEN-QUESTIONS.md`; both default to offline (no-op / never-flag) until a key is configured, same fallback posture as Mistral commentary. |
 | 10 | Sound + CRT visual pass | ⬜ | `sounds/`, `theme/` have structure + hooks; assets are placeholders. |
 | 11 | Soak testing | ⬜ | Not started; needs hardware. |
 
 ## What actually runs today (no hardware needed)
 
 - `cd hub && python3 -m zenhub` — the Home Hub nav skeleton.
-- `cd frank && python3 -m pytest` — Frank rule engine + enforcement tests.
+- `cd frank && python3 -m pytest` — Frank rule engine + enforcement tests, plus
+  the sorting/sifting (`triage.py`) and Overseer (`overseer.py`) tests added
+  this session (69 tests total).
 - `python3 -m frankd.rules --selftest` — dumps how sample events are classified.
 
 ## Known gaps / TODO markers

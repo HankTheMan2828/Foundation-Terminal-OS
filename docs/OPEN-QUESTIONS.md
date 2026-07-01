@@ -129,11 +129,50 @@ Chat show a clear "no key configured" state. Key loading is scaffolded from
 root-owned secret files; nothing secret is committed. See
 [`docs/INSTALL.md`](INSTALL.md) → "Configuring API keys."
 
+## 9. AI-layer session (sorting/sifting Frank + the Overseer) — 🟨 partially resolved
+
+The three-tier Frank model requested this session is built and tested — see
+[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) "Three tiers, one enforcement path."
+What was decided vs. what's still open:
+
+- ✅ **Same hard ceiling applies to the Overseer** (not an exception to it).
+  The Overseer expresses every decision as a `Finding` run through the exact
+  `Enforcer.process()` the rule engine uses — no parallel enforcement path,
+  so it structurally cannot exceed the ceiling, scope, or duration rules
+  already governing Frank.
+- ✅ **Check-in cadence:** the Overseer's periodic path runs twice a day
+  (`config.OverseerConfig.checkin_interval_seconds`, default 12h) — a config
+  value, tune freely.
+- ✅ **Immediate-trigger scope:** only a SERIOUS-severity finding wakes the
+  Overseer early; lesser lockouts/warnings wait for the next scheduled
+  check-in (`config.OverseerConfig.wake_on_serious`).
+- ⬜ **Model choice for the two new AI roles — still open**, same as
+  sensitivity was left as a config value rather than hardcoded. Both roles
+  default to the existing Mistral integration's wire shape (`ai.py`'s
+  `ChatCompletionClient`, OpenAI/Mistral-style `/v1/chat/completions`) so
+  nothing new has to be stood up to try it, but the model string is a config
+  change either way. Researched recommendations, based on how each role is
+  actually used:
+
+  | Role | Call frequency | What it needs | Suggestion |
+  |---|---|---|---|
+  | Sifter (`triage.py`) | Every triage interval (default every 15 min) — the frequent one | Fast, cheap text classification against one narrow category | A small/fast-tier model. If moving off Mistral: **Claude Haiku 4.5** ($1/$5 per MTok, 200K context) — cheapest Claude tier, sized for exactly this kind of frequent narrow classification. |
+  | Overseer brain (`overseer.py`) | A couple of times a day, plus rare SERIOUS triggers — the infrequent one | Judgment over an already-organized digest; consequential (can trigger a machine-wide lockout) | Call volume is low enough that per-token price barely matters — absolute monthly cost stays small either way. Favor capability: **Claude Opus 4.8** ($5/$25 per MTok, 1M context) for the strongest judgment, or **Claude Sonnet 5** ($3/$15, $2/$10 intro through 2026-08-31) as a cheaper near-Opus alternative if the extra margin isn't worth it. |
+
+  Mistral was the first thing that came to mind when the rest of Frank was
+  scaffolded, not a considered choice for these two specific roles — hence
+  leaving this open rather than silently picking one. Note: the Anthropic API
+  uses a different request/response shape than the OpenAI/Mistral-style
+  `chat/completions` `ai.py` speaks today — adopting Claude for either role
+  means adding a second concrete class behind the same `Sifter`/
+  `OverseerBrain` Protocol, not adapting the existing one.
+
 ---
 
 ## Parking lot (raised by the spec, not yet needed)
 
 - Local-model fallback for Frank (spec §6) — architected as a swappable
-  `Commentator` interface now, not implemented in v1.
+  `Commentator` interface now, not implemented in v1. The same pattern now
+  also covers `ai.py`'s `Sifter`/`OverseerBrain` interfaces (§9).
 - Disk encryption / USB-boot tamper resistance (spec §6, §9) — deferred phase,
   intentionally out of scope.

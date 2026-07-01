@@ -63,11 +63,33 @@ class EnforcementConfig:
 
 
 @dataclass
+class TriageConfig:
+    """Sorting/sifting Frank (frankd/triage.py) — the middle tier. Runs far
+    more often than the Overseer, on plain arithmetic + one cheap content
+    scan; see docs/OPEN-QUESTIONS.md for model-tier recommendations."""
+    interval_seconds: int = 900        # 15 min
+
+
+@dataclass
+class OverseerConfig:
+    """Main Frank / the Overseer (frankd/overseer.py) — operator-confirmed
+    this session: periodic check-in 1-2x/day, PLUS an immediate wake on any
+    SERIOUS-severity finding (not on lesser lockouts/warnings)."""
+    checkin_interval_seconds: int = 12 * 3600   # twice a day
+    wake_on_serious: bool = True
+
+
+@dataclass
 class FrankConfig:
     sensitivity: int = 3               # 1 lenient … 5 strict (spec §5 default 3)
     enforcement: EnforcementConfig = field(default_factory=EnforcementConfig)
+    triage: TriageConfig = field(default_factory=TriageConfig)
+    overseer: OverseerConfig = field(default_factory=OverseerConfig)
     ledger_path: Path = Path("/var/lib/frank/ledger.timestamps")
     incidents_path: Path = Path("/var/lib/frank/incidents.db")
+    events_path: Path = Path("/var/lib/frank/events.log")
+    triage_path: Path = Path("/var/lib/frank/triage.jsonl")
+    verdicts_path: Path = Path("/var/lib/frank/verdicts.jsonl")
     ipc_socket: Path = Path("/run/frank/hub.sock")
     reset_hour: int = 4                # daily reset time-of-day (context + ledger)
 
@@ -92,4 +114,12 @@ def load(path: Path = DEFAULT_CONFIG) -> FrankConfig:
             cfg.enforcement.hard_ceiling_seconds = int(enf["hard_ceiling_seconds"])
         if "reset_hour" in data:
             cfg.reset_hour = int(data["reset_hour"])
+        triage = data.get("triage", {})
+        if "interval_seconds" in triage:
+            cfg.triage.interval_seconds = int(triage["interval_seconds"])
+        overseer = data.get("overseer", {})
+        if "checkin_interval_seconds" in overseer:
+            cfg.overseer.checkin_interval_seconds = int(overseer["checkin_interval_seconds"])
+        if "wake_on_serious" in overseer:
+            cfg.overseer.wake_on_serious = bool(overseer["wake_on_serious"])
     return cfg

@@ -6,6 +6,16 @@ timestamp, incidents store records full detail (frank-only) -> pending warn is
 queued for the Hub to *display*, and the current lock decision is published for
 the ROOT enforcer to *apply*.
 
+Three tiers now feed the same Enforcer (this session added the second two):
+  1. Rule engine (rules.py) — realtime, offline, every tick. Primary/always-on.
+  2. Sorting/sifting Frank (triage.py) — periodic, organizes recent incidents
+     + raw log content into a digest. Never enforces anything itself.
+  3. The Overseer (overseer.py) — "main Frank." Reads the digests on its own
+     schedule, or immediately on a SERIOUS finding, and MAY produce its own
+     Finding, which flows through the identical `_handle_finding` path as a
+     rule-engine Finding — same ledger entry, same incidents record, same
+     Enforcer state machine, same hard ceiling.
+
 The operator has NO power over Frank. Nothing here reads operator-supplied
 configuration at runtime and there is no command that lets the operator tune,
 disable, or influence detection or enforcement. Sensitivity is loaded once from
@@ -21,10 +31,25 @@ from collections import deque
 
 from . import config, lockstate, sources
 from .enforcement import Enforcer, ReactionKind
+from .eventlog import EventLog
 from .incidents import IncidentStore
 from .ledger import TimestampLedger
 from .mistral import build as build_commentator
+from .model import Severity, Source
+from .overseer import Overseer, VerdictLog
 from .rules import RuleEngine
+from .triage import TriageEngine, TriageStore
+
+# Only these sources carry free text worth persisting to the raw event log
+# for later content review — same restriction triage.py applies when reading
+# it back. Process/network events are numeric/destination signals already
+# handled by the rule engine; logging them here would be pure volume.
+_LOGGABLE_SOURCES = {Source.SHELL, Source.BROWSER}
+
+# How far back an Overseer check-in's activity snapshot looks (spec: it should
+# see "the user's current happenings" at check-in time, not just history).
+_SNAPSHOT_WINDOW_SECONDS = 300
+_SNAPSHOT_MAX_LINES = 20
 
 
 class Frank:
@@ -34,14 +59,22 @@ class Frank:
         self.enforcer = Enforcer(self.cfg.enforcement)
         self.ledger = TimestampLedger(self.cfg.ledger_path)
         self.incidents = IncidentStore(self.cfg.incidents_path)
+        self.eventlog = EventLog(self.cfg.events_path)
+        self.triage_store = TriageStore(self.cfg.triage_path)
+        self.triage = TriageEngine(self.incidents, self.eventlog, self.triage_store)
+        self.overseer = Overseer(self.triage_store, self.incidents, self.eventlog,
+                                  VerdictLog(self.cfg.verdicts_path))
         self.commentator = build_commentator()
         self.poll_interval = poll_interval
         self.lock_state_path = self.cfg.incidents_path.parent / "lockout.state"
         self._src_state: dict = {}
         self._pending: deque = deque(maxlen=32)   # warnings awaiting Hub display
         self._last_reset_day = time.gmtime().tm_yday
+        now = time.time()
+        self._last_triage_run = now
+        self._last_overseer_checkin = now
         # Re-arm a still-valid MACHINE lock from a previous boot (spec §6).
-        lockstate.restore_machine_lock(self.enforcer, self.lock_state_path, time.time())
+        lockstate.restore_machine_lock(self.enforcer, self.lock_state_path, now)
 
     # NOTE: there is deliberately NO set_sensitivity / no operator-facing mutator.
     # Sensitivity is fixed from root-owned config at load; the operator cannot
@@ -69,7 +102,15 @@ class Frank:
             commentary = self.commentator.comment(reaction)
             self._queue_for_hub(reaction, commentary)
         # Full detail always recorded, frank-only.
-        self.incidents.record(finding, reaction.kind.value, commentary)
+        self.incidents.record(finding, reaction.kind.value, commentary, now=now)
+        # Immediate Overseer wake on SERIOUS (operator-confirmed scope this
+        # session: SERIOUS only, not every lockout). Guard against a synthetic
+        # Overseer Finding re-triggering itself — it already got its review.
+        if (self.cfg.overseer.wake_on_serious
+                and finding.severity is Severity.SERIOUS
+                and finding.event.source is not Source.OVERSEER):
+            for extra in self.overseer.on_serious_finding(finding, now):
+                self._handle_finding(extra, now)
 
     def _queue_for_hub(self, reaction, commentary: str) -> None:
         # Warnings are DISPLAYED by the Hub. Lockouts are ENFORCED by the root
@@ -85,8 +126,12 @@ class Frank:
         now = time.time() if now is None else now
         self._maybe_daily_reset(now)
         for event in sources.collect(self._src_state):
+            if event.source in _LOGGABLE_SOURCES:
+                self.eventlog.record(event)   # the "base logs" triage/overseer sift
             for finding in self.engine.classify(event):
                 self._handle_finding(finding, now)
+        self._maybe_run_triage(now)
+        self._maybe_overseer_checkin(now)
         # Publish the current lock decision for the root enforcer every tick,
         # so it applies new locks and releases expired ones promptly.
         lockstate.write(self.lock_state_path, self.enforcer, now)
@@ -97,7 +142,34 @@ class Frank:
         if lt.tm_yday != self._last_reset_day and lt.tm_hour >= self.cfg.reset_hour:
             self.ledger.reset_daily()
             self.enforcer.reset_daily()
+            self.eventlog.prune(now)   # own retention policy — see eventlog.py
             self._last_reset_day = lt.tm_yday
+
+    def _maybe_run_triage(self, now: float) -> None:
+        """Sorting/sifting Frank's own cadence — independent of, and much
+        shorter than, the Overseer's check-in interval."""
+        if now - self._last_triage_run >= self.cfg.triage.interval_seconds:
+            self.triage.run(now)
+            self._last_triage_run = now
+
+    def _maybe_overseer_checkin(self, now: float) -> None:
+        """Main Frank's periodic path (the SERIOUS-trigger path fires from
+        `_handle_finding` instead, immediately, independent of this cadence)."""
+        if now - self._last_overseer_checkin >= self.cfg.overseer.checkin_interval_seconds:
+            for finding in self.overseer.check_in(now, self._activity_snapshot(now)):
+                self._handle_finding(finding, now)
+            self._last_overseer_checkin = now
+
+    def _activity_snapshot(self, now: float) -> str:
+        """What Main Frank sees of "the user's current happenings" at
+        check-in — a bounded recent slice of the raw event log, not a live
+        process dump (keeps this deterministic/testable and cheap)."""
+        recent = self.eventlog.between(now - _SNAPSHOT_WINDOW_SECONDS, now)
+        lines = [f"lockout: {'active scope=' + self.enforcer.scope().value if self.enforcer.is_locked(now) else 'none'}"]
+        lines.append(f"last {_SNAPSHOT_WINDOW_SECONDS}s of activity ({len(recent)} events):")
+        for entry in recent[-_SNAPSHOT_MAX_LINES:]:
+            lines.append(f"  [{entry.get('source')}] {entry.get('text')}")
+        return "\n".join(lines)
 
     def run(self) -> None:  # pragma: no cover - long-running loop
         from .ipc import IPCServer

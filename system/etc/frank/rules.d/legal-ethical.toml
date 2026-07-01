@@ -92,16 +92,17 @@ patterns = [
 sources = ["browser", "shell", "network"]
 
 # ── Hate speech / extremism / violent threats ──────────────────────────────
-# Only the high-precision half is implemented: explicit first-person violent
-# threats. A broader hate-speech/extremism WORD LIST is intentionally NOT
-# authored here — bare keyword lists for that misfire constantly on ordinary
-# news, history, and fiction/games content, and the operator asked for that
-# broader category to go through a scheduled/periodic review rather than
-# realtime keyword flagging. A scheduled review is an AI-layer/batch feature
-# (Frank reviewing accumulated activity on an interval, then reporting) —
-# that belongs in the AI-layer session, not this rule-engine refinement pass.
-# [TODO(next session, AI layer)] wire up a periodic review pass for the
-# broader hate-speech/extremism category.
+# Only the high-precision half is implemented here: explicit first-person
+# violent threats. A broader hate-speech/extremism WORD LIST is intentionally
+# NOT authored as a realtime rule — bare keyword lists for that misfire
+# constantly on ordinary news, history, and fiction/games content.
+# [RESOLVED — AI-layer session] the periodic review the operator asked for
+# instead is now wired up: frankd/triage.py's Sifter runs raw shell/browser
+# text through a "hate_speech_extremism" content classifier on its own
+# interval, and frankd/overseer.py (the Overseer / "main Frank") decides
+# whether any sifted observation is worth flagging. See docs/ARCHITECTURE.md
+# "Three tiers, one enforcement path" for how that stays bounded by the same
+# Enforcer invariants as this file's realtime rules.
 [[rule]]
 id = "legal-violent-threat"
 track = "legal_ethical"

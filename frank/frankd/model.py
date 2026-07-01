@@ -33,6 +33,9 @@ class Source(enum.Enum):
     FILESYSTEM = "filesystem"  # files opened/edited
     NETWORK = "network"      # connections/destinations
     BROWSER = "browser"      # searches/requests from the browser & elsewhere
+    OVERSEER = "overseer"    # a Finding synthesized by the Overseer's own
+                             # judgment (overseer.py), not a raw collector —
+                             # never matched against rules.py patterns
 
 
 @dataclass
