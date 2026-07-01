@@ -1,14 +1,24 @@
 # Frank rules — LEGAL / ETHICAL track (spec §6).
 #
-# [TODO(approval)] The spec defines this as the "broader concerning content or
-# activity" track. What belongs here is highly personal and context-dependent
-# — this file intentionally does NOT decide it. The two rules below are
-# placeholders that prove the second track works end-to-end; they are NOT a
-# considered recommendation of what should be flagged. See
-# docs/OPEN-QUESTIONS.md §3 for the actual decision (what categories belong
-# here at all, and what a "serious" tier would even mean for this track).
-# Schema + tier model: see security.toml header.
+# Categories + severities below are operator-confirmed (docs/OPEN-QUESTIONS.md
+# §3 resolved). Schema + tier model: see security.toml header.
+#
+# Known limitation: several rules below target `sources = ["browser"]`, but
+# the browser collector (frankd/sources.py `browser()`) is still an unfilled
+# stub — it emits nothing yet (spec's own [TODO(frank)] marker predates this
+# session; implementing a real browser-history/DNS tap is a separate, larger
+# task, not a rules/severity refinement). Until that collector is built, these
+# rules will only catch cases that also show up via shell (e.g. downloading
+# something from a flagged domain with curl/wget) or network source text —
+# real day-to-day web-browsing coverage is NOT active yet. Flagging this so
+# expectations are set correctly.
 
+# ── Piracy / copyright infringement ───────────────────────────────────────
+# The DRM-circumvention half of this (yt-dlp/youtube-dl + drm/widevine
+# keywords) was REMOVED per operator direction — yt-dlp has too many
+# legitimate uses (archiving your own streams, downloading Creative Commons
+# video) for a tool-name match to be a reliable signal. Only the plain
+# torrent-keyword rule remains.
 [[rule]]
 id = "legal-piracy-indicator"
 track = "legal_ethical"
@@ -16,13 +26,88 @@ severity = "minor"
 description = "Generic indicator of pirated-media acquisition."
 patterns = ["\\btorrent\\b", "\\b1080p\\b.*\\b(WEB|BluRay|x264|x265)\\b"]
 
+# ── Adult content ──────────────────────────────────────────────────────────
+# Operator-confirmed: serious (immediate whole-machine lockout). Deliberately
+# limited to specific, unambiguous site names rather than a generic word like
+# "porn" — a bare word match risks a false "serious" full-lockout on something
+# totally innocuous (a headline using the word figuratively, etc.), which is a
+# much worse failure mode at this severity than under-matching.
 [[rule]]
-id = "legal-circumvention-tooling"
+id = "legal-adult-content"
+track = "legal_ethical"
+severity = "serious"
+description = "Adult content site/service indicator."
+patterns = [
+  "\\bpornhub\\b", "\\bxvideos\\b", "\\bxnxx\\b", "\\bxhamster\\b",
+  "\\bredtube\\b", "\\byouporn\\b", "\\bbrazzers\\b", "\\bspankbang\\b",
+  "\\bonlyfans\\b",
+]
+sources = ["browser", "shell", "network"]
+
+# ── Gambling ────────────────────────────────────────────────────────────────
+[[rule]]
+id = "legal-gambling"
 track = "legal_ethical"
 severity = "elevated"
-description = "DRM/paywall circumvention tooling."
-patterns = ["\\byoutube-dl\\b", "\\byt-dlp\\b.*\\b(drm|widevine)\\b"]
+description = "Gambling site/service indicator."
+patterns = [
+  "\\bdraftkings\\b", "\\bfanduel\\b", "\\bbet365\\b", "\\bpokerstars\\b",
+  "\\bsportsbook\\b", "\\bonline\\s+casino\\b",
+]
+sources = ["browser", "shell", "network"]
 
-# Serious-tier legal/ethical patterns are intentionally NOT shipped as guesses.
-# This track's serious tier must be authored by the operator with real intent —
-# a wrong guess here is worse than an empty slot. [TODO(approval)]
+# ── Illegal goods / drugs ──────────────────────────────────────────────────
+# Deliberately narrow: bare drug-name keyword matching is extremely
+# false-positive prone (news, medical/harm-reduction info, school research,
+# TV/film discussion). This targets purchase-intent phrasing and known
+# darknet-market names instead, which is a much stronger signal.
+[[rule]]
+id = "legal-illegal-goods"
+track = "legal_ethical"
+severity = "minor"
+description = "Purchase-intent language for illegal goods/drugs, or a known darknet-market name."
+patterns = [
+  "\\b(buy|order|score|deal(er)?)\\b.{0,20}\\b(coke|cocaine|heroin|meth|fentanyl|mdma|lsd)\\b",
+  "\\bsilk\\s*road\\b", "\\balphabay\\b", "\\bdarknet\\s*market\\b",
+  "\\.onion\\b.{0,30}\\b(market|drugs?)\\b",
+]
+sources = ["browser", "shell", "network"]
+
+# ── Self-harm-related content ──────────────────────────────────────────────
+# Operator-confirmed: OBSERVE only. This deliberately does NOT go through the
+# warn/lockout pipeline at all — a punitive lockout during a bad moment would
+# be the wrong response, not a helpful one. Findings still land in Frank's
+# incidents log (frank-only, full detail) same as everything else; they just
+# never produce a warning, a lockout, or any user-visible reaction. Cast a
+# slightly wider net than other rules since there's no punitive downside here.
+[[rule]]
+id = "legal-self-harm-content"
+track = "legal_ethical"
+severity = "observe"
+description = "Self-harm-related search/content indicator. Log-only by design — never enforced."
+patterns = [
+  "\\bsuicid(e|al)\\b", "\\bself[\\s-]?harm\\b", "\\bself[\\s-]?injur", "\\bkill\\s+myself\\b",
+  "\\bways?\\s+to\\s+die\\b",
+]
+sources = ["browser", "shell", "network"]
+
+# ── Hate speech / extremism / violent threats ──────────────────────────────
+# Only the high-precision half is implemented: explicit first-person violent
+# threats. A broader hate-speech/extremism WORD LIST is intentionally NOT
+# authored here — bare keyword lists for that misfire constantly on ordinary
+# news, history, and fiction/games content, and the operator asked for that
+# broader category to go through a scheduled/periodic review rather than
+# realtime keyword flagging. A scheduled review is an AI-layer/batch feature
+# (Frank reviewing accumulated activity on an interval, then reporting) —
+# that belongs in the AI-layer session, not this rule-engine refinement pass.
+# [TODO(next session, AI layer)] wire up a periodic review pass for the
+# broader hate-speech/extremism category.
+[[rule]]
+id = "legal-violent-threat"
+track = "legal_ethical"
+severity = "elevated"
+description = "Explicit first-person statement of intent to commit violence."
+patterns = [
+  "\\bi(\\s*(a|')?m)?\\s*(going\\s*to|gonna|will)\\s+(kill|murder|shoot|stab|bomb)\\b",
+  "\\bi\\s+(want|wanna)\\s+to\\s+(kill|murder|shoot|stab)\\b",
+]

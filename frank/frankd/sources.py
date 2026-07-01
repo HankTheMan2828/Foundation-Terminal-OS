@@ -21,13 +21,11 @@ from .model import Event, Source
 
 OPERATOR = os.environ.get("FRANK_OPERATOR", "operator")
 
-# [TODO(approval)] placeholders pending operator input (docs/OPEN-QUESTIONS.md
-# §3) — how hot, and for how long, counts as "runaway" rather than a normal
-# burst (compiling, encoding, a game loading). Duration is expressed in polls,
-# not seconds, since the daemon's poll interval is what actually elapses
-# between checks (default 2s -> 15 ticks ~= 30s).
-RUNAWAY_CPU_THRESHOLD = 0.90     # fraction of one core
-RUNAWAY_CPU_STREAK_TICKS = 15    # consecutive polls above threshold before flagging
+# Operator-confirmed (docs/OPEN-QUESTIONS.md §3): 85% sustained for 10s. Streak
+# is expressed in polls, not seconds, since the daemon's poll interval is what
+# actually elapses between checks (default 2s -> 5 ticks == 10s).
+RUNAWAY_CPU_THRESHOLD = 0.85     # fraction of one core
+RUNAWAY_CPU_STREAK_TICKS = 5     # consecutive polls above threshold before flagging
 
 
 def shell_history(state: dict) -> Iterator[Event]:

@@ -29,27 +29,37 @@ class EnforcementConfig:
     """Tunables for the warning/lockout state machine. See enforcement.py."""
     # Cumulative escalation weight per severity. Higher weight => "fewer warnings
     # before action" (spec §6: serious skips straight to fewer warnings).
+    # OBSERVE is listed for completeness but Enforcer.process() bypasses the
+    # weight/threshold math for it entirely — it never warns or locks out.
     weights: dict[Severity, int] = field(default_factory=lambda: {
+        Severity.OBSERVE: 0,
         Severity.MINOR: 1,
         Severity.ELEVATED: 2,
         Severity.SERIOUS: 4,
     })
     # Cross the threshold => lockout. With threshold 4 and the weights above:
-    # minor -> ~3 warnings then lock; elevated -> ~1 warning; serious -> immediate.
+    # minor -> 3 warnings then lock on the 4th; elevated -> 1 warning then lock
+    # on the 2nd; serious -> immediate (operator-confirmed: "3 warnings total").
     warning_threshold: int = 4
+    # If a track has gone quiet for longer than this, its accrued warning score
+    # decays back to zero on the next finding instead of continuing to stack —
+    # a burst of minor flags should count against you, but scattered one-offs
+    # weeks apart shouldn't slowly build toward a lockout (operator-confirmed).
+    track_score_decay_seconds: int = 300   # 5 minutes
     # Base lockout seconds by the severity that triggered it (spec §6:
-    # severity -> duration). Minor/elevated lock the session; serious the machine.
+    # severity -> duration). Minor/elevated lock the session; serious the
+    # machine. Halved from the original first draft per operator direction.
     base_lockout_seconds: dict[Severity, int] = field(default_factory=lambda: {
-        Severity.MINOR: 300,      # 5 min, session/console only
-        Severity.ELEVATED: 900,   # 15 min, session/console only
-        Severity.SERIOUS: 1800,   # 30 min, whole machine
+        Severity.MINOR: 150,      # 2.5 min, session/console only
+        Severity.ELEVATED: 450,   # 7.5 min, session/console only
+        Severity.SERIOUS: 900,    # 15 min, whole machine
     })
     # The absolute ceiling on ANY lockout (spec §6). Frank can extend up to this
     # for severe violations but can NEVER exceed it; it always eventually expires.
-    hard_ceiling_seconds: int = 3600  # 1 hour, hard.
+    hard_ceiling_seconds: int = 1800  # 30 min, hard.
     # How much a further severe finding extends an ACTIVE lockout (clamped to
     # ceiling-from-start).
-    extension_seconds: int = 600
+    extension_seconds: int = 300
 
 
 @dataclass

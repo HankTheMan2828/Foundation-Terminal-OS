@@ -13,7 +13,14 @@ class Track(enum.Enum):
 
 
 class Severity(enum.IntEnum):
-    """Severity tiers. IntEnum so comparisons/max() are meaningful."""
+    """Severity tiers. IntEnum so comparisons/max() are meaningful.
+
+    OBSERVE sits below MINOR: a "record but never act on" tier for findings
+    where the normal warn/lockout pipeline is the wrong response (e.g.
+    self-harm-related content — a punitive lockout in a bad moment would be
+    counterproductive, not helpful). See Enforcer.process()'s early bypass.
+    """
+    OBSERVE = 0
     MINOR = 1
     ELEVATED = 2
     SERIOUS = 3

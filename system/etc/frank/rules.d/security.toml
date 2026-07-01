@@ -1,20 +1,17 @@
 # Frank rules — SECURITY / RESOURCE track (spec §6).
 #
-# [TODO(approval)] Severities marked "placeholder" below are first-draft
-# guesses, not final decisions — the operator is being asked to confirm/adjust
-# each one (see docs/OPEN-QUESTIONS.md §3). Structure, regexes, and rule
-# splits are refinement-pass-1 changes and are NOT placeholders — they're
-# meant to stay regardless of how the severity questions land.
+# Severities below are operator-confirmed (docs/OPEN-QUESTIONS.md §3 resolved).
 #
 # Schema (see frankd/rules.py):
 #   id         unique string
 #   track      "security"
-#   severity   "minor" | "elevated" | "serious"   (tier model below)
+#   severity   "observe" | "minor" | "elevated" | "serious"  (tier model below)
 #   patterns   list of regex, matched case-insensitively against event text
 #   sources    optional list: shell|process|filesystem|network|browser
 #   description frank-only; never shown to the operator
 #
 # Tier -> action (via enforcement.py, adjusted by sensitivity §5):
+#   observe   recorded (frank-only) but NEVER warns or locks out
 #   minor     accrues several warnings (status bar) before a session lockout
 #   elevated  fewer warnings before a session lockout
 #   serious   immediate whole-machine lockout, full-screen banner
@@ -34,23 +31,26 @@ patterns = [
 sources = ["shell"]
 
 # ── Offensive tooling — split from one bucket into four so severity can be
-# tuned independently per the operator's actual risk tolerance. These were
-# previously lumped together as "sec-exploit-tooling" at a single severity,
-# which didn't distinguish a dual-use scanner (nmap) from a credential-theft
-# framework (mimikatz). [TODO(approval)] severities below are placeholders.
+# tuned independently per tool. These were previously lumped together as
+# "sec-exploit-tooling" at a single severity, which didn't distinguish a
+# dual-use scanner (nmap) from a credential-theft framework (mimikatz).
+# Operator confirmed: doesn't recognize/use nmap or raw listeners personally,
+# so false-positive tolerance is less of a concern than for a security
+# practitioner — elevated (not serious) is still the right default since
+# neither is as unambiguous as an exploit framework.
 [[rule]]
 id = "sec-recon-tooling"
 track = "security"
 severity = "elevated"
-description = "Network reconnaissance / port-scanning tool. Dual-use: also common for legitimate home-network diagnostics — high false-positive risk if treated the same as exploit frameworks."
+description = "Network reconnaissance / port-scanning tool. Dual-use in general, but the operator has no known legitimate use for it personally."
 patterns = ["\\bnmap\\b"]
 sources = ["shell", "process"]
 
 [[rule]]
 id = "sec-exploit-framework"
 track = "security"
-severity = "elevated"
-description = "Offensive exploitation framework or credential-dumping tool (Metasploit console, Meterpreter payload, Mimikatz)."
+severity = "serious"
+description = "Offensive exploitation framework or credential-dumping tool (Metasploit console, Meterpreter payload, Mimikatz) — no everyday legitimate use on a personal machine (operator-confirmed serious)."
 patterns = ["\\bmsfconsole\\b", "\\bmeterpreter\\b", "\\bmimikatz\\b"]
 sources = ["shell", "process"]
 
@@ -66,7 +66,7 @@ sources = ["shell", "process"]
 id = "sec-raw-listener"
 track = "security"
 severity = "elevated"
-description = "Raw listening socket via netcat/ncat/socat — common in reverse-shell setups, but also legitimate for ad hoc file transfer/debugging."
+description = "Raw listening socket via netcat/ncat/socat — common in reverse-shell setups. Operator has no known legitimate use for it personally."
 patterns = ["\\bnc\\b\\s+-l", "\\bncat\\b\\s+-l", "\\bsocat\\b.*\\blisten\\b"]
 sources = ["shell", "process"]
 
@@ -79,9 +79,11 @@ description = "Connection to a common reverse-shell / C2 port. NOTE: port 9001 i
 patterns = [":4444\\b", ":1337\\b", ":9001\\b"]
 sources = ["network"]
 
-# ── Credential exposure — split so the inline-secret pattern (high
-# false-positive rate on routine dev work) can be tuned separately from the
-# key-file patterns (low false-positive rate, clearly sensitive).
+# ── Credential exposure. The old generic "password\s*=" text match is
+# GONE (operator-confirmed) — it fired on any normal dev work (editing a
+# config, writing code with a variable called password) with no real signal.
+# What's left is narrowly file/key-based, which has a far lower false-positive
+# rate: these patterns essentially only match actual credential material.
 [[rule]]
 id = "sec-credential-files"
 track = "security"
@@ -89,22 +91,15 @@ severity = "elevated"
 description = "Handling of private-key / cloud-credential file material."
 patterns = [
   "id_rsa\\b", "id_ed25519\\b", "\\.pem\\b", "AKIA[0-9A-Z]{16}",
-  "-----BEGIN [A-Z ]*PRIVATE KEY-----",
+  "-----BEGIN [A-Z ]*PRIVATE KEY-----", "\\bAWS_SECRET",
 ]
-
-[[rule]]
-id = "sec-credential-inline"
-track = "security"
-severity = "elevated"
-description = "Inline password/secret assignment in shell text or code. Broad on purpose in this draft — WILL false-positive on routine dev work (editing configs, writing code with a variable named password). [TODO(approval)]"
-patterns = ["\\bpassword\\s*=", "\\bAWS_SECRET"]
 
 # ── Destructive commands ──────────────────────────────────────────────────
 [[rule]]
 id = "sec-destructive-command"
 track = "security"
-severity = "elevated"
-description = "Potentially destructive filesystem/disk command, or a fork bomb."
+severity = "serious"
+description = "Potentially destructive filesystem/disk command, or a fork bomb — irreversible data loss/crash (operator-confirmed serious)."
 patterns = [
   "rm\\s+-rf\\s+/(?!home)",
   "mkfs\\.",

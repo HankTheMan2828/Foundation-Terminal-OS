@@ -58,6 +58,7 @@ class Reaction:
 class _TrackState:
     score: int = 0
     max_severity: Severity = Severity.MINOR
+    last_time: float | None = None
 
 
 @dataclass
@@ -94,6 +95,12 @@ class Enforcer:
 
     # ── the main entry point ─────────────────────────────────────────────────
     def process(self, finding: Finding, now: float) -> Reaction:
+        # OBSERVE is a hard bypass: always recorded, never warns, never locks
+        # out, regardless of current lock state or accrued score on its track.
+        if finding.severity is Severity.OBSERVE:
+            return Reaction(ReactionKind.OBSERVE, Delivery.STATUS_BAR,
+                            finding.severity, finding.track)
+
         weight = self.cfg.weights[finding.severity]
         delivery = (Delivery.BANNER if finding.severity is Severity.SERIOUS
                     else Delivery.STATUS_BAR)
@@ -110,8 +117,15 @@ class Enforcer:
             return Reaction(ReactionKind.OBSERVE, delivery,
                             finding.severity, finding.track)
 
-        # Not locked: accumulate escalation on this track.
+        # Not locked: accumulate escalation on this track. A long-quiet track
+        # decays back to zero first — scattered one-offs shouldn't slowly
+        # stack toward a lockout the way a burst of activity should.
         st = self.tracks[finding.track]
+        if (st.last_time is not None
+                and now - st.last_time > self.cfg.track_score_decay_seconds):
+            st.score = 0
+            st.max_severity = Severity.MINOR
+        st.last_time = now
         st.score += weight
         st.max_severity = max(st.max_severity, finding.severity)
 
