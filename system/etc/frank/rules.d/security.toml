@@ -1,8 +1,10 @@
 # Frank rules — SECURITY / RESOURCE track (spec §6).
 #
-# [TODO(approval)] These are DELIBERATELY CONSERVATIVE FIRST DRAFTS so the
-# engine is testable. The real pattern lists and thresholds are yours to define
-# for your actual usage — see docs/OPEN-QUESTIONS.md §3.
+# [TODO(approval)] Severities marked "placeholder" below are first-draft
+# guesses, not final decisions — the operator is being asked to confirm/adjust
+# each one (see docs/OPEN-QUESTIONS.md §3). Structure, regexes, and rule
+# splits are refinement-pass-1 changes and are NOT placeholders — they're
+# meant to stay regardless of how the severity questions land.
 #
 # Schema (see frankd/rules.py):
 #   id         unique string
@@ -17,61 +19,110 @@
 #   elevated  fewer warnings before a session lockout
 #   serious   immediate whole-machine lockout, full-screen banner
 
+# ── Remote-payload execution ──────────────────────────────────────────────
 [[rule]]
 id = "sec-pipe-to-shell"
 track = "security"
 severity = "serious"
-description = "Remote payload piped directly into a shell interpreter."
+description = "Remote payload piped directly into a shell/script interpreter (classic install-script pattern)."
 patterns = [
-  "(curl|wget|fetch)\\s+\\S+.*\\|\\s*(ba|z|da)?sh\\b",
+  "(curl|wget|fetch)\\s+\\S+.*\\|\\s*(sudo\\s+)?(ba|z|da|fi)?sh\\b",
+  "(curl|wget|fetch)\\s+\\S+.*\\|\\s*(sudo\\s+)?python[23]?\\b",
+  "(curl|wget|fetch)\\s+\\S+.*\\|\\s*(sudo\\s+)?perl\\b",
+  "base64\\s+(-d|--decode)\\b.*\\|\\s*(sudo\\s+)?(ba|z|da|fi)?sh\\b",
 ]
 sources = ["shell"]
 
+# ── Offensive tooling — split from one bucket into four so severity can be
+# tuned independently per the operator's actual risk tolerance. These were
+# previously lumped together as "sec-exploit-tooling" at a single severity,
+# which didn't distinguish a dual-use scanner (nmap) from a credential-theft
+# framework (mimikatz). [TODO(approval)] severities below are placeholders.
 [[rule]]
-id = "sec-exploit-tooling"
+id = "sec-recon-tooling"
 track = "security"
 severity = "elevated"
-description = "Known offensive/exploit tooling invocation."
-patterns = [
-  "\\bmsfconsole\\b", "\\bmeterpreter\\b", "\\bsqlmap\\b",
-  "\\bnmap\\b", "\\bhydra\\b", "\\bmimikatz\\b", "\\bnc\\b\\s+-l",
-]
+description = "Network reconnaissance / port-scanning tool. Dual-use: also common for legitimate home-network diagnostics — high false-positive risk if treated the same as exploit frameworks."
+patterns = ["\\bnmap\\b"]
 sources = ["shell", "process"]
 
+[[rule]]
+id = "sec-exploit-framework"
+track = "security"
+severity = "elevated"
+description = "Offensive exploitation framework or credential-dumping tool (Metasploit console, Meterpreter payload, Mimikatz)."
+patterns = ["\\bmsfconsole\\b", "\\bmeterpreter\\b", "\\bmimikatz\\b"]
+sources = ["shell", "process"]
+
+[[rule]]
+id = "sec-attack-tooling"
+track = "security"
+severity = "elevated"
+description = "Automated attack tooling (SQL-injection tester, network login brute-forcer)."
+patterns = ["\\bsqlmap\\b", "\\bhydra\\b"]
+sources = ["shell", "process"]
+
+[[rule]]
+id = "sec-raw-listener"
+track = "security"
+severity = "elevated"
+description = "Raw listening socket via netcat/ncat/socat — common in reverse-shell setups, but also legitimate for ad hoc file transfer/debugging."
+patterns = ["\\bnc\\b\\s+-l", "\\bncat\\b\\s+-l", "\\bsocat\\b.*\\blisten\\b"]
+sources = ["shell", "process"]
+
+# ── Network C2 indicators ─────────────────────────────────────────────────
 [[rule]]
 id = "sec-reverse-shell-port"
 track = "security"
 severity = "serious"
-description = "Connection to a common reverse-shell / C2 port."
+description = "Connection to a common reverse-shell / C2 port. NOTE: port 9001 is a real false-positive risk (Tor ORPort, Portainer, other legitimate services also default to it)."
 patterns = [":4444\\b", ":1337\\b", ":9001\\b"]
 sources = ["network"]
 
+# ── Credential exposure — split so the inline-secret pattern (high
+# false-positive rate on routine dev work) can be tuned separately from the
+# key-file patterns (low false-positive rate, clearly sensitive).
 [[rule]]
-id = "sec-credential-exposure"
+id = "sec-credential-files"
 track = "security"
 severity = "elevated"
-description = "Handling of credential / private-key material."
+description = "Handling of private-key / cloud-credential file material."
 patterns = [
-  "id_rsa\\b", "\\.pem\\b", "AKIA[0-9A-Z]{16}", "-----BEGIN [A-Z ]*PRIVATE KEY-----",
-  "\\bpassword\\s*=", "\\bAWS_SECRET",
+  "id_rsa\\b", "id_ed25519\\b", "\\.pem\\b", "AKIA[0-9A-Z]{16}",
+  "-----BEGIN [A-Z ]*PRIVATE KEY-----",
 ]
 
+[[rule]]
+id = "sec-credential-inline"
+track = "security"
+severity = "elevated"
+description = "Inline password/secret assignment in shell text or code. Broad on purpose in this draft — WILL false-positive on routine dev work (editing configs, writing code with a variable named password). [TODO(approval)]"
+patterns = ["\\bpassword\\s*=", "\\bAWS_SECRET"]
+
+# ── Destructive commands ──────────────────────────────────────────────────
 [[rule]]
 id = "sec-destructive-command"
 track = "security"
 severity = "elevated"
-description = "Potentially destructive filesystem/disk command."
-patterns = ["rm\\s+-rf\\s+/(?!home)", "mkfs\\.", "dd\\s+if=\\S+\\s+of=/dev/"]
+description = "Potentially destructive filesystem/disk command, or a fork bomb."
+patterns = [
+  "rm\\s+-rf\\s+/(?!home)",
+  "mkfs\\.",
+  "dd\\s+if=\\S+\\s+of=/dev/",
+  ":\\(\\)\\s*\\{\\s*:\\s*\\|\\s*:\\s*&\\s*\\}\\s*;\\s*:",
+]
 sources = ["shell"]
 
 # Runaway resource usage is a resource-track security signal (spec §6). The
-# threshold check lives with the collector/rule; here we flag the sustained
-# high-CPU marker the process collector can emit.
+# collector (frankd/sources.py) tracks consecutive high-CPU polls per-process
+# and emits the __RUNAWAY_CPU__ marker once a process is sustained above
+# threshold for a set number of ticks — a brief spike (compiling, encoding)
+# should NOT trip this; only a genuinely sustained runaway process should.
+# Tune the threshold/duration in the collector, not here (see its constants).
 [[rule]]
 id = "res-runaway-cpu"
 track = "security"
 severity = "minor"
-description = "Sustained high CPU by a single process (see meta.cpu)."
-# Matches the collector's high-cpu marker; tune in the collector, not here.
+description = "Sustained high CPU by a single process (see meta.cpu / meta.pid)."
 patterns = ["__RUNAWAY_CPU__"]
 sources = ["process"]

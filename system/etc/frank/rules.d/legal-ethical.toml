@@ -1,10 +1,13 @@
 # Frank rules — LEGAL / ETHICAL track (spec §6).
 #
 # [TODO(approval)] The spec defines this as the "broader concerning content or
-# activity" track. What belongs here is highly personal and context-dependent,
-# so the shipped set is intentionally minimal and generic — placeholders to
-# prove the second track works end-to-end. Define the real set yourself; see
-# docs/OPEN-QUESTIONS.md §3. Schema + tier model: see security.toml header.
+# activity" track. What belongs here is highly personal and context-dependent
+# — this file intentionally does NOT decide it. The two rules below are
+# placeholders that prove the second track works end-to-end; they are NOT a
+# considered recommendation of what should be flagged. See
+# docs/OPEN-QUESTIONS.md §3 for the actual decision (what categories belong
+# here at all, and what a "serious" tier would even mean for this track).
+# Schema + tier model: see security.toml header.
 
 [[rule]]
 id = "legal-piracy-indicator"

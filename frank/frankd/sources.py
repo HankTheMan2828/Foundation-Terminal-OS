@@ -21,6 +21,14 @@ from .model import Event, Source
 
 OPERATOR = os.environ.get("FRANK_OPERATOR", "operator")
 
+# [TODO(approval)] placeholders pending operator input (docs/OPEN-QUESTIONS.md
+# §3) — how hot, and for how long, counts as "runaway" rather than a normal
+# burst (compiling, encoding, a game loading). Duration is expressed in polls,
+# not seconds, since the daemon's poll interval is what actually elapses
+# between checks (default 2s -> 15 ticks ~= 30s).
+RUNAWAY_CPU_THRESHOLD = 0.90     # fraction of one core
+RUNAWAY_CPU_STREAK_TICKS = 15    # consecutive polls above threshold before flagging
+
 
 def shell_history(state: dict) -> Iterator[Event]:
     """New lines appended to the operator's shell history since last poll."""
@@ -36,24 +44,44 @@ def shell_history(state: dict) -> Iterator[Event]:
     state["shell_seen"] = len(lines)
 
 
-def processes(_state: dict) -> Iterator[Event]:
-    """Running processes + CPU%. Runaway resource usage is a security signal."""
+def processes(state: dict) -> Iterator[Event]:
+    """Running processes + CPU%. Sustained (not spiky) high CPU by a single
+    process is a security signal: track consecutive high-CPU polls per-pid and
+    emit the res-runaway-cpu rule's marker once a process has been hot for
+    RUNAWAY_CPU_STREAK_TICKS in a row. A short burst resets the streak instead
+    of flagging, so compiling/encoding/loading a game doesn't trip this."""
     try:
         out = subprocess.run(
-            ["ps", "-eo", "comm,pcpu", "--no-headers"],
+            ["ps", "-eo", "pid,comm,pcpu", "--no-headers"],
             capture_output=True, text=True, timeout=5).stdout
     except Exception:
         return
+    streaks: dict[int, int] = state.setdefault("cpu_streaks", {})
+    seen_pids: set[int] = set()
     for line in out.splitlines():
-        parts = line.split()
-        if len(parts) != 2:
+        parts = line.split(None, 2)
+        if len(parts) != 3:
             continue
-        comm, pcpu = parts[0], parts[1]
+        pid_s, comm, pcpu = parts
         try:
-            cpu = float(pcpu)
+            pid = int(pid_s)
+            cpu = float(pcpu) / 100.0
         except ValueError:
             continue
-        yield Event(Source.PROCESS, comm, meta={"cpu": cpu / 100.0})
+        seen_pids.add(pid)
+        yield Event(Source.PROCESS, comm, meta={"cpu": cpu, "pid": pid})
+
+        if cpu >= RUNAWAY_CPU_THRESHOLD:
+            streaks[pid] = streaks.get(pid, 0) + 1
+        else:
+            streaks.pop(pid, None)
+        if streaks.get(pid, 0) >= RUNAWAY_CPU_STREAK_TICKS:
+            yield Event(Source.PROCESS, f"{comm} __RUNAWAY_CPU__",
+                        meta={"cpu": cpu, "pid": pid})
+
+    for pid in list(streaks):        # drop streaks for processes that exited
+        if pid not in seen_pids:
+            streaks.pop(pid, None)
 
 
 def network(_state: dict) -> Iterator[Event]:
