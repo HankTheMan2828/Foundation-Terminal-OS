@@ -1,13 +1,14 @@
-# Zenbook Duo Terminal OS
+# Terminal OS
 
-A fully console-based Arch Linux system. The core targets no specific device
-— any x86_64 machine that can run Arch and a Wayland compositor works. It
-ships with one hardware profile, for the 2024 Asus Zenbook Duo (UX8406MA),
-which is where the project started; see [`docs/PROFILES.md`](docs/PROFILES.md)
-for how that's kept separate from the core, and how to add another. No desktop
-environment, no window-manager chrome, no typed shell commands in normal use.
-The machine is navigated like a Fallout&nbsp;4 terminal or an Aperture Science
-console: **highlight an option, press Enter.**
+A fully console-based Arch Linux system. This is the parent project: a
+generic core that targets no specific device — any x86_64 machine that can
+run Arch and a Wayland compositor works — from which per-device **hardware
+profiles** are built and refined (see [`docs/PROFILES.md`](docs/PROFILES.md)).
+It ships with one profile so far, for the 2024 Asus Zenbook Duo (UX8406MA),
+which is where the project started. No desktop environment, no window-manager
+chrome, no typed shell commands in normal use. The machine is navigated like a
+Fallout&nbsp;4 terminal or an Aperture Science console: **highlight an option,
+press Enter.**
 
 Login drops straight into a custom curses TUI (the "Home Hub") that *is* the
 login shell — there is no bash prompt to fall back to. An always-on
@@ -61,8 +62,8 @@ services, udev rules, or polkit grants installed.
 > it, then:
 
 ```sh
-git clone <this-repo> /opt/zenbook-terminal-os
-cd /opt/zenbook-terminal-os
+git clone <this-repo> /opt/terminal-os
+cd /opt/terminal-os
 sudo ./install/run-all.sh        # generic core only
 
 # or, building a release for a specific device:

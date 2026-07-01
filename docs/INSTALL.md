@@ -10,7 +10,7 @@
    - `pacstrap /mnt base linux-lts linux-firmware` (LTS kernel — spec §1)
    - working network, a user account you'll turn into the operator, `sudo`,
      `git`.
-2. This repo cloned to the target, e.g. `/opt/zenbook-terminal-os`.
+2. This repo cloned to the target, e.g. `/opt/terminal-os`.
 3. Decide whether you're installing the **generic core** (any x86_64 machine)
    or building a **release for a specific device** — see
    [`PROFILES.md`](PROFILES.md). For the latter, set `HARDWARE_PROFILE=<name>`
