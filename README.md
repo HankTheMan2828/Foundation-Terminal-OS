@@ -10,10 +10,14 @@ chrome, no typed shell commands in normal use. The machine is navigated like a
 Fallout&nbsp;4 terminal or an Aperture Science console: **highlight an option,
 press Enter.**
 
-Login drops straight into a custom curses TUI (the "Home Hub") that *is* the
-login shell — there is no bash prompt to fall back to. An always-on
-monitoring/accountability layer, **Frank**, watches real system usage and can
-restrict access based on rule-based detection plus AI-generated commentary.
+Boot lands on a terminal-styled **login screen** — these are shared company
+machines, up to 8 tiered accounts each with a fixed storage allotment (see
+[`docs/USERS.md`](docs/USERS.md)) — and from there into a custom curses TUI
+(the "Home Hub") that *is* the login shell: there is no bash prompt to fall
+back to. An always-on monitoring/accountability layer, **Frank**, watches real
+system usage per user and can restrict access based on rule-based detection
+plus AI-generated commentary. All user-facing applications are being built
+in-house; the few remaining open-source stand-ins are marked for replacement.
 
 > **Status:** early scaffold. This repository is the *deployable source and
 > installer* for the OS. It is built and iterated on off-device, then cloned

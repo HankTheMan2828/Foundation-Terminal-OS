@@ -182,3 +182,60 @@ class Enforcer:
         time-of-day governs context/ledger/working-memory reset. Kept distinct.
         """
         self.tracks = {t: _TrackState() for t in Track}
+
+
+# ── multi-user coordination (docs/USERS.md) ──────────────────────────────────
+
+DEFAULT_USER = "operator"    # unattributed events land on the session default
+
+
+class UserEnforcers:
+    """Per-user records; machine locks are global.
+
+    Each username gets its own Enforcer — warning scores and SESSION-scope
+    lockouts follow the person across logins. A MACHINE-scope lockout,
+    whoever triggered it, locks the terminal for everyone: the coordinator
+    surfaces it globally rather than per-user.
+
+    This is a router, not a second enforcement path: every Finding still runs
+    through Enforcer.process(), so the hard-ceiling/scope/duration invariants
+    hold per user exactly as they did for the single-user model.
+    """
+
+    def __init__(self, config: EnforcementConfig | None = None):
+        self.cfg = config or EnforcementConfig()
+        self.users: dict[str, Enforcer] = {}
+
+    def enforcer_for(self, user: str) -> Enforcer:
+        user = user or DEFAULT_USER
+        if user not in self.users:
+            self.users[user] = Enforcer(self.cfg)
+        return self.users[user]
+
+    def process(self, finding: Finding, now: float) -> Reaction:
+        return self.enforcer_for(finding.event.user).process(finding, now)
+
+    # ── aggregate views ──────────────────────────────────────────────────────
+    def machine_lockout(self, now: float) -> tuple[str, Lockout] | None:
+        """The active MACHINE lock and who triggered it, if any."""
+        for user, enf in self.users.items():
+            if enf.is_locked(now) and enf.lockout.scope is Scope.MACHINE:
+                return user, enf.lockout
+        return None
+
+    def session_lockouts(self, now: float) -> dict[str, Lockout]:
+        """Active SESSION locks by user — these follow the person, so the
+        login screen refuses them until expiry (docs/USERS.md)."""
+        return {user: enf.lockout for user, enf in self.users.items()
+                if enf.is_locked(now) and enf.lockout.scope is Scope.SESSION}
+
+    def is_locked(self, user: str, now: float) -> bool:
+        """Whether this user may hold the console: their own session lock OR
+        anyone's machine lock says no."""
+        if self.machine_lockout(now) is not None:
+            return True
+        return self.enforcer_for(user).is_locked(now)
+
+    def reset_daily(self) -> None:
+        for enf in self.users.values():
+            enf.reset_daily()

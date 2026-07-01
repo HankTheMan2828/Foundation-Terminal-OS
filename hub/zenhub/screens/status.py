@@ -36,7 +36,17 @@ class StatusScreen(MenuScreen):
             row += 1
             win.addstr(row, left, f"{self._user}   uid {self._uid}",
                        theme.attr(theme.PAIR_NORMAL))
-            row += 2
+            row += 1
+            acct = session.get_active_account()
+            if acct is not None:
+                from ..accounts import GiB, MiB
+                q = acct.info.quota_bytes
+                quota = (f"{q // GiB} GB" if q >= GiB else f"{q // MiB} MB")
+                win.addstr(row, left,
+                           f"{acct.info.label}   allotment {quota}",
+                           theme.attr(theme.PAIR_NORMAL))
+                row += 1
+            row += 1
 
             win.addstr(row, left, labels.STATUS_FUNCTIONS_HEADING,
                        theme.attr(theme.PAIR_DIM, dim=True))

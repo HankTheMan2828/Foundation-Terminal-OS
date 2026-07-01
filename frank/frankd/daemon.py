@@ -30,7 +30,7 @@ import time
 from collections import deque
 
 from . import config, lockstate, sources
-from .enforcement import Enforcer, ReactionKind
+from .enforcement import ReactionKind, UserEnforcers
 from .eventlog import EventLog
 from .incidents import IncidentStore
 from .ledger import TimestampLedger
@@ -56,7 +56,9 @@ class Frank:
     def __init__(self, cfg: config.FrankConfig | None = None, *, poll_interval: float = 2.0):
         self.cfg = cfg or config.load()
         self.engine = RuleEngine.from_dir(config.RULES_DIR, self.cfg.sensitivity)
-        self.enforcer = Enforcer(self.cfg.enforcement)
+        # Per-user records; machine locks global (docs/USERS.md). Same single
+        # enforcement path — UserEnforcers only routes by the event's user.
+        self.enforcers = UserEnforcers(self.cfg.enforcement)
         self.ledger = TimestampLedger(self.cfg.ledger_path)
         self.incidents = IncidentStore(self.cfg.incidents_path)
         self.eventlog = EventLog(self.cfg.events_path)
@@ -74,7 +76,7 @@ class Frank:
         self._last_triage_run = now
         self._last_overseer_checkin = now
         # Re-arm a still-valid MACHINE lock from a previous boot (spec §6).
-        lockstate.restore_machine_lock(self.enforcer, self.lock_state_path, now)
+        lockstate.restore_machine_lock(self.enforcers, self.lock_state_path, now)
 
     # NOTE: there is deliberately NO set_sensitivity / no operator-facing mutator.
     # Sensitivity is fixed from root-owned config at load; the operator cannot
@@ -85,14 +87,20 @@ class Frank:
         if self._pending:
             return self._pending.popleft()
         now = time.time()
-        if self.enforcer.is_locked(now):
-            return (f"lockout scope={self.enforcer.scope().value} "
-                    f"remaining={int(self.enforcer.remaining(now))}")
+        machine = self.enforcers.machine_lockout(now)
+        if machine is not None:
+            return (f"lockout scope=machine "
+                    f"remaining={int(machine[1].end - now)}")
+        sessions = self.enforcers.session_lockouts(now)
+        if sessions:
+            user, lk = next(iter(sessions.items()))
+            return (f"lockout scope=session user={user} "
+                    f"remaining={int(lk.end - now)}")
         return "NONE"
 
     # ── processing ────────────────────────────────────────────────────────────
     def _handle_finding(self, finding, now: float) -> None:
-        reaction = self.enforcer.process(finding, now)
+        reaction = self.enforcers.process(finding, now)
         # Every logged action gets a timestamp in the visible ledger (§6).
         self.ledger.record(now)
         commentary = ""
@@ -133,15 +141,17 @@ class Frank:
         self._maybe_run_triage(now)
         self._maybe_overseer_checkin(now)
         # Publish the current lock decision for the root enforcer every tick,
-        # so it applies new locks and releases expired ones promptly.
-        lockstate.write(self.lock_state_path, self.enforcer, now)
+        # so it applies new locks and releases expired ones promptly — plus
+        # the public usernames+timestamps summary the login screen gates on.
+        lockstate.write(self.lock_state_path, self.enforcers, now)
+        lockstate.write_public(self.cfg.login_locks_path, self.enforcers, now)
 
     def _maybe_daily_reset(self, now: float) -> None:
         """Time-of-day reset of ledger + working memory (spec §6). Not lockouts."""
         lt = time.localtime(now)
         if lt.tm_yday != self._last_reset_day and lt.tm_hour >= self.cfg.reset_hour:
             self.ledger.reset_daily()
-            self.enforcer.reset_daily()
+            self.enforcers.reset_daily()
             self.eventlog.prune(now)   # own retention policy — see eventlog.py
             self._last_reset_day = lt.tm_yday
 
@@ -165,7 +175,15 @@ class Frank:
         check-in — a bounded recent slice of the raw event log, not a live
         process dump (keeps this deterministic/testable and cheap)."""
         recent = self.eventlog.between(now - _SNAPSHOT_WINDOW_SECONDS, now)
-        lines = [f"lockout: {'active scope=' + self.enforcer.scope().value if self.enforcer.is_locked(now) else 'none'}"]
+        machine = self.enforcers.machine_lockout(now)
+        sessions = self.enforcers.session_lockouts(now)
+        if machine is not None:
+            lock_desc = "active scope=machine"
+        elif sessions:
+            lock_desc = f"active scope=session users={','.join(sorted(sessions))}"
+        else:
+            lock_desc = "none"
+        lines = [f"lockout: {lock_desc}"]
         lines.append(f"last {_SNAPSHOT_WINDOW_SECONDS}s of activity ({len(recent)} events):")
         for entry in recent[-_SNAPSHOT_MAX_LINES:]:
             lines.append(f"  [{entry.get('source')}] {entry.get('text')}")

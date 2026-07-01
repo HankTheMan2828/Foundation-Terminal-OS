@@ -1,12 +1,36 @@
 """Every user-visible label in one place.
 
-Spec §5 and §10: all menu wording is placeholder pending the operator's review.
-Centralizing it here makes the wording review a single-file diff — approving or
-rewriting labels never touches screen logic. See docs/OPEN-QUESTIONS.md §1.
+Centralizing wording here makes any wording change a single-file diff —
+rewriting labels never touches screen logic.
 
 Flavor register: Vault-Tec / Aperture Science meets plain practicality.
-Nothing here is final. [TODO(approval)]
+✅ APPROVED — the operator locked this label set (docs/OPEN-QUESTIONS.md §1);
+the alternate drafts were dropped. Future edits are ordinary changes, not
+pending decisions.
 """
+
+# ── Login (the terminal's front door — docs/USERS.md) ────────────────────────
+LOGIN_TITLE = "TERMINAL // ACCESS"
+LOGIN_SUBTITLE = "IDENTIFY YOURSELF — ALL ACCESS IS RECORDED"
+LOGIN_REGISTER = "NEW OPERATOR REGISTRATION"
+LOGIN_PASSWORD_FOR = "AUTHENTICATION — {user}"
+LOGIN_PASSWORD_PROMPT = "PASSWORD"
+LOGIN_DENIED = "ACCESS DENIED"
+LOGIN_COOLDOWN = "TOO MANY FAILURES — WAIT"
+LOGIN_LOCKED = "LOCKED"
+LOGIN_MACHINE_LOCKED = "TERMINAL LOCKED BY THE OVERSEER"
+LOGIN_AT_CAPACITY = "TERMINAL AT ACCOUNT CAPACITY (8)"
+LOGIN_HINT = "↑↓/jk move   ↵ select   q power"
+
+REG_TITLE = "OPERATOR REGISTRATION"
+REG_USERNAME = "DESIGNATION"
+REG_TIER = "CLEARANCE TIER"
+REG_SETUP_CODE = "TECHNICIAN SETUP CODE"
+REG_PASSWORD = "PASSWORD"
+REG_PASSWORD_CONFIRM = "CONFIRM PASSWORD"
+REG_MISMATCH = "PASSWORDS DO NOT MATCH"
+REG_DONE = "ACCOUNT REGISTERED — WELCOME ABOARD"
+REG_HINT = "type   ↵ confirm   Esc cancel"
 
 # ── Top-level Home Hub ────────────────────────────────────────────────────────
 HUB_TITLE = "TERMINAL // MAIN"

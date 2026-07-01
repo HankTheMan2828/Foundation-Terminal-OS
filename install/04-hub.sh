@@ -17,6 +17,22 @@ fi
 install -d -o root -g root -m 0755 /etc/zenhub
 install_file "etc/zenhub/recreation.toml" "/etc/zenhub/recreation.toml" 0644
 install_file "etc/zenhub/kitty.conf"       "/etc/zenhub/kitty.conf"       0644
+
+# ── Multi-user login (docs/USERS.md) ─────────────────────────────────────────
+# Account registry: root writes (via zenhub-account), the Hub only reads.
+# Bootstrapped empty -> the login screen offers NEW OPERATOR REGISTRATION.
+if [[ ! -e /etc/zenhub/users.json ]]; then
+  install -o root -g "$OPERATOR" -m 0640 /dev/null /etc/zenhub/users.json 2>/dev/null || \
+  install -o root -g root -m 0640 /dev/null /etc/zenhub/users.json
+fi
+# Root-only provisioning helper + the polkit grant scoped to exactly it.
+install_file "usr/local/bin/zenhub-account" "/usr/local/bin/zenhub-account" 0755
+install -d -m 0755 /etc/polkit-1/rules.d
+install_file "etc/polkit-1/rules.d/50-zenhub-account.rules" \
+             "/etc/polkit-1/rules.d/50-zenhub-account.rules" 0644
+# /run/zenhub (active-user publication for Frank's per-user attribution).
+install_file "etc/tmpfiles.d/zenhub.conf" "/etc/tmpfiles.d/zenhub.conf" 0644
+systemd-tmpfiles --create /etc/tmpfiles.d/zenhub.conf 2>/dev/null || true
 # AI Chat key file (operator-readable, separate from Frank's key). Empty by
 # default -> AI Chat runs in the clearly-labelled offline state (spec §5).
 if [[ ! -e /etc/zenhub/aichat.env ]]; then

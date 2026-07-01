@@ -24,12 +24,20 @@ login shell = /usr/local/bin/zenhub-session
   ▼
 cage (Wayland kiosk compositor)
   └── launches ONE fullscreen kitty
-        └── runs `python -m zenhub`  ◄──── the Home Hub TUI
+        └── runs `python -m zenhub`  ◄──── LOGIN screen, then the Home Hub
 ```
 
 Key property from the spec: **the TUI is the login shell.** There is no bash
 prompt behind it. `zenhub-session` execs cage→kitty→zenhub; when zenhub exits,
 the whole chain unwinds and the session ends. No shell to drop to.
+
+Multi-user (docs/USERS.md): zenhub now opens on a **login screen** — up to 8
+tiered accounts per machine. In the interim layering, the Linux user
+`operator` hosts the console session and zenhub accounts are logical users on
+top of it; the Hub publishes the active account to `/run/zenhub/active-user`
+so Frank attributes events per person, and Frank's session-scope locks gate
+the login screen via the public `/run/frank/login.locks` summary (usernames +
+expiry timestamps only). Real per-account Linux sessions are `TODO(hardware)`.
 
 The session wrapper is a thin script rather than making cage itself the shell so
 we can (a) start the per-session sound daemon, (b) export the CRT theme env, and

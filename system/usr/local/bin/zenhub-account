@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""zenhub-account — ROOT helper for account provisioning (docs/USERS.md).
+
+The registry (/etc/zenhub/users.json) is root-owned: the Hub can read it to
+list accounts and verify passwords, but cannot write it. All mutation goes
+through this helper, invoked from the login screen's registration flow via
+pkexec (see /etc/polkit-1/rules.d/50-zenhub-account.rules).
+
+    zenhub-account create <username> <tier-int>
+        stdin line 1: password
+        stdin line 2: technician setup code (may be empty for GUEST)
+
+This is the authoritative validation point — the Hub pre-checks for nicer UX,
+but a hostile client talking straight to pkexec hits the same checks here:
+capacity (8), username rules, tier's setup-code requirement.
+
+Besides the registry entry it also provisions the underlying system pieces:
+  * a real Linux user for the account            [TODO(hardware) verify]
+  * the tier's fixed storage quota               [TODO(hardware) — needs a
+    quota-enabled filesystem; setquota is attempted, failure is reported but
+    not fatal so off-target testing still works]
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+
+try:
+    import pwd
+except ImportError:          # non-POSIX dev box; system-user provisioning skipped
+    pwd = None               # type: ignore[assignment]
+
+# The deployed repo carries the Hub package; the registry logic lives there so
+# helper and Hub can never disagree about the schema.
+sys.path.insert(0, os.environ.get("ZENHUB_LIB", "/opt/terminal-os/hub"))
+
+from zenhub.accounts import Registry, RegistryError, Tier, TIERS  # noqa: E402
+
+REGISTRY_GROUP = os.environ.get("ZENHUB_OPERATOR", "operator")
+
+
+def _fail(msg: str) -> int:
+    print(msg, file=sys.stderr)
+    return 1
+
+
+def _provision_system_user(username: str, tier: Tier) -> None:
+    """Create the Linux user + quota behind the logical account."""
+    if pwd is None or shutil.which("useradd") is None:
+        return   # off-target dev box
+    try:
+        pwd.getpwnam(username)
+        return   # already exists (idempotent re-run)
+    except KeyError:
+        pass
+    subprocess.run(["useradd", "-m", "-s", "/usr/sbin/nologin", username],
+                   check=True)
+    # Fixed per-tier allotment (docs/USERS.md). Block quota only; soft=hard —
+    # "a set amount of storage, no more no less".
+    blocks = TIERS[tier].quota_bytes // 1024
+    res = subprocess.run(
+        ["setquota", "-u", username, str(blocks), str(blocks), "0", "0", "/home"],
+        capture_output=True, text=True)
+    if res.returncode != 0:   # TODO(hardware): quota-enabled /home on target
+        print(f"warning: quota not applied ({res.stderr.strip()})",
+              file=sys.stderr)
+
+
+def cmd_create(username: str, tier_raw: str) -> int:
+    if os.name == "posix" and os.geteuid() != 0:
+        return _fail("zenhub-account must run as root (via pkexec)")
+    try:
+        tier = Tier(int(tier_raw))
+    except ValueError:
+        return _fail(f"unknown tier {tier_raw!r}")
+    password = sys.stdin.readline().rstrip("\n")
+    setup_code = sys.stdin.readline().rstrip("\n")
+
+    registry = Registry()
+    try:
+        registry.add_account(username, password, tier, setup_code=setup_code)
+    except RegistryError as exc:
+        return _fail(str(exc))
+    # Hub (operator) reads the registry; only root writes it.
+    try:
+        shutil.chown(registry.path, "root", REGISTRY_GROUP)
+        os.chmod(registry.path, 0o640)
+    except (OSError, LookupError):
+        pass
+    try:
+        _provision_system_user(username, tier)
+    except subprocess.CalledProcessError as exc:
+        return _fail(f"registry updated but system user failed: {exc}")
+    print(f"account {username} registered ({TIERS[tier].label})")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) == 4 and argv[1] == "create":
+        return cmd_create(argv[2], argv[3])
+    return _fail(__doc__.strip().splitlines()[0]
+                 + "\nusage: zenhub-account create <username> <tier-int>")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

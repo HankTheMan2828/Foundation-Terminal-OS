@@ -21,6 +21,19 @@ from .model import Event, Source
 
 OPERATOR = os.environ.get("FRANK_OPERATOR", "operator")
 
+# The Hub publishes which logical account holds the session (docs/USERS.md);
+# collectors stamp every event with it so records follow the person, not the
+# shared Linux session user.
+ACTIVE_USER_FILE = Path(os.environ.get("ZENHUB_ACTIVE_USER",
+                                       "/run/zenhub/active-user"))
+
+
+def active_user() -> str:
+    try:
+        return ACTIVE_USER_FILE.read_text().strip()
+    except OSError:
+        return ""
+
 # Operator-confirmed (docs/OPEN-QUESTIONS.md §3): 85% sustained for 10s. Streak
 # is expressed in polls, not seconds, since the daemon's poll interval is what
 # actually elapses between checks (default 2s -> 5 ticks == 10s).
@@ -109,5 +122,9 @@ ALL = [shell_history, processes, network, filesystem, browser]
 
 
 def collect(state: dict) -> Iterator[Event]:
+    user = active_user()
     for src in ALL:
-        yield from src(state)
+        for event in src(state):
+            if not event.user:
+                event.user = user
+            yield event

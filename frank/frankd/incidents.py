@@ -30,6 +30,7 @@ class IncidentStore:
         """Append full detail. NEVER read back into any user-facing surface."""
         entry = {
             "ts": time.time() if now is None else now,
+            "user": finding.event.user,      # records follow the person (docs/USERS.md)
             "rule_id": finding.rule_id,
             "track": finding.track.value,
             "severity": finding.severity.name,

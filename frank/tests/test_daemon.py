@@ -14,6 +14,7 @@ def _cfg(tmp_path, **overrides):
         triage_path=tmp_path / "triage.jsonl",
         verdicts_path=tmp_path / "verdicts.jsonl",
         ipc_socket=tmp_path / "hub.sock",
+        login_locks_path=tmp_path / "login.locks",
     )
     for k, v in overrides.items():
         setattr(cfg, k, v)
@@ -124,9 +125,22 @@ def test_activity_snapshot_reflects_lock_state(tmp_path):
     f = Frank(_cfg(tmp_path))
     snap = f._activity_snapshot(now=100)
     assert "lockout: none" in snap
-    f.enforcer.process(_finding(sev=Severity.SERIOUS), now=100)
+    f.enforcers.process(_finding(sev=Severity.SERIOUS), now=100)
     snap2 = f._activity_snapshot(now=100)
     assert "lockout: active scope=machine" in snap2
+
+
+def test_findings_are_recorded_per_user(tmp_path):
+    """Records follow the person (docs/USERS.md): the incident entry carries
+    the logical user, and enforcement state is keyed by it."""
+    f = Frank(_cfg(tmp_path))
+    ev = Event(Source.SHELL, "x", user="alice")
+    f._handle_finding(Finding("rule", Track.SECURITY, Severity.MINOR, ev, "x"),
+                      now=100)
+    entry = f.incidents.since(0)[0]
+    assert entry["user"] == "alice"
+    assert "alice" in f.enforcers.users
+    assert not f.enforcers.enforcer_for("bob").is_locked(100)
 
 
 def test_only_content_bearing_sources_are_persisted_to_the_raw_eventlog():

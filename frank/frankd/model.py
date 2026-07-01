@@ -45,6 +45,10 @@ class Event:
     text: str                       # the observable payload (command, path, host, query…)
     ts: float = field(default_factory=time.time)
     meta: dict = field(default_factory=dict)  # e.g. {"cpu": 0.98, "pid": 1234}
+    # Which logical account produced this (docs/USERS.md). Records follow the
+    # person: enforcement state is keyed by this. "" = unattributed, treated
+    # as the default session user by the enforcement layer.
+    user: str = ""
 
 
 @dataclass

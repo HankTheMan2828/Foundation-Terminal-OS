@@ -159,3 +159,65 @@ def test_track_score_does_not_decay_within_window():
         e.process(_finding(Severity.MINOR), now=0)
     e.process(_finding(Severity.MINOR), now=e.cfg.track_score_decay_seconds - 1)
     assert e.tracks[Track.SECURITY].score == 3     # still within window -> keeps stacking
+
+
+# ── multi-user coordination (docs/USERS.md): per-user records, machine locks
+# global. UserEnforcers is a router over Enforcer, not a second path — these
+# tests pin the routing semantics; the invariants above still hold per user.
+
+from frankd.enforcement import UserEnforcers
+
+
+def _ufinding(sev, user, track=Track.SECURITY):
+    return Finding("r", track, sev, Event(Source.SHELL, "x", user=user),
+                   matched="x")
+
+
+def test_warning_scores_are_isolated_per_user():
+    """One user's near-lockout must not spill onto anyone else's record."""
+    e = UserEnforcers()
+    for _ in range(3):
+        e.process(_ufinding(Severity.MINOR, "alice"), now=0)
+    r = e.process(_ufinding(Severity.MINOR, "bob"), now=0)
+    assert r.kind is ReactionKind.WARN          # bob starts clean
+    assert not e.enforcer_for("bob").is_locked(0)
+    r = e.process(_ufinding(Severity.MINOR, "alice"), now=0)
+    assert r.kind is ReactionKind.LOCKOUT       # alice's 4th strike is hers
+
+
+def test_session_lock_follows_the_user_not_the_machine():
+    e = UserEnforcers()
+    for _ in range(4):
+        e.process(_ufinding(Severity.MINOR, "alice"), now=0)
+    assert e.enforcer_for("alice").scope() is Scope.SESSION
+    assert e.is_locked("alice", 0)
+    assert not e.is_locked("bob", 0)            # bob may still log in
+    assert e.machine_lockout(0) is None
+    assert set(e.session_lockouts(0)) == {"alice"}
+
+
+def test_machine_lock_freezes_the_terminal_for_everyone():
+    """SERIOUS -> machine scope: whoever caused it, nobody gets the console."""
+    e = UserEnforcers()
+    e.process(_ufinding(Severity.SERIOUS, "alice"), now=0)
+    assert e.is_locked("alice", 0)
+    assert e.is_locked("bob", 0)
+    assert e.is_locked("someone-never-seen", 0)
+    user, lk = e.machine_lockout(0)
+    assert user == "alice" and lk.scope is Scope.MACHINE
+
+
+def test_unattributed_events_land_on_the_default_user():
+    e = UserEnforcers()
+    r = e.process(_ufinding(Severity.MINOR, ""), now=0)
+    assert r.kind is ReactionKind.WARN
+    assert "operator" in e.users
+
+
+def test_daily_reset_covers_every_user():
+    e = UserEnforcers()
+    e.process(_ufinding(Severity.MINOR, "alice"), now=0)
+    e.process(_ufinding(Severity.MINOR, "bob"), now=0)
+    e.reset_daily()
+    assert e.enforcer_for("alice").tracks[Track.SECURITY].score == 0
+    assert e.enforcer_for("bob").tracks[Track.SECURITY].score == 0

@@ -9,25 +9,15 @@ Legend: ⬜ needs your decision · 🟨 drafted, awaiting sign-off · ✅ approv
 
 ---
 
-## 1. Menu labels (spec §5, §10)
+## 1. Menu labels (spec §5, §10) — ✅ LOCKED (2026-07-01)
 
-The Home Hub top level. Flavor mixes Vault-Tec/Aperture with plain practicality.
-All labels are centralized in [`hub/zenhub/labels.py`](../hub/zenhub/labels.py)
-so approving them is a single-file edit. Current drafts:
-
-| Area (spec name)   | 🟨 Draft label        | Alt option            |
-|--------------------|-----------------------|-----------------------|
-| (Hub title)        | `TERMINAL // MAIN`    | `OPERATOR CONSOLE`    |
-| Programs           | `PROGRAMS`            | `UTILITIES`           |
-| Recreation         | `RECREATION`          | `LEISURE SUBSYSTEM`   |
-| Functions Control  | `FUNCTIONS`           | `SYSTEMS CONTROL`     |
-| System Status (was Settings) | `SYSTEM STATUS` | — |
-| Log                | `LOGS`                | `RECORDS`             |
-| Personal Notes     | `PERSONAL FILE`       | `OPERATOR JOURNAL`    |
-| AI Chat            | `ASSISTANT`           | `ADVISORY`            |
-
-Sub-labels (Log split, Notes split, etc.) are also in `labels.py`. **Status:
-🟨 awaiting sign-off — tell me a set and I'll lock it.**
+The operator approved the primary draft set; the alternate options are
+dropped. The locked set, all in
+[`hub/zenhub/labels.py`](../hub/zenhub/labels.py): `TERMINAL // MAIN`,
+`PROGRAMS`, `RECREATION`, `FUNCTIONS`, `SYSTEM STATUS`, `LOGS`,
+`PERSONAL FILE`, `ASSISTANT`, plus the new login-screen set
+(`TERMINAL // ACCESS` etc.). Future edits are ordinary changes, not pending
+decisions.
 
 **✅ Settings → System Status, approved and applied.** The user decided the
 old Settings/Configuration area shouldn't exist as an operator-facing settings
@@ -120,10 +110,16 @@ the operator cannot ignore or no-op a lockout. See ARCHITECTURE.md →
 "Enforcement is root-owned." ⬜ Only open sub-question: what should the root-set
 default sensitivity be? (currently 3 / balanced).
 
-## 6. Login model — ✅ decided
+## 6. Login model — ✅ REVERSED (2026-07-01): multi-user login screen
 
-Autologin straight to the Hub (your call this session). Wired in
-[`system/etc/systemd/system/getty@tty1.service.d/autologin.conf`].
+The earlier "autologin straight to the Hub" call is superseded: these are
+shared company terminals, so boot lands on a **login screen** — up to 8
+accounts per machine, fixed per-tier storage, guest self-service,
+technician setup code (placeholder `1234`) for everything above guest, and
+a future company user-ID system for provisioning. Full spec:
+[`docs/USERS.md`](USERS.md). The getty autologin conf survives, but it now
+lands on the login screen, not the Hub; `ZENHUB_USER=<name>` is the
+skip-login hook for dev and future per-user sessions.
 
 ## 7. Theme defaults — ✅ decided (tunable later)
 
@@ -174,6 +170,37 @@ What was decided vs. what's still open:
   `chat/completions` `ai.py` speaks today — adopting Claude for either role
   means adding a second concrete class behind the same `Sifter`/
   `OverseerBrain` Protocol, not adapting the existing one.
+
+## 10. In-house applications mandate + web integration (2026-07-01 session)
+
+The operator's finalized vision, decided in one pass:
+
+- ✅ **Everything user-facing goes in-house.** The open-source stand-ins
+  (ranger, btop, nvim, the games) are placeholders to be replaced, not kept.
+  **Hybrid architecture:** core apps (notes, file manager, system monitor)
+  become native Hub screens; heavy apps (media playback, games) become
+  separate in-house TUI programs the Hub launches.
+- ✅ **Redundancy cuts approved:** ONE in-house media player (`zenmedia`,
+  audio+video — cmus and mpv both dropped from the package set); ONE editor
+  everywhere (the notes suite's editor becomes the system editor; nvim is
+  interim-only); LOGS is confirmed as the single records surface (system
+  records + overseer ledger, nothing duplicated elsewhere); labels locked
+  (§1).
+- ✅ **Notes = full in-house suite** (a key aspect of the system): built-in
+  curses editor plus a note browser — dated journal, tagged notes, search by
+  tag/text — all inside the Hub. No external editor. *Build next.*
+- ✅ **Web integration: none in v1.** The terminal stays offline-first. The
+  chosen future direction is a **retrieval terminal** backed by a search API
+  — operator's candidates: **Kagi API or Brave Search API** (AI-mediated
+  access was considered and is less likely). Both are plain HTTPS+JSON, so
+  the feature stays viable on the console-mode portability tier. Design the
+  Hub so a NETWORK ARCHIVE area can be added without rework.
+- ✅ **Multi-user login + tiers + per-user Frank** — see §6 and
+  [`docs/USERS.md`](USERS.md).
+- ⬜ Per-tier quota amounts (64 MB / 5 GB / 15 GB / 25 GB drafted) and tier
+  names await sign-off — see USERS.md.
+- ⬜ The real user-ID provisioning system (replaces the `1234` setup code) —
+  future session.
 
 ---
 

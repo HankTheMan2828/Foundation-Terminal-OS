@@ -21,6 +21,14 @@ FRANK_SOCK = os.environ.get("FRANK_HUB_SOCK", "/run/frank/hub.sock")
 # Ledger: timestamps ONLY (spec §6). The Hub can read this; it can NOT read
 # Frank's detail store, which is frank:frank 0600 and never exposed.
 LEDGER_PATH = os.environ.get("FRANK_LEDGER", "/var/lib/frank/ledger.timestamps")
+# Frank's public login-lock summary: usernames + expiry timestamps only, so
+# the login screen can refuse a locked-out account. No detail, same philosophy
+# as the timestamp ledger (docs/USERS.md).
+LOGIN_LOCKS = Path(os.environ.get("FRANK_LOGIN_LOCKS", "/run/frank/login.locks"))
+# Where the Hub publishes which logical account holds the session, so Frank's
+# collectors can attribute events per user (docs/USERS.md).
+ACTIVE_USER_FILE = Path(os.environ.get("ZENHUB_ACTIVE_USER",
+                                       "/run/zenhub/active-user"))
 
 
 def _run(argv: list[str], ok: str) -> str:
@@ -90,10 +98,51 @@ def get_power_profile_status() -> str:
     return _run_get(["powerprofilesctl", "get"], "n/a")
 
 
+# ── the active logical account (set by the login screen — docs/USERS.md) ─────
+# The Linux user hosting the session stays `operator`; zenhub accounts are
+# logical users layered on top until real per-account sessions land
+# [TODO(hardware)].
+
+_active_account = None    # accounts.Account | None
+
+
+def set_active_account(acct) -> None:
+    global _active_account
+    _active_account = acct
+    if acct is not None:
+        os.environ["ZENHUB_USER"] = acct.username
+        try:
+            ACTIVE_USER_FILE.parent.mkdir(parents=True, exist_ok=True)
+            ACTIVE_USER_FILE.write_text(acct.username + "\n")
+        except OSError:
+            pass   # off-device: /run/zenhub may not exist; Frank just sees no user
+
+
+def get_active_account():
+    return _active_account
+
+
+def read_login_locks() -> dict:
+    """Frank's public lock summary: {"machine_end": ts, "users": {name: ts}}.
+
+    Timestamps + usernames only, by design. Missing/corrupt file = no locks
+    (off-device, or Frank not running)."""
+    import json
+    try:
+        data = json.loads(LOGIN_LOCKS.read_text())
+        return {"machine_end": float(data.get("machine_end", 0)),
+                "users": {str(k): float(v)
+                          for k, v in data.get("users", {}).items()}}
+    except (OSError, ValueError):
+        return {"machine_end": 0.0, "users": {}}
+
+
 # ── System Status (read-only identity + basic health checks) ─────────────────
 
 def get_user_identity() -> tuple[str, str]:
     """Return (username, uid) for display. Never raises."""
+    if _active_account is not None:
+        return _active_account.username, str(os.getuid())
     try:
         name = getpass.getuser()
     except Exception:

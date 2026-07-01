@@ -38,24 +38,33 @@ print("" if v is None else v)
 PY
 }
 
+# Scope semantics with the multi-user login screen (docs/USERS.md):
+#   session  the offending USER is locked, not the terminal — tear down the
+#            live session (getty restarts it into the LOGIN screen, where
+#            Frank's public lock summary refuses that account until expiry;
+#            everyone else may still sign in).
+#   machine  nobody gets the console: also stop getty and show the root
+#            countdown locker until the timer expires.
 enforce() {  # enforce <end_epoch> <scope>
   local end="$1" scope="${2:-machine}"
   echo "$end" > "$MARK"
   logger -t frank-enforcer "applying ${scope} lockout until ${end}" || true
-  # 1) tear down any active operator session immediately.
+  # 1) tear down the active session immediately (both scopes).
   loginctl terminate-user "$OPERATOR" 2>/dev/null || true
-  # 2) block new logins on the locked tty until release.
-  systemctl stop "getty@${LOCK_TTY}.service" 2>/dev/null || true
-  # 3) show the root locker on the console (best-effort; see TODO(hardware)).
-  pkill -f "$LOCKER" 2>/dev/null || true
-  setsid bash -c "exec $LOCKER $end < /dev/${LOCK_TTY} > /dev/${LOCK_TTY} 2>&1" &
+  if [[ "$scope" == "machine" ]]; then
+    # 2) block new logins on the locked tty until release.
+    systemctl stop "getty@${LOCK_TTY}.service" 2>/dev/null || true
+    # 3) show the root locker on the console (best-effort; see TODO(hardware)).
+    pkill -f "$LOCKER" 2>/dev/null || true
+    setsid bash -c "exec $LOCKER $end < /dev/${LOCK_TTY} > /dev/${LOCK_TTY} 2>&1" &
+  fi
 }
 
 release() {
   rm -f "$MARK"
   pkill -f "$LOCKER" 2>/dev/null || true
   logger -t frank-enforcer "lockout released — restoring console" || true
-  # Restore autologin -> the operator lands back in the Hub.
+  # Restore autologin -> the console lands back on the LOGIN screen.
   systemctl start "getty@${LOCK_TTY}.service" 2>/dev/null || true
 }
 

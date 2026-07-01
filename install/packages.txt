@@ -32,11 +32,12 @@ python
 # (zenhub and frankd are pure-stdlib; no pip deps required for offline mode)
 
 # --- Programs area tools (spec §5) ---
-ranger          # file manager
-cmus            # audio player
-mpv             # media
-btop            # system monitor
-neovim          # text editor
+# DIRECTION: all of these are TEMPORARY stand-ins to be replaced in-house
+# (docs/OPEN-QUESTIONS.md §10). cmus and mpv are already dropped — media is
+# one in-house player (zenmedia) when it lands, not two borrowed ones.
+ranger          # file manager      -> native Hub screen (planned)
+btop            # system monitor    -> native Hub screen (planned)
+neovim          # text editor       -> in-house notes-suite editor (planned)
 networkmanager  # nmtui network config
 
 # --- optional: AI features (spec §5, §6) need python-requests when a key is set ---
