@@ -122,3 +122,40 @@ def test_two_tracks_escalate_independently():
     # Legal/ethical track untouched by security-track escalation.
     assert e.tracks[Track.LEGAL_ETHICAL].score == 0
     assert e.tracks[Track.SECURITY].score == 2
+
+
+def test_observe_never_warns_or_locks():
+    """OBSERVE is a hard bypass (e.g. self-harm content): record, never act."""
+    e = Enforcer()
+    for i in range(50):
+        r = e.process(_finding(Severity.OBSERVE), now=i)
+        assert r.kind is ReactionKind.OBSERVE
+    assert not e.is_locked(49)
+    assert e.tracks[Track.SECURITY].score == 0   # never touches escalation state
+
+
+def test_observe_bypasses_an_active_lockout_too():
+    e = Enforcer()
+    e.process(_finding(Severity.SERIOUS), now=0)
+    assert e.is_locked(0)
+    r = e.process(_finding(Severity.OBSERVE), now=0)
+    assert r.kind is ReactionKind.OBSERVE
+    assert e.is_locked(0)          # lockout untouched
+
+
+def test_track_score_decays_after_quiet_period():
+    """A track that's gone quiet past the decay window resets before accruing."""
+    e = Enforcer()
+    for _ in range(3):
+        e.process(_finding(Severity.MINOR), now=0)
+    assert e.tracks[Track.SECURITY].score == 3
+    e.process(_finding(Severity.MINOR), now=e.cfg.track_score_decay_seconds + 1)
+    assert e.tracks[Track.SECURITY].score == 1     # decayed to 0, then +1
+
+
+def test_track_score_does_not_decay_within_window():
+    e = Enforcer()
+    for _ in range(2):
+        e.process(_finding(Severity.MINOR), now=0)
+    e.process(_finding(Severity.MINOR), now=e.cfg.track_score_decay_seconds - 1)
+    assert e.tracks[Track.SECURITY].score == 3     # still within window -> keeps stacking

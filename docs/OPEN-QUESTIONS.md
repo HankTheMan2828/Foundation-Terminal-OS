@@ -52,21 +52,44 @@ it lean? ⬜ any specific titles you already love? The Recreation screen reads i
 list from [`system/etc/zenhub/recreation.toml`], so adding/removing a game is a
 config edit, not a code change.
 
-## 3. Frank rule/keyword lists + severity tiers (spec §6, §10)
+## 3. Frank rule/keyword lists + severity tiers (spec §6, §10) — ✅ RESOLVED
 
-Two category tracks, each with tiers. Starter lists live in
-[`system/etc/frank/rules.d/`](../system/etc/frank/rules.d). These are
-**deliberately conservative first drafts** — real tuning needs your input on
-what should trip a flag for *your* actual usage.
+Two category tracks, each with tiers. Rule lists live in
+[`system/etc/frank/rules.d/`](../system/etc/frank/rules.d), tuned in a
+dedicated refinement session (operator Q&A, see git history on the
+`security-rules-refinement` branch for the full back-and-forth).
 
-- `security.toml` — malware/exploit tooling keywords, credential-exposure
-  patterns, unsafe-script patterns, runaway-resource thresholds.
-- `legal-ethical.toml` — the broader "concerning content/activity" track.
+- `security.toml` — offensive-tooling detection split into four rules by tool
+  (recon/exploit-framework/attack-tooling/raw-listener) so severity could be
+  set per tool instead of one bucket; exploit frameworks and destructive
+  commands are `serious`, everything else operator-confirmed `elevated`. The
+  old blanket `password=` text match was removed (pure false-positive noise on
+  routine dev work); credential detection is now file/key-pattern only.
+  Runaway-CPU detection was a **dead rule** — the collector never emitted the
+  marker it looked for — now fixed: 85% sustained for 10s (per-process streak
+  tracked in `frankd/sources.py`), severity `minor`.
+- `legal-ethical.toml` — now covers piracy (torrent keywords only — the
+  DRM-tool/yt-dlp half was dropped, too false-positive prone), adult content
+  (`serious`), gambling (`elevated`), illegal-goods/drug purchase-intent
+  (`minor`, deliberately narrow), self-harm content (a new `observe` severity
+  tier — logged, but the warn/lockout pipeline is bypassed entirely so a bad
+  moment never triggers a punitive lockout), and a narrow direct-violent-threat
+  rule (`elevated`). A broader hate-speech/extremism word list was
+  **intentionally not authored** — the operator wants that handled by a
+  scheduled/periodic AI-layer review instead of realtime keyword matching;
+  that's parked as a follow-up for the AI-layer session, not this one.
+  ⚠️ Adult-content/gambling/drug rules target `sources = ["browser", ...]`,
+  but the browser collector is still an unfilled stub (see parking lot) — real
+  day-to-day web coverage isn't active until that's built.
+- Enforcement tuning (`frankd/config.py`): lockout durations halved from the
+  original first draft (minor 2.5min/elevated 7.5min/serious 15min session or
+  machine, 30min hard ceiling). Warning threshold unchanged (3 warnings then
+  lockout on the 4th). New: a track's accrued warning score now decays back to
+  zero if that track has gone quiet for 5+ minutes, so scattered one-offs
+  don't slowly stack toward a lockout the way a burst does.
 
-⬜ **This is the biggest genuinely-open item.** The scaffold ships plausible
-examples so the engine is testable, but the actual pattern lists and thresholds
-are yours to define. See the top of each file for the tier model
-(`minor` / `elevated` / `serious`) and how tiers map to warning counts and
+See the top of each rules file for the tier model
+(`observe` / `minor` / `elevated` / `serious`) and how tiers map to warning counts and
 lockout scope.
 
 ## 4. Frank voice lines / commentary style guide (spec §6, §10)
@@ -114,11 +137,50 @@ Chat show a clear "no key configured" state. Key loading is scaffolded from
 root-owned secret files; nothing secret is committed. See
 [`docs/INSTALL.md`](INSTALL.md) → "Configuring API keys."
 
+## 9. AI-layer session (sorting/sifting Frank + the Overseer) — 🟨 partially resolved
+
+The three-tier Frank model requested this session is built and tested — see
+[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) "Three tiers, one enforcement path."
+What was decided vs. what's still open:
+
+- ✅ **Same hard ceiling applies to the Overseer** (not an exception to it).
+  The Overseer expresses every decision as a `Finding` run through the exact
+  `Enforcer.process()` the rule engine uses — no parallel enforcement path,
+  so it structurally cannot exceed the ceiling, scope, or duration rules
+  already governing Frank.
+- ✅ **Check-in cadence:** the Overseer's periodic path runs twice a day
+  (`config.OverseerConfig.checkin_interval_seconds`, default 12h) — a config
+  value, tune freely.
+- ✅ **Immediate-trigger scope:** only a SERIOUS-severity finding wakes the
+  Overseer early; lesser lockouts/warnings wait for the next scheduled
+  check-in (`config.OverseerConfig.wake_on_serious`).
+- ⬜ **Model choice for the two new AI roles — still open**, same as
+  sensitivity was left as a config value rather than hardcoded. Both roles
+  default to the existing Mistral integration's wire shape (`ai.py`'s
+  `ChatCompletionClient`, OpenAI/Mistral-style `/v1/chat/completions`) so
+  nothing new has to be stood up to try it, but the model string is a config
+  change either way. Researched recommendations, based on how each role is
+  actually used:
+
+  | Role | Call frequency | What it needs | Suggestion |
+  |---|---|---|---|
+  | Sifter (`triage.py`) | Every triage interval (default every 15 min) — the frequent one | Fast, cheap text classification against one narrow category | A small/fast-tier model. If moving off Mistral: **Claude Haiku 4.5** ($1/$5 per MTok, 200K context) — cheapest Claude tier, sized for exactly this kind of frequent narrow classification. |
+  | Overseer brain (`overseer.py`) | A couple of times a day, plus rare SERIOUS triggers — the infrequent one | Judgment over an already-organized digest; consequential (can trigger a machine-wide lockout) | Call volume is low enough that per-token price barely matters — absolute monthly cost stays small either way. Favor capability: **Claude Opus 4.8** ($5/$25 per MTok, 1M context) for the strongest judgment, or **Claude Sonnet 5** ($3/$15, $2/$10 intro through 2026-08-31) as a cheaper near-Opus alternative if the extra margin isn't worth it. |
+
+  Mistral was the first thing that came to mind when the rest of Frank was
+  scaffolded, not a considered choice for these two specific roles — hence
+  leaving this open rather than silently picking one. Note: the Anthropic API
+  uses a different request/response shape than the OpenAI/Mistral-style
+  `chat/completions` `ai.py` speaks today — adopting Claude for either role
+  means adding a second concrete class behind the same `Sifter`/
+  `OverseerBrain` Protocol, not adapting the existing one.
+
 ---
 
 ## Parking lot (raised by the spec, not yet needed)
 
 - Local-model fallback for Frank (spec §6) — architected as a swappable
-  `Commentator` interface now, not implemented in v1.
+  `Commentator` interface now, not implemented in v1. The same pattern now
+  also covers `ai.py`'s `Sifter`/`OverseerBrain` interfaces (§9).
 - Disk encryption / USB-boot tamper resistance (spec §6, §9) — deferred phase,
   intentionally out of scope.

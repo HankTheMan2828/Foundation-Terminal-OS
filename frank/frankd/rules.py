@@ -9,7 +9,7 @@ Each rule:
     [[rule]]
     id = "sec-exploit-tooling"
     track = "security"          # security | legal_ethical
-    severity = "elevated"       # minor | elevated | serious
+    severity = "elevated"       # observe | minor | elevated | serious
     description = "..."         # frank-only, never shown to the user
     patterns = ["msfconsole", "meterpreter"]   # regex, matched case-insensitively
     sources = ["shell", "process"]              # optional; omit = all sources

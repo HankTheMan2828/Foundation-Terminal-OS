@@ -25,10 +25,11 @@ class IncidentStore:
         if not self.path.exists():
             self.path.touch(mode=0o600)
 
-    def record(self, finding: Finding, reaction_kind: str, commentary: str) -> None:
+    def record(self, finding: Finding, reaction_kind: str, commentary: str,
+               now: float | None = None) -> None:
         """Append full detail. NEVER read back into any user-facing surface."""
         entry = {
-            "ts": time.time(),
+            "ts": time.time() if now is None else now,
             "rule_id": finding.rule_id,
             "track": finding.track.value,
             "severity": finding.severity.name,
@@ -41,3 +42,27 @@ class IncidentStore:
         }
         with self.path.open("a") as fh:
             fh.write(json.dumps(entry) + "\n")
+
+    # ── reads (frank-only consumers: triage.py, overseer.py) ────────────────
+    # These never feed any user-facing surface — only the sifting/overseer AI
+    # tiers, which are themselves frank-internal (see ARCHITECTURE.md).
+    def between(self, start: float, end: float) -> list[dict]:
+        """All entries with start <= ts < end. Used by the Overseer to sift a
+        specific time window itself (spec: no subagent, to save context/$)."""
+        out = []
+        try:
+            with self.path.open() as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    entry = json.loads(line)
+                    if start <= entry.get("ts", 0) < end:
+                        out.append(entry)
+        except OSError:
+            pass
+        return out
+
+    def since(self, ts: float) -> list[dict]:
+        """All entries newer than ts. Used by triage.py's periodic scan."""
+        return self.between(ts, float("inf"))

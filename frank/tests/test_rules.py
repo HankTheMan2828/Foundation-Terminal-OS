@@ -85,3 +85,38 @@ def test_shipped_sample_rules_load():
     root = pathlib.Path(__file__).resolve().parents[2]
     eng = RuleEngine.from_dir(root / "system/etc/frank/rules.d")
     assert eng.rules, "shipped sample rules failed to load"
+
+
+def _shipped_engine():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2]
+    return RuleEngine.from_dir(root / "system/etc/frank/rules.d")
+
+
+def test_shipped_self_harm_rule_is_observe_only():
+    # Operator-confirmed: self-harm content is logged but never enforced.
+    eng = _shipped_engine()
+    f = eng.classify(Event(Source.SHELL, "feeling suicidal lately"))[0]
+    assert f.rule_id == "legal-self-harm-content"
+    assert f.severity is Severity.OBSERVE
+
+
+def test_shipped_adult_content_rule_is_serious():
+    eng = _shipped_engine()
+    f = eng.classify(Event(Source.BROWSER, "pornhub.com"))[0]
+    assert f.rule_id == "legal-adult-content"
+    assert f.severity is Severity.SERIOUS
+
+
+def test_shipped_drm_tool_rule_was_removed():
+    # yt-dlp/youtube-dl detection was dropped per operator direction (too
+    # many legitimate uses for a bare tool-name match to be a reliable signal).
+    eng = _shipped_engine()
+    assert eng.classify(Event(Source.SHELL, "yt-dlp --embed-thumbnail url")) == []
+
+
+def test_shipped_inline_password_pattern_was_removed():
+    # The generic "password=" text match was dropped per operator direction
+    # (fired on any routine dev work with no real signal).
+    eng = _shipped_engine()
+    assert eng.classify(Event(Source.SHELL, "password=hunter2")) == []

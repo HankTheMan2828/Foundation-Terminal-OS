@@ -76,6 +76,11 @@ Implementation approach:
   `0640`/`0600` on files. `operator` cannot read it.
 - Findings/detail live at `/var/lib/frank/incidents.db` — `frank:frank`, `0600`.
   Never surfaced through any Hub screen.
+- The sorting/sifting and Overseer tiers (added this session, see below) keep
+  their own frank-only stores under the same isolation model: raw base logs
+  at `/var/lib/frank/events.log`, sifted digests at `/var/lib/frank/triage.jsonl`,
+  and the Overseer's own decision audit trail at `/var/lib/frank/verdicts.jsonl`
+  — all `frank:frank`, `0600`, never surfaced through any interface.
 - Lock decisions are published to `/var/lib/frank/lockout.state` —
   `frank:frank`, `0640` (root reads, operator denied).
 - **The operator has NO power over Frank — none, ever.** There is no tunable
@@ -113,14 +118,21 @@ from `lockout.state`, so rebooting cannot escape them. The operator cannot read
 the state file, signal the enforcer, or reach a shell — the only escape is
 physical/USB, which the spec places out of scope.
 
-## The two Mistral integrations are separate
+## The AI integrations are separate trust domains
 
-Same provider, different clients, different invocation, different trust domain:
+Three, as of this session — same provider(s) available, different clients,
+different invocation, different power, never sharing a credential or a code
+path:
 
 - **Frank commentary** (`frank/frankd/mistral.py`): called by `frankd` (user
   `frank`) *only* when the rule layer flags an ambiguous/serious event. Uses the
   key from `/etc/frank/secrets.env` (root:frank, 0640). The user's account never
-  sees this key.
+  sees this key. **Phrasing only — never decides guilt or severity** (spec §6).
+- **The AI layer** (`frank/frankd/ai.py`, used by `triage.py`/`overseer.py`):
+  the deliberate exception to "AI never decides" — see below. Own key lines in
+  the same secrets file (`FRANK_SIFT_API_KEY` / `FRANK_OVERSEER_API_KEY`), so
+  spend is attributable per tier the same way the operator already wanted
+  commentary spend attributable.
 - **AI Chat** (`hub/zenhub/aichat.py`): called by the Hub (user `operator`) only
   when the user opens the AI Chat screen and sends a message. Uses a *separate*
   key file the operator can read. This assistant has no access to Frank's data
@@ -129,24 +141,81 @@ Same provider, different clients, different invocation, different trust domain:
 Keeping them separate keeps costs attributable and prevents the general
 assistant from becoming a side channel into Frank.
 
+## Three tiers, one enforcement path (this session)
+
+The rule engine was always described as "the primary, always-on mechanism,"
+with Mistral commentary explicitly barred from deciding anything (spec §6:
+"AI never decides violations"). This session adds two tiers *above* it, at
+the operator's request, to cover a gap the rule engine deliberately left open
+— docs/OPEN-QUESTIONS.md §3 parked a broad hate-speech/extremism category for
+"a scheduled/periodic AI-layer review instead of realtime keyword matching."
+That review needed somewhere to live; these two tiers are it.
+
+1. **Rule engine** (`rules.py`) — unchanged. Realtime, offline, every tick.
+   Decides what's flagged and how severe, for the categories it has patterns
+   for.
+2. **Sorting/sifting Frank** (`frank/frankd/triage.py`) — new. Runs on its own
+   short interval (`config.TriageConfig`, default 15 min). Reduces recent
+   `incidents.db` entries to counts/rule-hit stats (no AI), and runs the raw
+   base-log text (`eventlog.py`, shell/browser sources only) through a cheap
+   classifier (`ai.py`'s `Sifter`) for the one category that needed periodic
+   review instead of keyword matching. **Never enforces anything and never
+   decides a violation** — it produces a `TriageReport`, organized material
+   for the next tier, same spirit as the rule-engine/commentary split.
+3. **The Overseer — "main Frank"** (`frank/frankd/overseer.py`) — new. This is
+   the deliberate exception to "AI never decides": it DOES render a verdict.
+   Two activation paths (operator-confirmed this session):
+   - **Periodic check-in**, `config.OverseerConfig.checkin_interval_seconds`
+     (default twice a day). Reads every `TriageReport` since the last
+     check-in, plus a bounded live-activity snapshot ("the user's current
+     happenings"). If a report looks noteworthy, the Overseer queries
+     `IncidentStore`/`EventLog` directly for that report's time window — a
+     plain method call, not a subagent, to save context/cost (operator's
+     explicit direction this session).
+   - **Immediate wake on a SERIOUS finding** (only SERIOUS — lesser
+     lockouts/warnings wait for the next scheduled check-in; operator-
+     confirmed scope). Pulls a short lookback window around the trigger.
+
+   Whatever the Overseer decides to flag is expressed as an ordinary
+   `Finding` (any track, any severity — this is the "intervene on any and all
+   levels" the operator described) and runs through the **exact same**
+   `Enforcer.process()` a rule-engine Finding does. There is no second
+   enforcement path. That is what makes "the same hard ceiling applies to the
+   Overseer" (operator-confirmed this session) true by construction: the
+   Overseer literally cannot reach a different lockout/scope/ceiling
+   calculation than the rule engine can, because it's the same function.
+
+See `frank/frankd/ai.py` for the model-choice discussion — kept as an open,
+swappable config choice rather than hardcoded, same as sensitivity was.
+
 ## Detection data flow (Frank)
 
 ```
 data sources (sources.py)                rule engine (rules.py)
   shell history  ─┐                         ┌─ security track  ─┐
   processes      ─┤                         │  (severity tiers) │
-  filesystem     ─┼─►  normalized events ─► ┤                   ├─► verdict
-  network        ─┤                         │  legal/ethical    │
-  browser reqs   ─┘                         └─ (severity tiers) ─┘
-                                                    │
-                            flagged/ambiguous only  ▼
-                                              mistral.py  (commentary only —
-                                              phrases it, never decides guilt)
-                                                    │
-                                                    ▼
-                                   enforcement.py  (warn → lockout state
-                                   machine; hard cooldown ceiling)
-                                                    │
+  filesystem     ─┼─►  normalized events ─► ┤                   ├─► Finding
+  network        ─┤                         │  legal/ethical    │      │
+  browser reqs   ─┘                         └─ (severity tiers) ─┘      │
+         │ (shell/browser only)                                        │
+         ▼                                                              │
+   eventlog.py (raw base logs, frank-only)                              │
+         │                                                              │
+         ▼ periodic, own interval                                      │
+   triage.py — TriageEngine                                            │
+     stats (no AI) + ai.Sifter on raw text                             │
+     for the one parked category ──► TriageReport                      │
+         │                                                              │
+         ▼ read at its own cadence, OR immediately on a SERIOUS Finding│
+   overseer.py — Overseer ("main Frank")                                │
+     ai.OverseerBrain renders a verdict; flagged => synthetic Finding ──┤
+                                                                         ▼
+                            flagged/ambiguous only            enforcement.py
+                                              mistral.py       (warn → lockout
+                                              (commentary       state machine;
+                                              only — phrases    hard cooldown
+                                              it, never          ceiling)
+                                              decides guilt)          │
                           ┌─────────────────────────┼───────────────────────┐
                           ▼                         ▼                        ▼
                    ledger.py (timestamps      IPC → Hub (warn/          incidents.db
@@ -154,18 +223,25 @@ data sources (sources.py)                rule engine (rules.py)
                    keyboard detach)                                     frank-only)
 ```
 
-Design invariants baked into the code, straight from §6:
+Design invariants baked into the code, straight from §6 (the last one scoped
+by this session — see "Three tiers, one enforcement path" above):
 
 - **Severity → lockout duration.** **Time-of-day → context/ledger reset.** These
   two axes never cross. See `enforcement.py` and `ledger.py`.
 - **Hard cooldown is an absolute ceiling.** Frank can lengthen a lockout up to
   the ceiling for severe events but can never exceed or bypass it. It always
-  eventually expires.
+  eventually expires — including for a lockout the Overseer triggers; it goes
+  through the identical `Enforcer.process()`.
 - **Ledger shows timestamps only.** The visible ledger is machine-formatted
   timestamps — no category, severity, description, or content. Detail is
   frank-only.
-- **AI never decides violations.** The rule layer decides *what* is flagged and
-  *how severe*; Mistral only writes the words.
+- **The rule engine never decides on AI say-so.** Mistral commentary
+  (`mistral.py`) only writes the words for a verdict the rule layer already
+  reached — unchanged. The Overseer (`overseer.py`) is the one deliberate,
+  bounded exception the operator asked for this session: its AI call CAN
+  produce a Finding, for the one category the rule layer intentionally
+  doesn't keyword-match. It is bounded by running through the same
+  `Enforcer.process()`, not by being forbidden to decide.
 
 ## The Home Hub (zenhub)
 
