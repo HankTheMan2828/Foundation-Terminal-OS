@@ -2,7 +2,7 @@
 # Hardened so the operator session cannot read its data or interfere.
 [Unit]
 Description=Frank overseer daemon
-After=multi-user.target
+After=network.target
 Wants=network.target
 
 [Service]
