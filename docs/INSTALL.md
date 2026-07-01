@@ -86,16 +86,22 @@ rescue path available until you've confirmed it works (see "Recovery" below).
 
 ## 4. Frank isolation checks (spec §6)
 
-After `07-frank.sh`, confirm the operator genuinely cannot reach Frank:
+The operator must have **no power over Frank, ever**. After `07-frank.sh`,
+confirm every one of these is DENIED (the script runs these too and aborts if
+any succeeds):
 
 ```sh
-sudo -u operator cat /etc/frank/config.toml        # must be: Permission denied
-sudo -u operator cat /var/lib/frank/incidents.db   # must be: Permission denied
-sudo -u operator systemctl stop frankd             # must fail (no polkit/sudo path)
+sudo -u operator cat /etc/frank/config.toml        # Permission denied
+sudo -u operator cat /var/lib/frank/incidents.db   # Permission denied
+sudo -u operator cat /var/lib/frank/lockout.state  # Permission denied
+sudo -u operator systemctl stop frankd             # fails (no polkit/sudo path)
+sudo -u operator systemctl stop frank-enforcer     # fails
 ```
 
-All three must be denied. If any succeeds, isolation is broken — see
-ARCHITECTURE.md → "Frank isolation."
+There is also no operator-facing way to *tune* Frank: the Hub↔Frank socket is
+read-only (the Hub can only receive warnings to display), there is no sensitivity
+setting in the Hub, and there is no `set_*` IPC command anywhere. If any check
+above succeeds, isolation is broken — see ARCHITECTURE.md → "Frank isolation."
 
 ## Recovery / safety while building
 

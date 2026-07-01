@@ -1,0 +1,25 @@
+# Frank enforcer (spec §6) — the ROOT service that actually applies lockouts.
+#
+# Separate from frankd (which runs as the unprivileged `frank` user for data
+# isolation). frankd DECIDES; this ENFORCES with the privilege needed to shut
+# the operator's console. The operator has no path to stop or influence it.
+[Unit]
+Description=Frank lockout enforcer (root)
+After=frankd.service
+Wants=frankd.service
+
+[Service]
+Type=simple
+# Root: it must terminate the operator session, stop getty, and hold the VT.
+ExecStart=/usr/local/bin/frank-enforcer
+Restart=always
+RestartSec=2
+RuntimeDirectory=frank
+RuntimeDirectoryMode=0755
+# Hardened, but NOT sandboxed away from the capabilities it needs (loginctl,
+# systemctl stop getty, console). It is intentionally privileged.
+NoNewPrivileges=false
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

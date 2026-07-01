@@ -1,13 +1,19 @@
-"""The narrow Hub <-> Frank IPC surface (spec §5, §6).
+"""The Hub <- Frank IPC surface (spec §6) — STRICTLY READ-ONLY for the Hub.
 
-Exactly three message types cross this boundary and nothing else:
-  * poll                 (Hub -> Frank)  fetch a pending warn/lockout, if any
-  * set_sensitivity N    (Hub -> Frank)  the ONE operator-tunable knob (1–5)
-  * <warn/lockout lines> (Frank -> Hub)  delivered as the poll response
+The operator has NO power over Frank, ever. This boundary carries exactly one
+direction of authority: Frank tells the Hub what to display. The Hub can ask
+only for status; it can change NOTHING about Frank.
 
-Deliberately tiny and line-oriented. The socket is group-restricted so only the
-operator session can reach it; it exposes no way to read Frank's config, logs,
-or findings, and no way to stop Frank (spec §6 config protection).
+Accepted messages (Hub -> Frank):
+  * poll            fetch a pending warn/status line to display, if any
+
+Everything else — sensitivity, config, thresholds, enabling/disabling,
+stopping — is rejected here and has no code path anywhere. There is no
+`set_*` command. Sensitivity lives only in Frank's root-owned config and cannot
+be changed from within the running OS by any user.
+
+The socket is group-restricted so only the operator session can *connect* (to
+receive warnings); connecting grants no authority beyond reading status.
 """
 from __future__ import annotations
 
@@ -19,13 +25,10 @@ from typing import Callable
 
 
 class IPCServer:
-    """A minimal AF_UNIX line server. Callbacks keep policy out of the transport."""
+    """A minimal, read-only AF_UNIX line server. Frank -> Hub status only."""
 
-    def __init__(self, path: Path,
-                 on_set_sensitivity: Callable[[int], str],
-                 on_poll: Callable[[], str]):
+    def __init__(self, path: Path, on_poll: Callable[[], str]):
         self.path = Path(path)
-        self.on_set_sensitivity = on_set_sensitivity
         self.on_poll = on_poll
         self._sock: socket.socket | None = None
         self._thread: threading.Thread | None = None
@@ -37,7 +40,8 @@ class IPCServer:
             self.path.unlink()
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.bind(str(self.path))
-        # Group-restricted: operator's group may connect; world may not.
+        # Group-restricted: the operator's group may connect to RECEIVE warnings.
+        # Connecting confers no authority to change anything (see _handle).
         os.chmod(self.path, 0o660)
         self._sock.listen(8)
         self._sock.settimeout(0.5)
@@ -61,18 +65,11 @@ class IPCServer:
 
     def _handle(self, line: str) -> str:
         parts = line.split()
-        if not parts:
-            return "ERR empty"
-        cmd = parts[0]
-        if cmd == "poll":
+        if parts and parts[0] == "poll":
             return self.on_poll() or "NONE"
-        if cmd == "set_sensitivity" and len(parts) == 2:
-            try:
-                return self.on_set_sensitivity(int(parts[1]))
-            except ValueError:
-                return "ERR bad value"
-        # Anything else is out of scope for this boundary, by design.
-        return "ERR unsupported"
+        # There is deliberately NO mutating command. Anything else is refused.
+        # The operator cannot tune, disable, or influence Frank from here.
+        return "ERR read-only"
 
     def stop(self) -> None:
         self._stop.set()

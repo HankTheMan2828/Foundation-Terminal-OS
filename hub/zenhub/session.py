@@ -70,11 +70,13 @@ def read_overseer_ledger(limit: int = 200) -> list[str]:
 # ── Frank IPC client (Hub <-> Frank, spec-limited surface) ───────────────────
 
 class FrankClient:
-    """Thin client for the three allowed messages (see ARCHITECTURE.md).
+    """READ-ONLY client. The Hub can only *receive* what Frank tells it to show.
 
-    Hub receives ``warn``/``lockout`` and may send exactly one thing back:
-    ``set_sensitivity`` (the single user-tunable knob, spec §5). Everything
-    else about Frank is unreachable from the operator session.
+    The operator has NO power over Frank (per explicit requirement): there is no
+    method here — and no command on the wire — to tune, disable, or influence
+    Frank in any way. The Hub polls for a warning/status line to DISPLAY, and
+    that is the entire surface. Lockouts are enforced by a root service the Hub
+    cannot reach; the Hub only reflects them.
     """
 
     def __init__(self, path: str = FRANK_SOCK):
@@ -89,15 +91,6 @@ class FrankClient:
                 return s.recv(4096).decode().strip()
         except OSError:
             return None  # Frank not reachable (off-device / not running)
-
-    def set_sensitivity(self, level: int) -> str:
-        """The ONE knob. Frank validates and applies; Hub never edits its files."""
-        if not 1 <= level <= 5:
-            return "sensitivity must be 1–5"
-        resp = self._send(f"set_sensitivity {level}")
-        if resp is None:
-            return "overseer not reachable (offline) — value not applied"
-        return resp
 
     def poll(self) -> dict | None:
         """Non-blocking check for a pending warn/lockout. None if offline/none."""

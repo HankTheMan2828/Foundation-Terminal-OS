@@ -70,23 +70,24 @@ starter style guide + example lines are in
 the Mistral prompt and as offline fallback lines when no API key is set.
 **Status: 🟨 drafted — review the voice and the examples.**
 
-## 5. Frank sensitivity range exposed in Settings (spec §5, §6, §10)
+## 5. Frank sensitivity — ✅ RESOLVED: operator has NO power over Frank
 
-The spec allows exactly one user-tunable Frank knob in Settings: **detection
-sensitivity threshold only** — everything else (rules, logs, functions) is
-hard-locked and unreachable.
+**Superseded by your explicit direction: the operator cannot have ANY power
+over Frank, ever.** The previously-drafted in-Settings sensitivity dial has been
+**removed entirely** — no Settings screen, no IPC command, no operator-editable
+file. This overrides the spec §5 line about exposed sensitivity tuning.
 
-🟨 **Draft:** a single 1–5 sensitivity dial.
+Sensitivity still exists as a detection parameter, but it is a **root-only**
+value in `/etc/frank/config.toml` (root:frank, operator can't read it), loaded
+once at startup. Changing it requires root, which the operator account does not
+have and has no path to. The 1–5 model still governs how the middle severity
+tier flexes (see `frankd/rules.py`), but only someone with root can set it.
 
-| Level | Meaning                              | Effect on tiers |
-|-------|--------------------------------------|-----------------|
-| 1     | Lenient                              | only `serious` flags act; more warnings before lockout |
-| 3     | **[DEFAULT]** balanced               | tiers as authored |
-| 5     | Strict                               | `elevated` acts like `serious`; fewer warnings |
-
-The dial only shifts *thresholds/warning counts*, never reveals rules, never
-disables Frank, and can't push any lockout past the hard cooldown ceiling. ⬜
-Confirm the 1–5 model and what the endpoints should mean.
+Enforcement was also moved out of the operator's reach: lockouts are applied by
+the root `frank-enforcer` service, not rendered by the operator-owned Hub, so
+the operator cannot ignore or no-op a lockout. See ARCHITECTURE.md →
+"Enforcement is root-owned." ⬜ Only open sub-question: what should the root-set
+default sensitivity be? (currently 3 / balanced).
 
 ## 6. Login model — ✅ decided
 

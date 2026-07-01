@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# frank-locker — the root-owned lockout screen (spec §6).
+#
+# Runs as root on the locked console, started by frank-enforcer. Shows a cold
+# countdown until the lockout timer expires. It reads NOTHING the operator types
+# (input is ignored) and cannot be dismissed early — the operator has no power
+# over Frank. The timer always eventually expires (hard-ceiling guarantee lives
+# in frankd; this just displays the end it was given).
+#
+# Usage: frank-locker <end_epoch>
+#
+# TODO(hardware): on the real UX8406MA the operator's cage session holds DRM
+# master on tty1; finalize taking the VT/DRM master so this reliably covers the
+# panel(s). The security guarantee (no operator session runs during lockout) is
+# provided by frank-enforcer regardless of this display.
+set -euo pipefail
+END="${1:?usage: frank-locker <end_epoch>}"
+END="${END%.*}"
+
+# Ignore all keyboard input; no escape from here.
+stty -echo -icanon min 0 time 0 2>/dev/null || true
+trap '' INT TERM TSTP
+
+hide_cursor() { printf '\033[?25l'; }
+show_cursor() { printf '\033[?25h'; }
+trap show_cursor EXIT
+hide_cursor
+
+while :; do
+  now="$(date +%s)"
+  (( now >= END )) && break
+  remain=$(( END - now ))
+  h=$(( remain / 3600 )); m=$(( (remain % 3600) / 60 )); s=$(( remain % 60 ))
+  clear
+  printf '\n\n\n'
+  printf '        ================================================\n'
+  printf '                     A C C E S S   S U S P E N D E D\n'
+  printf '        ================================================\n\n'
+  printf '        This console is restricted pending evaluation.\n'
+  printf '        The restriction is timed and will expire on its own.\n'
+  printf '        Nothing you do will shorten it.\n\n'
+  printf '                    TIME REMAINING:  %02d:%02d:%02d\n' "$h" "$m" "$s"
+  sleep 1
+done
+
+clear

@@ -1,8 +1,11 @@
-"""Frank's configuration + the sensitivity model (spec §5, §6).
+"""Frank's configuration + the sensitivity model (spec §6).
 
-Config lives at /etc/frank/ (root:frank, unreadable by the operator). The ONLY
-operator-tunable value is `sensitivity` (1–5), applied via the narrow IPC — the
-operator never edits these files directly (spec §5, §6).
+Config lives at /etc/frank/ (root:frank, unreadable by the operator). NOTHING
+here is operator-tunable. Sensitivity (1–5) is a ROOT-ONLY value loaded once at
+startup; there is no in-session path — no IPC command, no Settings screen, no
+editable file — by which the operator can change it or anything else about
+Frank. The operator has no power over Frank, ever. (This tightens the spec §5
+mention of exposed sensitivity tuning, at the user's explicit direction.)
 """
 from __future__ import annotations
 

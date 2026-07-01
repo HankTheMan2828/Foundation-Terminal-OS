@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# frank-enforcer — applies Frank's lockouts as ROOT (spec §6).
+#
+# Frank (user `frank`) DECIDES lockouts but, being unprivileged, cannot force
+# the operator's console shut. This service — running as root, unreachable by
+# the operator — reads Frank's published lock decision and enforces it in a way
+# the operator has NO power to bypass, ignore, or shorten:
+#
+#   * kill the operator's active session (their Hub/cage goes away)
+#   * stop tty1 autologin so no new session can start until the timer expires
+#   * show a root-owned countdown locker on the console
+#   * MACHINE-scope locks are re-applied on boot (frankd re-arms them), so a
+#     reboot cannot escape them; SESSION-scope locks end with the session.
+#
+# The operator cannot read the state file, cannot signal this process (no
+# sudo/polkit path), and has no shell. Escape requires physical/USB access,
+# which the spec explicitly places out of scope.
+set -euo pipefail
+
+OPERATOR="${FRANK_OPERATOR:-operator}"
+STATE="${FRANK_LOCK_STATE:-/var/lib/frank/lockout.state}"
+RUN="/run/frank"
+MARK="$RUN/enforcing"          # holds the 'end' timestamp currently enforced
+LOCKER=/usr/local/bin/frank-locker
+LOCK_TTY="${FRANK_LOCK_TTY:-tty1}"
+mkdir -p "$RUN"
+
+# Read one field from the JSON state file using python3 (no jq dependency).
+field() {  # field <key>
+  python3 - "$STATE" "$1" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    d = {}
+v = d.get(sys.argv[2], "")
+print("" if v is None else v)
+PY
+}
+
+enforce() {  # enforce <end_epoch> <scope>
+  local end="$1" scope="${2:-machine}"
+  echo "$end" > "$MARK"
+  logger -t frank-enforcer "applying ${scope} lockout until ${end}" || true
+  # 1) tear down any active operator session immediately.
+  loginctl terminate-user "$OPERATOR" 2>/dev/null || true
+  # 2) block new logins on the locked tty until release.
+  systemctl stop "getty@${LOCK_TTY}.service" 2>/dev/null || true
+  # 3) show the root locker on the console (best-effort; see TODO(hardware)).
+  pkill -f "$LOCKER" 2>/dev/null || true
+  setsid bash -c "exec $LOCKER $end < /dev/${LOCK_TTY} > /dev/${LOCK_TTY} 2>&1" &
+}
+
+release() {
+  rm -f "$MARK"
+  pkill -f "$LOCKER" 2>/dev/null || true
+  logger -t frank-enforcer "lockout released — restoring console" || true
+  # Restore autologin -> the operator lands back in the Hub.
+  systemctl start "getty@${LOCK_TTY}.service" 2>/dev/null || true
+}
+
+currently_enforcing_end() { cat "$MARK" 2>/dev/null || echo ""; }
+
+loop() {
+  while true; do
+    local active end scope now cur
+    active="$(field active)"; end="$(field end)"; scope="$(field scope)"
+    # `end` may be absent while active is true only transiently; fall back to 0.
+    [[ -z "$end" ]] && end=0
+    now="$(date +%s)"; cur="$(currently_enforcing_end)"
+
+    if [[ "$active" == "True" || "$active" == "true" ]] && (( ${end%.*} > now )); then
+      if [[ "$cur" != "$end" ]]; then enforce "$end" "$scope"; fi
+    else
+      if [[ -n "$cur" ]]; then release; fi
+    fi
+    sleep 2
+  done
+}
+
+loop

@@ -43,7 +43,8 @@ exposing a shell.
 | `getty@tty1` (autologin)      | system     | root→operator | drops into the session |
 | `zenhub-session` → cage→kitty | user login | operator | the kiosk surface |
 | `python -m zenhub`            | user login | operator | Home Hub TUI (the shell) |
-| `frankd.service`              | system     | `frank`  | overseer daemon (§6) |
+| `frankd.service`              | system     | `frank`  | overseer daemon — decides (§6) |
+| `frank-enforcer.service`      | system     | **root** | applies lockouts the operator can't bypass (§6) |
 | `frank-ledger.service`        | system     | `frank`  | pipes timestamp ledger to eDP-2 on keyboard detach |
 | `duo-hardware.service`        | system     | root/polkit | display/rotation/brightness/battery glue |
 | `zenhub-sound.service`        | user login | operator | ambient hum + event sounds |
@@ -67,21 +68,42 @@ Implementation approach:
   `0640`/`0600` on files. `operator` cannot read it.
 - Findings/detail live at `/var/lib/frank/incidents.db` — `frank:frank`, `0600`.
   Never surfaced through any Hub screen.
-- The **only** user-tunable knob is a sensitivity value, exposed through a
-  narrow, validated IPC: the Hub writes a single integer to a request, `frankd`
-  validates and applies it. The Hub never edits Frank's files directly. See
-  [`frank/frankd/ipc.py`].
-- No sudoers entry grants `operator` anything against `frankd`, `/etc/frank`, or
-  `systemctl … frankd`.
+- Lock decisions are published to `/var/lib/frank/lockout.state` —
+  `frank:frank`, `0640` (root reads, operator denied).
+- **The operator has NO power over Frank — none, ever.** There is no tunable
+  knob, no sensitivity setting, no config the operator can edit, no IPC command
+  that changes anything. Sensitivity is a *root-only* value in `/etc/frank/`
+  loaded once at startup; there is no in-session path to change it. (This
+  tightens spec §5's mention of exposed sensitivity tuning, at the user's
+  explicit direction.)
+- No sudoers/polkit entry grants `operator` anything against `frankd`,
+  `frank-enforcer`, `/etc/frank`, or `systemctl … frank*`.
 - **Acknowledged limit (spec §6):** this is high-friction in-session tamper
   resistance, *not* immunity to a USB boot disk. Disk encryption / secure boot
-  is a deferred later phase. We do not over-engineer it in v1.
+  is a deferred later phase. "No power over Frank" is scoped to the running OS.
 
-The Hub ↔ Frank boundary is a small unix-socket IPC (`/run/frank/hub.sock`,
-group-restricted) carrying exactly three message types: `warn` (Frank→Hub, show
-a status-bar or full-screen banner), `lockout` (Frank→Hub, enter/refresh a
-lock screen with a countdown), and `set_sensitivity` (Hub→Frank, the one
-allowed knob). Nothing else crosses.
+The Hub ↔ Frank socket (`/run/frank/hub.sock`, group-restricted) is **strictly
+read-only for the Hub**: it carries one thing — the Hub asks `poll` and Frank
+returns a warning/status line to *display*. The Hub can change nothing about
+Frank. See [`frank/frankd/ipc.py`].
+
+### Enforcement is root-owned, not Hub-cooperative
+
+A lockout the operator's own process merely *renders* would be a lockout the
+operator has the power to ignore — so lockouts are **not** enforced by the Hub.
+`frankd` (user `frank`) *decides* lockouts and publishes the decision to
+`lockout.state`. A separate **root** service, `frank-enforcer`, reads it and
+applies an unbypassable console lock:
+
+- terminates the operator's active session (`loginctl terminate-user`),
+- stops `getty@tty1` so no new session can start until the timer expires,
+- shows a root-owned countdown locker (`frank-locker`) that ignores input.
+
+Scope maps to reboot behavior (spec §6): **session** locks end when the session
+ends (a reboot clears them); **machine** locks are re-armed by `frankd` on boot
+from `lockout.state`, so rebooting cannot escape them. The operator cannot read
+the state file, signal the enforcer, or reach a shell — the only escape is
+physical/USB, which the spec places out of scope.
 
 ## The two Mistral integrations are separate
 

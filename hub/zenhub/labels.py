@@ -38,7 +38,8 @@ SET_RESOURCE = "RESOURCE LIMITS"
 SET_NETWORK = "NETWORK"
 SET_AUTH = "USER / AUTH"
 SET_THEME = "THEME & SOUND"
-SET_OVERSEER = "OVERSEER SENSITIVITY"   # the ONE Frank knob (spec §5)
+# NOTE: there is intentionally no overseer/Frank setting. The operator has no
+# power over Frank, ever — nothing to expose here.
 
 # ── Logs (two distinct sections — spec §5) ───────────────────────────────────
 LOG_SYSTEM = "SYSTEM RECORDS"           # journald/kernel/auth, raw

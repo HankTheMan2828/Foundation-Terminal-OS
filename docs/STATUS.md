@@ -19,7 +19,7 @@ Legend: ✅ working · 🟨 skeleton/partial · ⬜ stub/placeholder · ⏸ defe
 | 6 | Zenbook hardware scripts | 🟨 | `hardware/` scripts ported to wlr-randr; keyboard-detach event hook present. Not hardware-tested. |
 | 7 | Fix NOPASSWD sudo → polkit | 🟨 | `system/etc/polkit-1/rules.d/50-zenbook-backlight.rules` + scoped helper. |
 | 8 | Home Hub sub-areas | 🟨 | All screens exist; Functions/Settings/Programs/Notes/Log wired to real actions or clear stubs; Recreation reads a config list; AI Chat offline-gated. |
-| 9 | Frank: rules → Mistral → enforcement → ledger | 🟨 | Rule engine ✅ + unit-tested. Enforcement state machine ✅ + tested. Mistral client 🟨 offline-safe. Ledger 🟨. Daemon wiring 🟨 with stub data sources. |
+| 9 | Frank: rules → Mistral → enforcement → ledger | 🟨 | Rule engine ✅ + unit-tested. Enforcement state machine ✅ + tested. Mistral client 🟨 offline-safe. Ledger 🟨. Daemon wiring 🟨 with stub data sources. **Operator has zero power over Frank:** read-only IPC ✅ tested, no sensitivity knob, root `frank-enforcer` applies lockouts (session vs. machine reboot semantics ✅ tested), machine locks survive reboot. The root locker's VT/DRM takeover is `TODO(hardware)`. |
 | 10 | Sound + CRT visual pass | ⬜ | `sounds/`, `theme/` have structure + hooks; assets are placeholders. |
 | 11 | Soak testing | ⬜ | Not started; needs hardware. |
 

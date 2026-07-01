@@ -20,10 +20,13 @@ c_ok "removed tty1 autologin drop-in"
 # 3) Stop + mask Frank (spec §6 process is normally unkillable from a session;
 #    this runs as root from rescue, which is the intended recovery path).
 if is_arch; then
-  systemctl disable --now frankd.service frank-ledger.service 2>/dev/null || true
+  systemctl disable --now frankd.service frank-enforcer.service frank-ledger.service 2>/dev/null || true
+  # Release any console lock the enforcer was holding, restore tty1 autologin.
+  pkill -f /usr/local/bin/frank-locker 2>/dev/null || true
+  systemctl start getty@tty1.service 2>/dev/null || true
   systemctl daemon-reload
 fi
-c_ok "stopped Frank services"
+c_ok "stopped Frank services (this is the root/rescue recovery path, not an in-session one)"
 
 # 4) Optionally purge incident data.
 if [[ $PURGE -eq 1 ]]; then
