@@ -1,10 +1,13 @@
 # Frank configuration (spec §6). Installed root:frank 0640 — the operator
-# CANNOT read or edit this. The ONLY operator-tunable value is `sensitivity`,
-# and even that is changed only via the narrow IPC (Settings > Overseer
-# Sensitivity), never by editing this file (spec §5, §6).
+# CANNOT read or edit this, and has NO tunable knob anywhere: sensitivity is
+# root-only, loaded once at startup; there is no IPC command and no Settings
+# surface for it (docs/OPEN-QUESTIONS.md §5 — operator has no power over
+# Frank, ever).
 
-# Detection sensitivity, 1 (lenient) .. 5 (strict). Default 3 (balanced).
-# See docs/OPEN-QUESTIONS.md §5. This is the one exposed knob.
+# Detection sensitivity, 1 (lenient) .. 5 (strict). Root-only.
+# 3 (balanced) confirmed by the operator 2026-07-02, with the standing
+# direction that Frank moves toward a primarily RULE-BASED overseer (the AI
+# layer stays secondary) — see docs/OPEN-QUESTIONS.md §5/§9.
 sensitivity = 3
 
 # Daily reset time-of-day (spec §6): resets the visible ledger + Frank's working
@@ -19,5 +22,7 @@ warning_threshold = 4
 
 # The ABSOLUTE ceiling on any lockout, in seconds (spec §6). Frank may extend an
 # active lockout up to this for severe violations but can NEVER exceed it. It
-# always eventually expires. 3600 = 1 hour.
-hard_ceiling_seconds = 3600
+# always eventually expires. 1800 = 30 min — halved in the rules-refinement
+# session (docs/OPEN-QUESTIONS.md §3); this file previously still said 3600
+# and, since it overrides the code default, was silently undoing that call.
+hard_ceiling_seconds = 1800

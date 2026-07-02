@@ -1,0 +1,28 @@
+# Live installer environment package set (the ISO's own root filesystem, NOT
+# the installed system — that comes from install/packages.txt + the base set
+# pacstrap'd by foundation-install). Keep this lean: it exists to run one
+# installer script on a kernel VT.
+
+# boot/kernel — linux-lts to match the OS itself (spec §1)
+base
+linux-lts
+linux-firmware
+mkinitcpio
+mkinitcpio-archiso
+
+# installer tooling
+arch-install-scripts
+gptfdisk
+dosfstools
+e2fsprogs
+
+# bootloader install on the target (both firmware types)
+grub
+efibootmgr
+
+# optional network fallback (only needed if the ISO was built without the
+# embedded offline package repo) + rescue-shell comfort
+networkmanager
+
+# console look, same phosphor font the OS uses
+terminus-font

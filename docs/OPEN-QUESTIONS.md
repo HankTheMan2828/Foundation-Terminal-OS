@@ -27,20 +27,21 @@ a read-only USER line (username + uid), and a FUNCTIONS list of basic
 functioning/not-functioning checks (network, audio, the Frank overseer).
 THEME & SOUND moved to `FUNCTIONS` alongside the other real hardware toggles.
 
-## 2. Recreation game list (spec §5, §10)
+## 2. Recreation game list (spec §5, §10) — ✅ SUPERSEDED by the in-house mandate
 
-Genre buckets from the spec, with concrete Arch-available titles proposed:
+The original question (which Arch packages to ship) was answered by §10's
+in-house mandate: arcade titles and chess are in-house programs now
+(Foundation Arcade, Foundation Chess — see STATUS row 12), so the old
+proposed-package table is moot. What remains:
 
-| Bucket             | 🟨 Proposed titles (packages)                          |
-|--------------------|--------------------------------------------------------|
-| Roguelikes         | NetHack (`nethack`), DCSS (`crawl` / `crawl-tiles`), Cataclysm-DDA console (`cataclysm-dda`) |
-| Arcade / simple    | `nsnake` (snake), `bastet`/`vitetris` (tetris-like), `ninvaders` (invaders) |
-| Puzzle / strategy  | `gnuchess` + `cchess`/`scid` front, `2048` (terminal 2048), `nudoku` (sudoku) |
-
-Open sub-questions: ⬜ include the heavier ones (Cataclysm, DCSS tiles) or keep
-it lean? ⬜ any specific titles you already love? The Recreation screen reads its
-list from [`system/etc/foundationhub/recreation.toml`], so adding/removing a game is a
-config edit, not a code change.
+- **NetHack** is the one interim external game still shipped (the only game
+  left in `install/packages.txt`), holding the roguelike slot until the
+  in-house roguelikes are approved and built (§11). Dungeon Crawl's menu
+  entry was removed 2026-07-02 — `crawl` was never actually in
+  `packages.txt`, so it was a dead item on a real install.
+- The Recreation screen still reads
+  [`system/etc/foundationhub/recreation.toml`], so list edits stay config,
+  not code.
 
 ## 3. Frank rule/keyword lists + severity tiers (spec §6, §10) — ✅ RESOLVED
 
@@ -89,7 +90,12 @@ threatening — "this is being recorded and evaluated," not comic snark.** A
 starter style guide + example lines are in
 [`docs/FRANK-VOICE.md`](FRANK-VOICE.md). These double as few-shot examples for
 the Mistral prompt and as offline fallback lines when no API key is set.
-**Status: 🟨 drafted — review the voice and the examples.**
+**Status (2026-07-02): 🟨 partially reviewed.** The serious-tier pun line was
+reworded per the operator ("You be frank with me and I will be frank with
+you."), and the operator directed a **line-by-line review session** — every
+example line pulled up individually for keep/rewrite/drop via the question
+tool. That session is specced as **BUILD-QUEUE §7** (Sonnet 5, zero
+deviation); the current lines ship as the offline fallbacks until it runs.
 
 ## 5. Frank sensitivity — ✅ RESOLVED: operator has NO power over Frank
 
@@ -107,8 +113,13 @@ tier flexes (see `frankd/rules.py`), but only someone with root can set it.
 Enforcement was also moved out of the operator's reach: lockouts are applied by
 the root `frank-enforcer` service, not rendered by the operator-owned Hub, so
 the operator cannot ignore or no-op a lockout. See ARCHITECTURE.md →
-"Enforcement is root-owned." ⬜ Only open sub-question: what should the root-set
-default sensitivity be? (currently 3 / balanced).
+"Enforcement is root-owned." ✅ Last sub-question closed 2026-07-02: the
+root-set default sensitivity **stays 3 (balanced)** — confirmed alongside the
+operator's standing direction that **Frank moves toward a primarily
+rule-based overseer system** (the AI layer stays secondary; keep detection
+strength in the rules, not in model judgment). Same session also fixed
+`system/etc/frank/config.toml`, whose `hard_ceiling_seconds = 3600` was
+silently overriding the halved 1800 decided in §3.
 
 ## 6. Login model — ✅ REVERSED (2026-07-01): multi-user login screen
 
@@ -150,8 +161,11 @@ What was decided vs. what's still open:
 - ✅ **Immediate-trigger scope:** only a SERIOUS-severity finding wakes the
   Overseer early; lesser lockouts/warnings wait for the next scheduled
   check-in (`config.OverseerConfig.wake_on_serious`).
-- ⬜ **Model choice for the two new AI roles — still open**, same as
-  sensitivity was left as a config value rather than hardcoded. Both roles
+- ⬜ **Model choice for the two new AI roles — still open**, and now
+  explicitly low-priority: the operator's direction (2026-07-02) is that
+  Frank moves toward a **primarily rule-based** overseer, so both AI roles
+  stay secondary and keep their offline-default posture. Same as
+  sensitivity, the choice is a config value rather than hardcoded. Both roles
   default to the existing Mistral integration's wire shape (`ai.py`'s
   `ChatCompletionClient`, OpenAI/Mistral-style `/v1/chat/completions`) so
   nothing new has to be stood up to try it, but the model string is a config
@@ -213,8 +227,8 @@ The operator's finalized vision, decided in one pass:
   Hub so a NETWORK ARCHIVE area can be added without rework.
 - ✅ **Multi-user login + tiers + per-user Frank** — see §6 and
   [`docs/USERS.md`](USERS.md).
-- ⬜ Per-tier quota amounts (64 MB / 5 GB / 15 GB / 25 GB drafted) and tier
-  names await sign-off — see USERS.md.
+- ✅ Per-tier quota amounts (GUEST 64 MB / EMPLOYEE 5 GB / SENIOR 15 GB /
+  TECHNICIAN 25 GB) and tier names **approved 2026-07-02** — see USERS.md.
 - ⬜ The real user-ID provisioning system (replaces the `1234` setup code) —
   future session.
 
@@ -232,10 +246,17 @@ until the doc is approved. Decisions (details in the doc §5):
   (1985)** as the default, **3.6 (1981, the OG)** as a second ruleset
   behind the same ROGUE title screen ("I want the OG still but the 85
   version looks nicer").
-- ⬜ Name for the modernized game (proposed: **Foundation Depths**).
+- ✅ **Classic names stay verbatim (2026-07-02):** the og games ship as
+  **ROGUE**, no Foundation rebranding — "it's a tribute to history
+  changing games."
+- ✅ **Score boards — machine-wide shared (2026-07-02):** the authentic
+  original behavior; a deliberate, narrow exception to the per-user-data
+  rule (name + score only). USERS.md carries the exception note.
+- ⬜ Name for the modernized game (proposed: **Foundation Depths**) — the
+  2026-07-02 answer locked the classics' names but didn't pick the new
+  game's.
 - ⬜ Confirm BSD-attributed re-implementation counts as in-house
   (ship the authors' notice + on-screen credit).
-- ⬜ Score boards per-user (recommended) vs authentic shared machine board.
 - ⬜ Classic input: original commands + arrows only (recommended).
 - ⬜ Sign off the Depths flavor register (facility premise, announcer voice,
   terminals-as-lore, section themes) and the modernization list (doc §3.3 —

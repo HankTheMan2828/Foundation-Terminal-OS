@@ -10,14 +10,10 @@ c_step "Recreation: install the in-house game programs"
 
 pac python
 
-# Pure-stdlib, so a plain copy is enough; pip keeps it upgradeable and wires up
-# the console scripts (foundation-arcade, foundation-chess) that recreation.toml
-# names and Launch() resolves on PATH.
-if is_arch && command -v pip >/dev/null 2>&1; then
-  pip install --break-system-packages "$REPO_ROOT/games" || \
-    for pkg in foundation_arcade foundation_chess; do
-      cp -r "$REPO_ROOT/games/$pkg" /usr/lib/python3*/site-packages/ 2>/dev/null || true
-    done
-fi
+# Pure-stdlib, so a plain copy is enough; pip (when present) wires the real
+# console scripts, otherwise install_py_dist shims foundation-arcade /
+# foundation-chess onto PATH so recreation.toml's Launch() names still resolve.
+install_py_dist "$REPO_ROOT/games" \
+  foundation-arcade=foundation_arcade foundation-chess=foundation_chess
 
 c_ok "in-house games installed — gnuchess retired -> foundation-chess"

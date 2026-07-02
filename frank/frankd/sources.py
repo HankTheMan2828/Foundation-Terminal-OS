@@ -19,7 +19,27 @@ from typing import Iterator
 
 from .model import Event, Source
 
+try:
+    import pwd
+except ImportError:          # non-POSIX dev box
+    pwd = None               # type: ignore[assignment]
+
 OPERATOR = os.environ.get("FRANK_OPERATOR", "operator")
+
+
+def operator_home() -> Path:
+    """The operator's home, resolved from the system user database — never a
+    guessed literal path, so the collectors work wherever this OS is installed
+    (any distro's home layout, any mini PC). Override: FRANK_OPERATOR_HOME."""
+    env = os.environ.get("FRANK_OPERATOR_HOME")
+    if env:
+        return Path(env)
+    if pwd is not None:
+        try:
+            return Path(pwd.getpwnam(OPERATOR).pw_dir)
+        except KeyError:
+            pass
+    return Path("/home") / OPERATOR   # last resort: the conventional layout
 
 # The Hub publishes which logical account holds the session (docs/USERS.md);
 # collectors stamp every event with it so records follow the person, not the
@@ -43,7 +63,7 @@ RUNAWAY_CPU_STREAK_TICKS = 5     # consecutive polls above threshold before flag
 
 def shell_history(state: dict) -> Iterator[Event]:
     """New lines appended to the operator's shell history since last poll."""
-    hist = Path(f"/home/{OPERATOR}/.bash_history")
+    hist = operator_home() / ".bash_history"
     try:
         lines = hist.read_text(errors="replace").splitlines()
     except OSError:

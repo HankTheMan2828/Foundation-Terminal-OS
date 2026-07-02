@@ -1,13 +1,15 @@
 # Recreation game list (spec §5). Data, not code — add/remove a game by editing
-# this file; the Recreation screen reads it live. Final title list is
-# [TODO(approval)] — see docs/OPEN-QUESTIONS.md §2.
+# this file; the Recreation screen reads it live. The list follows the in-house
+# mandate (docs/OPEN-QUESTIONS.md §2/§10): in-house games plus interim NetHack.
 #
 # Each bucket maps to a genre; each game has a display name and an argv `exec`.
 
+# NetHack is the interim stand-in until the in-house roguelikes land
+# (docs/ROGUELIKE-DESIGN.md). Dungeon Crawl was dropped: `crawl` was never in
+# install/packages.txt, so the entry was a dead menu item on a real install.
 [bucket.roguelikes]
 games = [
   { name = "NetHack",        exec = ["nethack"] },
-  { name = "Dungeon Crawl",  exec = ["crawl"] },
 ]
 
 [bucket.arcade]

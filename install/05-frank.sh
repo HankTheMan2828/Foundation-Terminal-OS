@@ -14,11 +14,9 @@ if ! id frank >/dev/null 2>&1; then
   c_ok "created system user 'frank'"
 fi
 
-# Install the daemon package.
-if is_arch && command -v pip >/dev/null 2>&1; then
-  pip install --break-system-packages "$REPO_ROOT/frank" || \
-    cp -r "$REPO_ROOT/frank/frankd" /usr/lib/python3*/site-packages/ 2>/dev/null || true
-fi
+# Install the daemon package (frankd.service runs `python -m frankd.daemon`,
+# so the copied-package path needs no console-script shim).
+install_py_dist "$REPO_ROOT/frank" frankd=frankd.daemon
 
 # --- config: root:frank, operator CANNOT read (spec §6) ---
 install -d -o root -g frank -m 0750 /etc/frank

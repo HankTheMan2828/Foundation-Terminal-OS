@@ -32,9 +32,39 @@ try:
 except ImportError:          # non-POSIX dev box; system-user provisioning skipped
     pwd = None               # type: ignore[assignment]
 
-# The deployed repo carries the Hub package; the registry logic lives there so
-# helper and Hub can never disagree about the schema.
-sys.path.insert(0, os.environ.get("FOUNDATIONHUB_LIB", "/opt/terminal-os/hub"))
+# The registry logic lives in the Hub package so helper and Hub can never
+# disagree about the schema. Resolution order — searched, never assumed, so
+# this works wherever the OS was installed:
+#   1. the normally-installed foundationhub package (site-packages, install/04)
+#   2. $FOUNDATIONHUB_LIB (explicit override)
+#   3. the install root recorded by install/04 in /etc/foundationhub/install-root
+#   4. /opt/terminal-os — the conventional clone path, as a last resort
+def _locate_hub_lib() -> None:
+    try:
+        import foundationhub  # noqa: F401  — already importable, nothing to do
+        return
+    except ImportError:
+        pass
+    candidates = []
+    if os.environ.get("FOUNDATIONHUB_LIB"):
+        candidates.append(os.environ["FOUNDATIONHUB_LIB"])
+    try:
+        root = open("/etc/foundationhub/install-root").read().strip()
+        if root:
+            candidates.append(os.path.join(root, "hub"))
+    except OSError:
+        pass
+    candidates.append("/opt/terminal-os/hub")
+    for cand in candidates:
+        if os.path.isdir(os.path.join(cand, "foundationhub")):
+            sys.path.insert(0, cand)
+            return
+    sys.exit("foundationhub-account: cannot locate the foundationhub package "
+             "(tried site-packages, $FOUNDATIONHUB_LIB, "
+             "/etc/foundationhub/install-root, /opt/terminal-os/hub)")
+
+
+_locate_hub_lib()
 
 from foundationhub.accounts import Registry, RegistryError, Tier, TIERS  # noqa: E402
 

@@ -50,8 +50,8 @@ class TierInfo:
     needs_setup_code: bool
 
 
-# Quota amounts are a first draft [TODO(approval)] — the *model* (fixed
-# per-tier allotments, guests get almost nothing) is the decided part.
+# Tier names + quota amounts operator-approved 2026-07-02 (docs/USERS.md);
+# the model is fixed per-tier allotments, guests get almost nothing.
 TIERS: dict[Tier, TierInfo] = {
     Tier.GUEST:      TierInfo("GUEST",      64 * MiB,  False),
     Tier.EMPLOYEE:   TierInfo("EMPLOYEE",    5 * GiB,  True),

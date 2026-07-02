@@ -94,6 +94,9 @@ out-of-band, Frank falls back to the offline line for that situation.
 
 ## Resolved
 
+- **Line-by-line review completed (2026-07-02):** every example line above was
+  walked through individually with the operator (BUILD-QUEUE §7). The lines
+  here are the final, approved shipping offline fallbacks.
 - Frank always addresses the operator impersonally ("you" / "the operator"),
   never by name or handle.
 - No sentence cap. Each situation uses the one quote given to it above,
