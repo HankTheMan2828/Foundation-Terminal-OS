@@ -34,7 +34,15 @@ python
 # --- Programs area tools (spec §5) ---
 # DIRECTION: all of these are TEMPORARY stand-ins to be replaced in-house
 # (docs/OPEN-QUESTIONS.md §10). cmus and mpv are already dropped — media is
-# one in-house player (foundationmedia) when it lands, not two borrowed ones.
+# one in-house player (foundationmedia), not two borrowed ones.
+# foundationmedia BUILT (BUILD-QUEUE §4): media/foundationmedia/, installed by
+# install/09-media.sh. Backend is the operator-approved hybrid: in-house core
+# (stdlib WAV/AIFF decode + ctypes ALSA output via alsa-lib) with ffmpeg as an
+# optional broad-format decode ENGINE under the in-house UI — a build tool,
+# not a borrowed app. Without ffmpeg the player still runs, WAV/AIFF-only
+# (that stdlib-only path is the Pocket8086-tier fallback).
+alsa-lib        # libasound — foundationmedia's in-house ctypes PCM output
+ffmpeg          # foundationmedia's optional decode engine (mp3/flac/ogg/…)
 # neovim RETIRED (BUILD-QUEUE §1): the in-house notes-suite editor
 # (hub/foundationhub/editor.py) is THE system editor now — one editor everywhere.
 # ranger RETIRED (BUILD-QUEUE §2): the in-house file manager

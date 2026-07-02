@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foundation-media"
+version = "0.1.0"
+description = "Foundation TerminalOS in-house media player (audio; TUI over stdlib+ALSA with optional ffmpeg decode engine)"
+requires-python = ">=3.10"
+# Pure-stdlib + ctypes; ffmpeg is an optional runtime engine, never a pip dep.
+dependencies = []
+
+# The argv[0] the Hub's Programs MEDIA item launches (Launch(["foundationmedia"])).
+[project.scripts]
+foundationmedia = "foundationmedia.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["foundationmedia*"]

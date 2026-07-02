@@ -194,7 +194,14 @@ The operator's finalized vision, decided in one pass:
   interim-only); LOGS is confirmed as the single records surface (system
   records + overseer ledger, nothing duplicated elsewhere); labels locked
   (§1).
-- ✅ **Notes = full in-house suite** (a key aspect of the system): built-in
+- ✅ **foundationmedia playback backend — APPROVED (2026-07-01, BUILD-QUEUE §4):**
+  the operator picked the hybrid, option (c): a fully in-house core (pure-stdlib
+  WAV/AIFF decode + ALSA PCM output via ctypes, no external programs) plus
+  **ffmpeg as an optional broad-format decode *engine*** under the in-house UI
+  (mp3/flac/ogg/opus/m4a/…). Without ffmpeg the player still runs, WAV/AIFF-only
+  — that stdlib path is the Pocket8086-tier fallback. ffmpeg is treated as a
+  build tool under our UI, not a borrowed app. Audio v1; video stays out of
+  scope (console tier may never do it). *Built 2026-07-01 — see STATUS row 12.*
   curses editor plus a note browser — dated journal, tagged notes, search by
   tag/text — all inside the Hub. No external editor. *Built 2026-07-01
   (BUILD-QUEUE §1); nvim retired — see STATUS row 12.*

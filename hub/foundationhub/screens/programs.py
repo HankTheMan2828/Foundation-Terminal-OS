@@ -7,7 +7,8 @@ EDITOR is the notes suite's in-house editor (queue §1) — nvim is retired;
 one editor everywhere.
 
 FILE MANAGER and SYSTEM MONITOR are now native too (queue §2/§3) — ranger and
-btop are both retired. Only MEDIA is still an external launch, pending §4.
+btop are both retired. MEDIA now launches the in-house foundationmedia (§4) —
+still a Launch by design (hybrid model: media is a separate program).
 """
 from __future__ import annotations
 
@@ -24,10 +25,11 @@ def screen():
     items = [
         MenuItem(labels.PROG_FILES, lambda a: FileManagerScreen(),
                  hint="in-house"),
-        # One in-house player, audio+video, as its own program (hybrid model).
+        # The ONE in-house player, as its own program (hybrid model). Audio
+        # v1; video out of scope (BUILD-QUEUE §4).
         MenuItem(labels.PROG_MEDIA, lambda a: Launch(
                      ["foundationmedia"],
-                     missing_hint="[ in-house player — not built yet ]"),
+                     missing_hint="[ in-house player — not installed ]"),
                  hint="foundationmedia"),
         # Native Hub screen (in-house monitor) — btop retired, queue §3.
         MenuItem(labels.PROG_MONITOR, lambda a: MonitorScreen(),
