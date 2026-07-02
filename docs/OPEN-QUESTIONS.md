@@ -218,6 +218,29 @@ The operator's finalized vision, decided in one pass:
 - ⬜ The real user-ID provisioning system (replaces the `1234` setup code) —
   future session.
 
+## 11. Roguelike design (BUILD-QUEUE §5 item 3) — 🟨 design doc drafted, awaiting approval
+
+Full design: [`docs/ROGUELIKE-DESIGN.md`](ROGUELIKE-DESIGN.md). Per the
+operator's ask: **three games, one engine** — faithful re-implementations of
+**both classic vintages** of Rogue (the og code exists: recovered by the
+original authors and BSD-3-licensed; we port the *rulebook* to pure-stdlib
+Python, not the C), plus **Foundation Depths**, a restrained modernization
+with the Aperture/Vault facility flavor. Retires nethack + crawl. No code
+until the doc is approved. Decisions (details in the doc §5):
+
+- ✅ **Vintages — operator decided (2026-07-01): both.** Rogue **5.4.4
+  (1985)** as the default, **3.6 (1981, the OG)** as a second ruleset
+  behind the same ROGUE title screen ("I want the OG still but the 85
+  version looks nicer").
+- ⬜ Name for the modernized game (proposed: **Foundation Depths**).
+- ⬜ Confirm BSD-attributed re-implementation counts as in-house
+  (ship the authors' notice + on-screen credit).
+- ⬜ Score boards per-user (recommended) vs authentic shared machine board.
+- ⬜ Classic input: original commands + arrows only (recommended).
+- ⬜ Sign off the Depths flavor register (facility premise, announcer voice,
+  terminals-as-lore, section themes) and the modernization list (doc §3.3 —
+  closed list; anything not on it is out).
+
 ---
 
 ## Parking lot (raised by the spec, not yet needed)
