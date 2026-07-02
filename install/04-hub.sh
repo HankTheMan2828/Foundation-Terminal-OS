@@ -7,15 +7,19 @@ c_step "Home Hub: install foundationhub, set as login shell"
 pac python
 
 # Install the Hub package. Pure-stdlib, so a plain copy onto the system path is
-# enough; using pip keeps it upgradeable.
-if is_arch && command -v pip >/dev/null 2>&1; then
-  pip install --break-system-packages "$REPO_ROOT/hub" || \
-    cp -r "$REPO_ROOT/hub/foundationhub" /usr/lib/python3*/site-packages/ 2>/dev/null || true
-fi
+# enough; pip (when present) keeps it upgradeable.
+install_py_dist "$REPO_ROOT/hub" foundationhub=foundationhub
 
 # Config + data dirs (recreation list, AI Chat key file).
 install -d -o root -g root -m 0755 /etc/foundationhub
 install_file "etc/foundationhub/recreation.toml" "/etc/foundationhub/recreation.toml" 0644
+
+# Record where the repo actually lives so nothing has to assume a clone path —
+# helpers (foundationhub-account) search this before falling back to the
+# conventional /opt/terminal-os.
+echo "$REPO_ROOT" > /etc/foundationhub/install-root
+chmod 0644 /etc/foundationhub/install-root
+c_ok "recorded install root: $REPO_ROOT"
 
 # ── Multi-user login (docs/USERS.md) ─────────────────────────────────────────
 # Account registry: root writes (via foundationhub-account), the Hub only reads.

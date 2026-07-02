@@ -33,6 +33,8 @@ bluez-utils
 # --- the Hub + Frank runtime (spec §4, §6) ---
 python
 # (foundationhub and frankd are pure-stdlib; no pip deps required for offline mode)
+polkit          # pkexec path for foundationhub-account (login registration, docs/USERS.md)
+sudo            # used by install/05's isolation probes; previously assumed from the hand base install
 
 # --- Programs area tools (spec §5) ---
 # DIRECTION: all of these are TEMPORARY stand-ins to be replaced in-house

@@ -31,12 +31,55 @@ require_root() {
 is_arch() { command -v pacman >/dev/null 2>&1; }
 
 # Install packages idempotently. No-op (with a note) off Arch so scripts can be
-# dry-read / partially exercised elsewhere.
+# dry-read / partially exercised elsewhere. FOUNDATION_OFFLINE=1 (set by the
+# flashable-ISO installer, image/) means every package was already laid down by
+# pacstrap from the ISO's embedded repo — just verify instead of hitting the
+# network.
 pac() {
   if ! is_arch; then
     c_warn "not Arch (no pacman) — would install: $*"; return 0
   fi
+  if [[ "${FOUNDATION_OFFLINE:-0}" == "1" ]]; then
+    local missing=()
+    local p
+    for p in "$@"; do pacman -Qq "$p" >/dev/null 2>&1 || missing+=("$p"); done
+    if ((${#missing[@]})); then
+      c_warn "offline install: not present and cannot fetch: ${missing[*]}"
+      c_warn "add them to the ISO's package list (image/) and rebuild"
+    fi
+    return 0
+  fi
   pacman -S --needed --noconfirm "$@"
+}
+
+# Install one of the repo's pure-stdlib Python distributions. pip when it's
+# available and works (wires real console-script entry points); otherwise copy
+# the package(s) into site-packages and shim each console script with a
+# `python -m` wrapper on PATH — so an offline install (the flashable ISO) ends
+# up with the exact same commands available as an online one.
+install_py_dist() {  # srcdir  [script-name=module ...]
+  local src="$1"; shift
+  if ! is_arch; then
+    c_warn "not Arch — would install python dist: $src"; return 0
+  fi
+  if command -v pip >/dev/null 2>&1 && \
+     pip install --break-system-packages "$src"; then
+    c_ok "pip installed $(basename "$src")"
+    return 0
+  fi
+  local sitedir
+  sitedir="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+  local pair name module pkg
+  for pair in "$@"; do
+    name="${pair%%=*}"; module="${pair#*=}"
+    pkg="${module%%.*}"   # the module may be dotted (frankd.daemon); the
+                          # directory to copy is its top-level package
+    rm -rf "${sitedir:?}/$pkg"
+    cp -r "$src/$pkg" "$sitedir/"
+    printf '#!/bin/sh\nexec python -m %s "$@"\n' "$module" > "/usr/local/bin/$name"
+    chmod 0755 "/usr/local/bin/$name"
+    c_ok "copied $pkg -> $sitedir (shim: /usr/local/bin/$name)"
+  done
 }
 
 # Copy a file from system/ tree onto / preserving intended perms.

@@ -18,8 +18,13 @@ if [[ -n "$HARDWARE_PROFILE" ]]; then
 else
   c_info "no hardware profile selected — generic core only (see docs/PROFILES.md)"
 fi
-read -rp "Continue? [y/N] " ans
-[[ "${ans,,}" == "y" ]] || { c_info "aborted"; exit 0; }
+# FOUNDATION_ASSUME_YES=1 is how the flashable-ISO installer (image/) runs
+# these steps inside the target chroot — the destructive disk questions were
+# already answered on the live console before this point.
+if [[ "${FOUNDATION_ASSUME_YES:-0}" != "1" ]]; then
+  read -rp "Continue? [y/N] " ans
+  [[ "${ans,,}" == "y" ]] || { c_info "aborted"; exit 0; }
+fi
 
 for step in \
   00-base-packages 01-kernel 02-console-kiosk 03-plymouth-grub \
