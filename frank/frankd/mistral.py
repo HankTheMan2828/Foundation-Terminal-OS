@@ -20,28 +20,31 @@ from .enforcement import Reaction, ReactionKind, Scope
 from .model import Severity
 
 # Offline fallback lines, grouped by situation. Mirror docs/FRANK-VOICE.md.
-# Used verbatim when no API key is set OR the model misbehaves. [TODO(approval)]
+# Used verbatim when no API key is set OR the model misbehaves.
 _LINES: dict[str, list[str]] = {
     "warn_minor": [
-        "Noted.",
-        "An entry has been recorded.",
-        "This activity has been logged for review.",
+        "Minor infraction.",
+        "This action has been logged for review.",
     ],
     "warn_elevated": [
-        "This is being evaluated. I would advise a different course.",
-        "Continued activity of this kind will be escalated.",
+        "This is your {n} notice. Your activity is under evaluation. "
+        "Continued activity of this kind will be escalated. I would advise "
+        "a different course of action.",
     ],
     "warn_serious": [
-        "STOP. This activity has been flagged for evaluation.",
-        "This session is being reviewed. Further action will restrict access.",
+        "STOP. This activity has been flagged for immediate evaluation. "
+        "A temporary penalty may follow.",
     ],
     "lockout_session": [
-        "Access to this console is suspended. The restriction will lift on its own.",
-        "This session is closed pending evaluation. It will reopen.",
+        "Access to this console is suspended due to {n} minor infractions, "
+        "your supervisor has been notified. This user level restriction "
+        "will lift on its own in {N} {unit}.",
     ],
     "lockout_machine": [
-        "This machine is restricted. The restriction is timed and will expire.",
-        "Access is suspended system-wide. Nothing you do will shorten it. Waiting will.",
+        "Due to a serious infraction ({Infraction}), this machine is "
+        "restricted, your supervisor has been notified, you are now under "
+        "official review. The restriction is system wide, operation of "
+        "this device will resume in {N} {unit}.",
     ],
     "extended": [
         "The restriction has been extended. It still expires.",

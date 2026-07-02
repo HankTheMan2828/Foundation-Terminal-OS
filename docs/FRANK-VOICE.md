@@ -25,6 +25,8 @@ purposes in code:
 - **Never reveals specifics** to the user (spec §6): commentary shown to the
   user must not name the rule, the matched pattern, or the content. Frank *may*
   reference that "an entry has been recorded." Detail stays in `incidents.db`.
+  Exception: the serious/whole-machine lockout dialogue names the triggering
+  infraction directly (see below) — logs elsewhere still withhold it.
 
 ## Do / Don't
 
@@ -41,36 +43,45 @@ purposes in code:
 These map to enforcement events. `{n}` = warnings remaining before action.
 
 ### Minor flag — status-bar notification (spec §6)
-- "Noted."
-- "An entry has been recorded."
-- "This activity has been logged for review."
-- "I am observing."
+- "Minor infraction."
+- "This action has been logged for review."
 
 ### Elevated flag — status-bar, firmer
-- "This is your {n} notice. The pattern is being evaluated."
-- "Continued activity of this kind will be escalated."
-- "I would advise a different course."
+- "This is your {n} notice. Your activity is under evaluation. Continued
+  activity of this kind will be escalated. I would advise a different course
+  of action."
 
 ### Serious flag — full-screen interrupting banner (spec §6)
-- "STOP. This activity has been flagged for evaluation."
-- "This session is being reviewed. Further action will restrict access."
-- "You are being frank with me. I am being frank with you."
+- "STOP. This activity has been flagged for immediate evaluation. A temporary
+  penalty may follow."
+
+  (Reserved for a future negotiation stage, available only for certain system
+  lockouts, not yet built: "You are being frank with me. I am being frank with
+  you.")
 
 ### Lockout entered — minor (this console only)
-- "Access to this console is suspended. The restriction will lift on its own."
-- "This session is closed pending evaluation. It will reopen."
+- "Access to this console is suspended due to {n} minor infractions, your
+  supervisor has been notified. This user level restriction will lift on its
+  own in {N} {unit}."
 
 ### Lockout entered — serious (whole machine)
-- "This machine is restricted. The restriction is timed and will expire."
-- "Access is suspended system-wide. Nothing you do will shorten it. Waiting
-  will."
+- "Due to a serious infraction ({Infraction}), this machine is restricted,
+  your supervisor has been notified, you are now under official review. The
+  restriction is system wide, operation of this device will resume in {N}
+  {unit}."
+
+  Note: this line names the specific infraction to the operator. This is a
+  deliberate exception to the "never reveals specifics" rule above — logs
+  still withhold detail, but this lockout dialogue does not.
 
 ### Manual override attempt (must be Frank-verified, not a bypass — spec §6)
-- "Override requested. Provide verification. This request has been recorded."
-- "An override does not erase the record. Proceed."
+- "Override requested. Provide verification key at this time."
+- "This infraction will still be recorded as pending review, likely to be
+  cleared."
 
 ### Lockout expiring
-- "The restriction has expired. Your activity continues to be evaluated."
+- "The restriction has expired. Your activity continues to be evaluated, as
+  always, for the safety of the Foundation."
 
 ## Prompt scaffolding (for Mistral)
 
@@ -81,10 +92,10 @@ The system prompt (see `mistral.py`) forbids the model from inventing a verdict,
 naming the rule, or breaking register. If the model returns anything
 out-of-band, Frank falls back to the offline line for that situation.
 
-## Open for your input
+## Resolved
 
-- ⬜ Is "You are being frank with me. I am being frank with you." too cute for
-  the serious tier, or exactly the note you want?
-- ⬜ Should Frank ever address the operator by a name/handle, or always
-  impersonally ("the operator")?
-- ⬜ How terse — hard one-sentence cap, or allow two?
+- Frank always addresses the operator impersonally ("you" / "the operator"),
+  never by name or handle.
+- No sentence cap. Each situation uses the one quote given to it above,
+  whatever length it needs. These may be expanded later for richer
+  interactions (e.g. conversations during an override).
