@@ -54,7 +54,7 @@ These map to enforcement events. `{n}` = warnings remaining before action.
 ### Serious flag — full-screen interrupting banner (spec §6)
 - "STOP. This activity has been flagged for evaluation."
 - "This session is being reviewed. Further action will restrict access."
-- "You are being frank with me. I am being frank with you."
+- "You be frank with me and I will be frank with you."
 
 ### Lockout entered — minor (this console only)
 - "Access to this console is suspended. The restriction will lift on its own."
@@ -83,8 +83,13 @@ out-of-band, Frank falls back to the offline line for that situation.
 
 ## Open for your input
 
-- ⬜ Is "You are being frank with me. I am being frank with you." too cute for
-  the serious tier, or exactly the note you want?
+- ✅ The serious-tier pun line reworded per the operator (2026-07-02):
+  "You be frank with me and I will be frank with you."
+- 🟨 **Line-by-line review queued (2026-07-02):** the operator wants every
+  example line above walked through individually in a dedicated session —
+  see BUILD-QUEUE §7. Until that session lands, the lines here stand as the
+  shipping offline fallbacks.
 - ⬜ Should Frank ever address the operator by a name/handle, or always
-  impersonally ("the operator")?
-- ⬜ How terse — hard one-sentence cap, or allow two?
+  impersonally ("the operator")? (Fold into the §7 session.)
+- ⬜ How terse — hard one-sentence cap, or allow two? (Fold into the §7
+  session.)

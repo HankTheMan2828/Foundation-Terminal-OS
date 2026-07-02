@@ -212,6 +212,33 @@ ordered:
    mirrored in OPEN-QUESTIONS.md, same process as the roguelike. No code
    until the operator signs off.
 
+## §7 FRANK VOICE LINE REVIEW (operator-directed, 2026-07-02)
+
+**Recommended model:** Sonnet 5 — no design latitude; this session follows
+the procedure below exactly, with zero deviation.
+
+**Goal:** finalize every Frank voice line in `docs/FRANK-VOICE.md` with the
+operator, one line at a time. The register is locked by the spec (cold,
+corporate, procedural, faintly threatening — see FRANK-VOICE.md "Register");
+this session settles *phrasing only*.
+
+Procedure (follow verbatim):
+1. Read `docs/FRANK-VOICE.md` and `frank/frankd/mistral.py` (`_LINES` — the
+   offline fallbacks that must mirror the doc).
+2. Go through the "Example lines by situation" sections **in order**. For
+   each line, individually, use the question tool (AskUserQuestion) to ask
+   the operator: keep it, rewrite it (offer one in-register alternative),
+   or drop it. One line per question; batch at most the 4 lines of a single
+   situation into one question call. Do not skip lines, do not propose new
+   lines unless a section ends up empty.
+3. While in there, also ask the two parked register questions: name/handle
+   vs. impersonal address, and one- vs. two-sentence cap.
+4. Apply the answers to BOTH `docs/FRANK-VOICE.md` and
+   `frank/frankd/mistral.py` `_LINES` (they must stay mirrored; remove the
+   `[TODO(approval)]` there when done). Keep Frank's test suite green.
+5. Flip FRANK-VOICE.md's status to ✅ approved, update OPEN-QUESTIONS §4,
+   and check this section off.
+
 ---
 
 ## Parked (not in this queue, decisions already recorded)

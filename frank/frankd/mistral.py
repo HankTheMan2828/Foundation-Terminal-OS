@@ -21,6 +21,7 @@ from .model import Severity
 
 # Offline fallback lines, grouped by situation. Mirror docs/FRANK-VOICE.md.
 # Used verbatim when no API key is set OR the model misbehaves. [TODO(approval)]
+# — a line-by-line review with the operator is queued: docs/BUILD-QUEUE.md §7.
 _LINES: dict[str, list[str]] = {
     "warn_minor": [
         "Noted.",

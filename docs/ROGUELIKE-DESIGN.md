@@ -100,7 +100,9 @@ original. This is why classic ships first.
 - Colors: the original was monochrome; we draw through `foundationhub.theme`
   semantic pairs, which on the amber CRT *is* a 1980 terminal. Classic mode
   uses the normal pair for nearly everything — no rainbow retrofit.
-- Score board is per-user, not machine-wide (see §5 ⬜).
+- Score board is **machine-wide** (shared top ten), as the original was —
+  operator decided 2026-07-02, a deliberate authentic exception to the
+  accounts-never-see-each-other's-data rule (see §5 item 4 ✅).
 
 ### 2.2 Two vintages — ✅ DECIDED (operator, 2026-07-01): ship both
 
@@ -228,9 +230,12 @@ games/foundation_depths/           ⬜ name — see §5
   timer loop, zero idle CPU, the friendliest program in the OS for the
   console tier and Pocket8086. Redraw per turn; 80×24 minimum, larger
   terminals letterbox (classic) or extend the map viewport (Depths).
-- **Per-user everything:** saves, scores, run history under the account's
-  own `FOUNDATIONHUB_DATA` tree via the same helper pattern as
+- **Per-user saves + run history** under the account's own
+  `FOUNDATIONHUB_DATA` tree via the same helper pattern as
   `foundation_arcade/scores.py`. Saves are a few KB of JSON — quota-polite.
+  **Score boards are the exception:** one shared machine-wide top ten per
+  game/vintage (operator, 2026-07-02 — see §5 item 4), stored in a shared
+  location all accounts can read, showing account name + score only.
 - **Frank:** nothing special. It's a user program on a Frank-watched
   terminal; no exemptions, no new Frank-visible surfaces, and the Depths
   announcer never echoes ledger content.
@@ -243,19 +248,24 @@ games/foundation_depths/           ⬜ name — see §5
 1. ⬜ **Name the modernized game.** Proposed: **FOUNDATION DEPTHS**
    (package `games/foundation_depths/`, script `foundation-depths`).
    Alternates if wanted: SUBLEVELS, THE STACKS, FOUNDATION VAULTS.
+   *Operator note (2026-07-02): the classics are NOT renamed under any
+   scheme — they ship as **ROGUE**, the og names verbatim, "a tribute to
+   history changing games." Only the new game needs a name.*
 2. ✅ **Vintages — DECIDED (operator, 2026-07-01): both.** 5.4.4 (1985) is
    the default; 3.6 (1981, the OG) ships as a second ruleset behind the
-   same title screen. See §2.2.
+   same title screen. See §2.2. Names locked (2026-07-02): the original
+   ROGUE titles stay verbatim — no Foundation rebranding of the classics.
 3. ⬜ **BSD attribution under the in-house mandate.** The classic game is a
    from-scratch Python re-implementation, but it knowingly derives its
    design and text from BSD-licensed source, so we keep the authors'
    notice and credit them on screen. Confirm you're happy calling that
    in-house (recommended: yes — the mandate's point is no borrowed
    *programs*; this borrows a 45-year-old rulebook, lawfully).
-4. ⬜ **Score boards.** Original Rogue's top-ten was machine-wide, but
-   USERS.md says accounts never see each other's data. Default: **per-user
-   top-ten** (recommended). Say the word if you want an opt-in shared
-   board instead — it's authentic, but it's a deliberate exception.
+4. ✅ **Score boards — DECIDED (operator, 2026-07-02): machine-wide.**
+   One shared top ten per game/vintage, the authentic original behavior —
+   a deliberate, narrow exception to USERS.md's per-user-data rule (the
+   board exposes account name + score only, nothing else crosses
+   accounts). USERS.md carries the matching exception note.
 5. ⬜ **Classic input:** original commands verbatim with arrow keys as the
    only addition (recommended), or also allow the Depths key bar in
    classic (not recommended — museum piece).

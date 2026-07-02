@@ -10,8 +10,8 @@ machines: boot lands on a **login screen**, not the Hub.
   screen shows the roster; when the machine is full, registration closes.
 - **Fixed storage per account — no more, no less.** The allotment is set by
   the account's tier and enforced with filesystem quotas (soft = hard).
-- **Tiers are employee levels.** Draft table (amounts `TODO(approval)`, the
-  model itself is decided):
+- **Tiers are employee levels.** ✅ Names and amounts approved by the
+  operator 2026-07-02:
 
   | Tier | Allotment | Provisioning |
   |---|---|---|
@@ -69,4 +69,8 @@ machines: boot lands on a **login screen**, not the Hub.
   public file carrying **usernames and expiry timestamps only** — same
   disclosure philosophy as the timestamp ledger: when, never why.
 - Users can NOT see each other's data; users have NO power over Frank —
-  both unchanged from the single-user model.
+  both unchanged from the single-user model. One narrow, deliberate
+  exception to the data rule (operator, 2026-07-02): game **score boards**
+  are machine-wide shared top tens — account name + score only, the
+  authentic arcade/Rogue behavior. See `docs/ROGUELIKE-DESIGN.md` §5
+  item 4.
