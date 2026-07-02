@@ -8,8 +8,8 @@ Account.user_id field is reserved for it).
 
 Passwords and the setup code are salted PBKDF2-SHA256 — pure stdlib, same
 portability constraint as the rest of the Hub. The registry itself is one
-JSON file: /etc/zenhub/users.json on the target (root-owned; mutations go
-through the root helper `zenhub-account`), or $ZENHUB_USERS for development,
+JSON file: /etc/foundationhub/users.json on the target (root-owned; mutations go
+through the root helper `foundationhub-account`), or $FOUNDATIONHUB_USERS for development,
 where the Hub writes it directly.
 """
 from __future__ import annotations
@@ -101,7 +101,7 @@ class Account:
 
 
 def registry_path() -> Path:
-    return Path(os.environ.get("ZENHUB_USERS", "/etc/zenhub/users.json"))
+    return Path(os.environ.get("FOUNDATIONHUB_USERS", "/etc/foundationhub/users.json"))
 
 
 class Registry:
@@ -180,7 +180,7 @@ class Registry:
         stored = self._setup_code_hash or hash_secret(DEFAULT_SETUP_CODE)
         return verify_secret(code, stored)
 
-    # ── mutation (dev path; on the target this happens in zenhub-account) ────
+    # ── mutation (dev path; on the target this happens in foundationhub-account) ────
     def add_account(self, username: str, password: str, tier: Tier,
                     setup_code: str | None = None) -> Account:
         if self.full():

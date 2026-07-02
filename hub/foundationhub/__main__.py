@@ -1,11 +1,11 @@
-"""Entry point: ``python -m zenhub``.
+"""Entry point: ``python -m foundationhub``.
 
 Because the Hub is the login shell (spec §4), this must be robust: any unhandled
 error should restore the terminal and exit cleanly (which logs the session out)
 rather than leaving a broken screen or — worse — dropping to a shell.
 
 Boot lands on the LOGIN screen (docs/USERS.md), not the Hub. Setting
-ZENHUB_USER=<name> skips login and enters the Hub as that account — the dev
+FOUNDATIONHUB_USER=<name> skips login and enters the Hub as that account — the dev
 shortcut, and the hook for a future real per-user session start
 [TODO(hardware)].
 """
@@ -22,7 +22,7 @@ from .screens import build_home
 
 def _main(stdscr) -> None:
     theme.init(stdscr)
-    preset = os.environ.get("ZENHUB_USER")
+    preset = os.environ.get("FOUNDATIONHUB_USER")
     if preset:
         from .accounts import Registry
         session.set_active_account(Registry().get(preset))
@@ -39,7 +39,7 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     except Exception as exc:  # never leave a half-drawn screen on the login shell
-        sys.stderr.write(f"zenhub exited: {exc}\n")
+        sys.stderr.write(f"foundationhub exited: {exc}\n")
         return 1
     return 0
 

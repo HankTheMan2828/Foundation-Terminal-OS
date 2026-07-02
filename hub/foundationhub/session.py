@@ -15,8 +15,8 @@ import subprocess
 from pathlib import Path
 
 # Where installed hardware helpers live on the target (see install/04, hardware/).
-HW_BIN = Path(os.environ.get("ZENHUB_HW_BIN", "/usr/local/lib/zenhub"))
-ETC = Path(os.environ.get("ZENHUB_ETC", "/etc/zenhub"))
+HW_BIN = Path(os.environ.get("FOUNDATIONHUB_HW_BIN", "/usr/local/lib/foundationhub"))
+ETC = Path(os.environ.get("FOUNDATIONHUB_ETC", "/etc/foundationhub"))
 FRANK_SOCK = os.environ.get("FRANK_HUB_SOCK", "/run/frank/hub.sock")
 # Ledger: timestamps ONLY (spec §6). The Hub can read this; it can NOT read
 # Frank's detail store, which is frank:frank 0600 and never exposed.
@@ -27,8 +27,8 @@ LEDGER_PATH = os.environ.get("FRANK_LEDGER", "/var/lib/frank/ledger.timestamps")
 LOGIN_LOCKS = Path(os.environ.get("FRANK_LOGIN_LOCKS", "/run/frank/login.locks"))
 # Where the Hub publishes which logical account holds the session, so Frank's
 # collectors can attribute events per user (docs/USERS.md).
-ACTIVE_USER_FILE = Path(os.environ.get("ZENHUB_ACTIVE_USER",
-                                       "/run/zenhub/active-user"))
+ACTIVE_USER_FILE = Path(os.environ.get("FOUNDATIONHUB_ACTIVE_USER",
+                                       "/run/foundationhub/active-user"))
 
 
 def _run(argv: list[str], ok: str) -> str:
@@ -99,7 +99,7 @@ def get_power_profile_status() -> str:
 
 
 # ── the active logical account (set by the login screen — docs/USERS.md) ─────
-# The Linux user hosting the session stays `operator`; zenhub accounts are
+# The Linux user hosting the session stays `operator`; foundationhub accounts are
 # logical users layered on top until real per-account sessions land
 # [TODO(hardware)].
 
@@ -110,12 +110,12 @@ def set_active_account(acct) -> None:
     global _active_account
     _active_account = acct
     if acct is not None:
-        os.environ["ZENHUB_USER"] = acct.username
+        os.environ["FOUNDATIONHUB_USER"] = acct.username
         try:
             ACTIVE_USER_FILE.parent.mkdir(parents=True, exist_ok=True)
             ACTIVE_USER_FILE.write_text(acct.username + "\n")
         except OSError:
-            pass   # off-device: /run/zenhub may not exist; Frank just sees no user
+            pass   # off-device: /run/foundationhub may not exist; Frank just sees no user
 
 
 def get_active_account():

@@ -80,9 +80,65 @@ STATUS_NOT_FUNCTIONING = "NOT FUNCTIONING"
 LOG_SYSTEM = "SYSTEM RECORDS"           # journald/kernel/auth, raw
 LOG_OVERSEER = "OVERSEER LEDGER"        # Frank's ledger — timestamps only (§6)
 
-# ── Personal File (journal + tagged notes — spec §5) ─────────────────────────
+# ── Personal File (journal + tagged notes + search — spec §5, queue §1) ──────
 NOTE_JOURNAL = "DATED JOURNAL"
 NOTE_TAGGED = "TAGGED NOTES"
+NOTE_SEARCH = "SEARCH RECORDS"
+NOTE_TODAY = "TODAY'S ENTRY"
+NOTE_NEW = "NEW NOTE"
+NOTE_EMPTY = "(no records on file)"
+NOTE_NAME_PROMPT = "DESIGNATE NOTE"
+NOTE_RENAME_PROMPT = "NEW DESIGNATION"
+NOTE_EXISTS = "A RECORD BY THAT NAME EXISTS"
+NOTE_DELETE_CONFIRM = "DELETE {name}?  y/n"
+NOTE_DELETED = "RECORD DESTROYED"
+NOTES_HINT = "↵ open   n new   r rename   d delete   Esc/⌫ back"
+
+SEARCH_PROMPT = "QUERY (words and #tags)"
+SEARCH_NONE = "NO MATCHING RECORDS"
+SEARCH_HINT = "type   ↵ search   Esc back"
+SEARCH_RESULTS_HINT = "↑↓/jk move   ↵ open   Esc new search"
+
+# ── File Manager (native Hub screen — queue §2) ──────────────────────────────
+FILES_UP = ".. (up)"
+FILES_EMPTY = "(empty)"
+FILES_NAME_PROMPT = "NAME"
+FILES_RENAME_PROMPT = "NEW NAME"
+FILES_EXISTS = "A FILE BY THAT NAME EXISTS"
+FILES_INVALID_NAME = "INVALID NAME"
+FILES_DELETE_CONFIRM = "DELETE {name}?  y/n"
+FILES_DELETED = "DELETED"
+FILES_MARKED_COPY = "MARKED TO COPY: {name}"
+FILES_MARKED_CUT = "MARKED TO CUT: {name}"
+FILES_NOTHING_MARKED = "NOTHING MARKED"
+FILES_PASTED = "PASTED"
+FILES_CANNOT_OPEN = "CANNOT OPEN (not a text file)"
+FILES_HINT = ("↵ open   n new dir   r rename   d delete   "
+              "c copy   x cut   v paste   Esc/⌫ back/up")
+
+# ── System Monitor (native Hub screen, view-only — queue §3) ─────────────────
+MONITOR_TITLE = "SYSTEM MONITOR"
+MONITOR_SUBTITLE = "view-only — kill/renice is root/overseer territory"
+MONITOR_NO_PROC = "HOST DOES NOT EXPOSE /proc"
+MONITOR_NO_PROC_DETAIL = "display only on target hardware"
+MONITOR_CPU = "CPU"
+MONITOR_MEM = "MEMORY"
+MONITOR_UPTIME = "UPTIME"
+MONITOR_LOAD = "LOAD"
+MONITOR_NET = "NETWORK"
+MONITOR_PROCESSES = "PROCESSES"
+MONITOR_PROC_HEADER = f"{'PID':>7}  {'NAME':<20}{'CPU%':>7}{'MEM':>10}"
+MONITOR_HINT = "auto-refresh   Esc/⌫ back"
+
+# ── The system text editor (one-editor policy — queue §1) ────────────────────
+EDITOR_TITLE = "TEXT EDITOR"
+EDITOR_SUBTITLE = "ALL ENTRIES ARE PART OF THE PERMANENT RECORD"
+EDITOR_MENU_SAVE = "SAVE"
+EDITOR_MENU_DISCARD = "DISCARD"
+EDITOR_MENU_RETURN = "RETURN"
+EDITOR_HINT = "type   Esc menu"
+EDITOR_MODIFIED = "modified"
+EDITOR_SAVE_FAILED = "SAVE FAILED: {err}"
 
 # ── Power ────────────────────────────────────────────────────────────────────
 POWER_LOGOUT = "LOG OUT"

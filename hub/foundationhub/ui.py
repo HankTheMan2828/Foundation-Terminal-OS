@@ -71,6 +71,32 @@ def _center(win, y: int, text: str, attr: int) -> None:
         pass
 
 
+class LineEdit:
+    """Minimal single-line editor for curses prompts. ASCII, bounded.
+    Shared by the login prompts and the notes suite's name/search prompts."""
+
+    def __init__(self, *, mask: bool = False, limit: int = 32, value: str = ""):
+        self.value = value
+        self.mask = mask
+        self.limit = limit
+
+    def handle(self, key: int) -> Optional[str]:
+        """Returns "submit", "cancel", or None (keep editing)."""
+        if key in KEYS_SELECT and key != ord(" "):
+            return "submit"
+        if key == 27:                      # Esc — cancel, never navigate-back
+            return "cancel"
+        if key in (curses.KEY_BACKSPACE, 127, 8):
+            self.value = self.value[:-1]
+        elif 32 <= key <= 126 and len(self.value) < self.limit:
+            self.value += chr(key)
+        return None
+
+    def display(self) -> str:
+        shown = "•" * len(self.value) if self.mask else self.value
+        return shown + "_"
+
+
 class MenuItem:
     """One selectable row. `action` gets the App; return value drives navigation."""
 
@@ -92,6 +118,7 @@ class Menu:
     def __init__(self, items: list[MenuItem]):
         self.items = items
         self.index = 0
+        self._top = 0    # scroll offset: keeps the selection on-screen
         if items and not items[0].enabled:
             for i, item in enumerate(items):
                 if item.enabled:
@@ -128,10 +155,15 @@ class Menu:
         # symmetric inside the border (content starts at `left`, so the
         # left margin is `left - 1` blank columns after the border).
         width = max(0, w - 2 * left)
-        for row, item in enumerate(self.items):
-            y = top + row
-            if y >= h - 2:
-                break
+        # Scroll so the selected row is always visible (long note lists).
+        page = max(1, h - 2 - top)
+        if self.index < self._top:
+            self._top = self.index
+        elif self.index >= self._top + page:
+            self._top = self.index - page + 1
+        visible = self.items[self._top: self._top + page]
+        for row, item in enumerate(visible, start=self._top):
+            y = top + row - self._top
             selected = row == self.index
             if not item.enabled:
                 a = theme.attr(theme.PAIR_DIM, dim=True)

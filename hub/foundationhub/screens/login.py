@@ -14,14 +14,13 @@ suspenders.
 """
 from __future__ import annotations
 
-import curses
 import time
 
 from .. import labels, session, theme
 from ..accounts import (MAX_ACCOUNTS, Registry, RegistryError, Tier, TIERS,
                         GiB, MiB)
 from ..app import MenuScreen, Screen, POP
-from ..ui import Menu, MenuItem, KEYS_BACK, KEYS_SELECT
+from ..ui import LineEdit, Menu, MenuItem, KEYS_BACK
 from . import build_home, power
 
 _FAILS_BEFORE_COOLDOWN = 3
@@ -50,31 +49,6 @@ def _start_session(app, acct) -> None:
     app.stack[:] = [build_home(app)]
 
 
-class _LineEdit:
-    """Minimal single-line editor for curses prompts. ASCII, bounded."""
-
-    def __init__(self, *, mask: bool = False, limit: int = 32):
-        self.value = ""
-        self.mask = mask
-        self.limit = limit
-
-    def handle(self, key: int) -> str | None:
-        """Returns "submit", "cancel", or None (keep editing)."""
-        if key in KEYS_SELECT and key != ord(" "):
-            return "submit"
-        if key == 27:                      # Esc — cancel, never navigate-back
-            return "cancel"
-        if key in (curses.KEY_BACKSPACE, 127, 8):
-            self.value = self.value[:-1]
-        elif 32 <= key <= 126 and len(self.value) < self.limit:
-            self.value += chr(key)
-        return None
-
-    def display(self) -> str:
-        shown = "•" * len(self.value) if self.mask else self.value
-        return shown + "_"
-
-
 class PasswordScreen(Screen):
     """Password prompt for one account. 3 failures = a per-account cooldown."""
 
@@ -84,7 +58,7 @@ class PasswordScreen(Screen):
         self.acct = acct
         self.registry = registry
         self.title = labels.LOGIN_PASSWORD_FOR.format(user=acct.username)
-        self.edit = _LineEdit(mask=True, limit=64)
+        self.edit = LineEdit(mask=True, limit=64)
         self.message = ""
 
     def _state(self) -> dict:
@@ -147,7 +121,7 @@ class RegistrationScreen(Screen):
         self.setup_code = ""
         self.password = ""
         self.message = ""
-        self.edit = _LineEdit(limit=16)
+        self.edit = LineEdit(limit=16)
         self.tier_menu = Menu([
             MenuItem(TIERS[t].label,
                      (lambda tier: (lambda a: self._pick_tier(tier)))(t),
@@ -160,7 +134,7 @@ class RegistrationScreen(Screen):
     # ── step transitions ─────────────────────────────────────────────────────
     def _goto(self, step: int, *, mask: bool, limit: int = 64) -> None:
         self.step = step
-        self.edit = _LineEdit(mask=mask, limit=limit)
+        self.edit = LineEdit(mask=mask, limit=limit)
 
     def _pick_tier(self, tier: Tier):
         self.tier = tier
@@ -261,14 +235,14 @@ class RegistrationScreen(Screen):
 def _create_via_helper(username: str, password: str, tier: Tier,
                        setup_code: str) -> str | None:
     """Target path: the registry is root-owned, so creation goes through the
-    root helper (pkexec zenhub-account). Returns an error string or None."""
+    root helper (pkexec foundationhub-account). Returns an error string or None."""
     import shutil
     import subprocess
     if shutil.which("pkexec") is None:
         return "registration unavailable (no root helper on this machine)"
     try:
         res = subprocess.run(
-            ["pkexec", "/usr/local/bin/zenhub-account", "create",
+            ["pkexec", "/usr/local/bin/foundationhub-account", "create",
              username, str(int(tier))],
             input=f"{password}\n{setup_code}\n", text=True,
             capture_output=True, timeout=30)

@@ -1,7 +1,7 @@
 """AI Chat — a general-purpose assistant (Mistral), separate from Frank (spec §5).
 
 On-demand only, to control cost. Architecturally isolated from Frank: its own
-key file (/etc/zenhub/aichat.env), its own client, no access to Frank's data or
+key file (/etc/foundationhub/aichat.env), its own client, no access to Frank's data or
 verdict logic (see ARCHITECTURE.md).
 
 Current state: offline-gated. With no key configured it shows a clear notice
@@ -18,7 +18,7 @@ from ..app import Screen, POP
 from ..ui import KEYS_BACK
 
 KEY_ENV = "MISTRAL_API_KEY"
-KEY_FILE = Path(os.environ.get("ZENHUB_AICHAT_ENV", "/etc/zenhub/aichat.env"))
+KEY_FILE = Path(os.environ.get("FOUNDATIONHUB_AICHAT_ENV", "/etc/foundationhub/aichat.env"))
 
 
 def _has_key() -> bool:
@@ -50,7 +50,7 @@ class AIChatScreen(Screen):
             lines = [
                 labels.NO_API_KEY,
                 "",
-                "AI Chat needs a Mistral key at /etc/zenhub/aichat.env",
+                "AI Chat needs a Mistral key at /etc/foundationhub/aichat.env",
                 "(separate from Frank's key — see docs/INSTALL.md §2).",
                 "",
                 "Everything else in the Hub works offline.",

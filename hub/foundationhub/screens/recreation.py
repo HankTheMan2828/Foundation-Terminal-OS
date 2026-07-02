@@ -1,6 +1,6 @@
 """Recreation — games (spec §5). The title list is data, not code.
 
-Reads /etc/zenhub/recreation.toml so adding/removing a game is a config edit.
+Reads /etc/foundationhub/recreation.toml so adding/removing a game is a config edit.
 Ships a genre-organized default matching the spec's direction (roguelikes /
 arcade / puzzle-strategy). Final list is [TODO(approval)] — see
 docs/OPEN-QUESTIONS.md §2.
@@ -23,15 +23,15 @@ _DEFAULT = {
         ("NetHack", ["nethack"]),
         ("Dungeon Crawl", ["crawl"]),
     ],
+    # One in-house program, five games (BUILD-QUEUE §5 item 1) — retires
+    # nsnake, vitetris, ninvaders, 2048, and nudoku.
     "arcade": [
-        ("Snake", ["nsnake"]),
-        ("Tetris", ["vitetris"]),
-        ("Invaders", ["ninvaders"]),
+        ("Foundation Arcade", ["foundation-arcade"]),
     ],
+    # Chess is in-house now (BUILD-QUEUE §5 item 2) — foundation-chess retires
+    # gnuchess (vs. a built-in minimax AI).
     "puzzle / strategy": [
-        ("Chess", ["gnuchess"]),
-        ("2048", ["2048"]),
-        ("Sudoku", ["nudoku"]),
+        ("Chess", ["foundation-chess"]),
     ],
 }
 
