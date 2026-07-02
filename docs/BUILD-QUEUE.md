@@ -33,8 +33,9 @@ as items land.
 - **Nothing is exempt from Frank.** No private zones, no Frank-visible
   surfaces removed. Never surface Frank detail beyond what the ledger
   already shows (timestamps only).
-- **Portability:** this must eventually run on much weaker hardware
-  (console-mode tier, then Pocket8086). No heavy dependencies, no pip
+- **Portability:** the core now runs on the bare kernel VT (no GPU/compositor
+  — done), and must keep shrinking: Tier 1-lean (MB-class RAM), then
+  Pocket8086 (KB-class, real-mode — see §6). No heavy dependencies, no pip
   requirements for core function, be frugal with redraw loops.
 - **Dev environment:** develop off-device. On Windows use `py` +
   `windows-curses` (already installed); dev knobs: `FOUNDATIONHUB_USERS=<path>`
@@ -182,6 +183,34 @@ Build order (operator said fine to split across chats):
 4. As each lands: update recreation.toml defaults + `_DEFAULT` in
    `hub/foundationhub/screens/recreation.py`, drop the replaced packages from
    packages.txt (`nethack` is currently the only one actually listed).
+
+## §6 CAPABILITY TIERS: LEAN BASE + POCKET8086 (operator-directed)
+
+**Recommended models:** Tier 1-lean → Opus 4.8 (systems packaging, tight
+constraints, little novel design); Pocket8086 design doc → Fable 5 (novel
+architecture, hard trade-offs); Pocket8086 implementation sessions → per the
+approved design doc.
+
+**Goal (operator's standing direction):** as close to MS-DOS as it gets — no
+faking, no emulating. Boot, text screen, work. Two sub-efforts, strictly
+ordered:
+
+1. **Tier 1-lean (packaging, same code).** Get the existing Hub + Frank
+   running on a minimal base: Alpine/musl + openrc or busybox initramfs, no
+   systemd, target low-tens-of-MB RAM. Deliverable: an alternative install
+   path beside `install/` (the scripts already gate Arch-isms behind
+   `is_arch`), plus a measured RAM number in STATUS.md. Constraint: zero
+   changes to hub/frank Python; if something in them assumes systemd, fix it
+   via indirection the way hardware helpers are done.
+2. **Pocket8086 (design doc FIRST, then approval, then build).** Real-mode
+   16-bit x86, KB-class RAM: physically cannot run Linux/CPython, so this is
+   a from-scratch C/asm program in the MS-DOS mold — BIOS text output,
+   floppy/FreeDOS boot, highlight-and-Enter Hub UX, Frank's rule
+   engine/enforcement/ledger reimplemented small. Shares wording
+   (`labels.py` as the source of truth) and design with this repo, zero
+   code. Session deliverable: `docs/POCKET8086-DESIGN.md` with open items
+   mirrored in OPEN-QUESTIONS.md, same process as the roguelike. No code
+   until the operator signs off.
 
 ---
 

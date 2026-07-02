@@ -6,7 +6,8 @@
 # the operator — reads Frank's published lock decision and enforces it in a way
 # the operator has NO power to bypass, ignore, or shorten:
 #
-#   * kill the operator's active session (their Hub/cage goes away)
+#   * kill the operator's active session (their Hub — and any profile
+#     display stack under it — goes away)
 #   * stop tty1 autologin so no new session can start until the timer expires
 #   * show a root-owned countdown locker on the console
 #   * MACHINE-scope locks are re-applied on boot (frankd re-arms them), so a

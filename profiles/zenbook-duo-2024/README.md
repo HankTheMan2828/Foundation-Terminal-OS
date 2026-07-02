@@ -14,7 +14,15 @@ Meteor Lake. This is what the generic Foundation TerminalOS core (`hub/`, `frank
 
 ## What it adds on top of the core
 
-- `packages.txt` — `iio-sensor-proxy`, `libwacom`, `brightnessctl`
+- **The display stack** (`hardware/display-stack` + `cage`/`kitty`/
+  `wlr-randr`/`seatd` in `packages.txt`) — the generic core runs the Hub
+  directly on the kernel VT with no compositor or GPU requirement; THIS
+  device needs a Wayland session because everything below drives its
+  dual-panel topology through `wlr-randr`. `foundationhub-session` execs
+  `/usr/local/lib/foundationhub/display-stack` when the profile has
+  installed it.
+- `packages.txt` — `iio-sensor-proxy`, `libwacom`, `brightnessctl`, plus the
+  display-stack packages above
 - `hardware/` — helper scripts installed to `/usr/local/lib/foundationhub/`, invoked
   by the Hub via `FOUNDATIONHUB_HW_BIN` (see `hub/foundationhub/session.py`): display
   topology (`duo-watch-displays`, `duo-screen-toggle`), keyboard detach

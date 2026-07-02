@@ -2,9 +2,12 @@
 
 The core of this repo — `hub/` (the Home Hub TUI), `frank/` (the overseer
 daemon), `system/`, `theme/`, `sounds/`, and `install/00`–`06` — targets no
-specific device. It's a generic console kiosk: cage+kitty running a curses
-TUI as the login shell, with Frank watching in the background. Any x86_64
-machine that can run Arch Linux and a Wayland compositor can run the core.
+specific device. It's a generic console kiosk: a curses TUI running as the
+login shell **directly on the kernel text console (VT)**, with Frank watching
+in the background. There is no compositor, no graphical terminal, and no
+GPU/DRM requirement in the core — any x86_64 machine that can boot Arch Linux
+to a text console can run it. A device that genuinely needs a display stack
+gets one from its profile (see the display-stack hook below).
 
 Actual laptops have quirks — display topology, backlight sysfs names,
 detach/rotate sensors, kernel regressions. Those live under `profiles/`, one
@@ -54,6 +57,18 @@ A profile may also add its own systemd units that depend on core services
 for an example. This is why the hardware-profile step runs *last*
 (`install/run-all.sh`): profile glue can assume the core is already in place.
 
+### The display-stack hook
+
+The core session is `getty → foundationhub-session → python -m foundationhub`
+on the kernel VT — no display stack at all. If a device's glue truly requires
+one (the Zenbook Duo drives its dual-panel topology through `wlr-randr`,
+which needs a Wayland compositor), the profile installs an executable at
+`/usr/local/lib/foundationhub/display-stack`; `foundationhub-session` execs it
+instead of the direct console path when present. Its contract: end up running
+`python -m foundationhub` fullscreen with no shell behind it, and exit when
+the Hub exits. Removing the profile removes the file and the session falls
+back to the plain VT. Nothing in the core knows what the stack is.
+
 ## Existing profiles
 
 - **`zenbook-duo-2024`** — Asus Zenbook Duo 2024 (UX8406MA), Intel Meteor
@@ -70,32 +85,32 @@ device check to core code, that's a signal the feature belongs in
 binary, degrade gracefully if it's missing) rather than as a branch in the
 core.
 
-## Future portability tiers (not built yet)
+## Capability tiers (operator-directed: run on anything, DOS-style)
 
-Hardware profiles solve *device* portability (which laptop). They don't touch
-*capability-class* portability (how powerful the machine has to be) — the core
-still assumes an MMU-capable CPU, a GPU/DRM driver for the Wayland compositor,
-and enough RAM to run systemd + CPython. That's fine for engineer-grade
-workstations; it's overkill for a fleet of cheap deployment hardware, which is
-the likely long-run majority case. Planned, not started:
+Hardware profiles solve *device* portability (which laptop). Capability-class
+portability (how powerful the machine has to be) is its own axis, and the
+operator's standing direction is: **the closer to MS-DOS the better — no
+faking, no emulating, boot to a text screen and work.** Targets, honestly
+stated:
 
-- **Tier 2 — console-mode backend.** `foundationhub` is a plain `curses` app; it does
-  not need Wayland/`cage`/a GPU at all. Add an alternative to
-  `install/02-cage-kiosk.sh` (e.g. `install/02-console-kiosk.sh`) that has
-  `foundationhub-session` exec the Hub directly on the Linux console/tty instead of
-  `cage → kitty → foundationhub`, selectable the same way hardware profiles are
-  (an env var, e.g. `KIOSK_BACKEND=console`). Same Python code, same Hub,
-  same Frank — this drops the GPU/DRM requirement and runs on cheap SBCs,
-  thin clients, and old x86 hardware. Optionally pair with a lighter base
-  (Alpine/musl + openrc) if RAM is tight enough that systemd's footprint
-  matters. This is the tier that actually matches "hardware a company would
-  deploy at scale" — no code reuse issue, just a second boot-chain option.
-- **Tier 3 — sub-MMU / embedded rewrite.** Genuinely ultra-low-power hardware
-  (no MMU, kilobytes-to-low-megabytes of RAM — e.g. 8086-class) can't run
-  Linux, systemd, or CPython at all. This would share zero code with the core:
-  a bare-metal or RTOS program in C, driving BIOS/serial text output directly,
-  with Frank's rule engine, enforcement state machine, and ledger reimplemented
-  from scratch in a language with no GC. Treat this as a separate project that
-  borrows only the UX philosophy (highlight-and-Enter terminal), not a fork of
-  this repo — there is no shared codebase to fork from. Worth doing only if a
-  concrete deployment target for it materializes; speculative work otherwise.
+- **Tier 1 — the x86_64 Linux core (built; this repo).** The Hub on the
+  kernel VT, no GPU/compositor/graphical anything. Floor is set by
+  Linux + systemd + CPython, not by our code: practically a few hundred MB of
+  RAM on the Arch base. That covers effectively every x86_64 box, thin
+  client, and SBC made this century.
+- **Tier 1-lean (planned next; same code).** Swap the base under the same
+  Hub/Frank: Alpine/musl + openrc or a busybox initramfs instead of
+  Arch + systemd. Same Python, same screens. Realistic floor drops to the
+  low tens of MB — this is the "MB of RAM" target, and it's a packaging
+  effort, not a rewrite.
+- **Tier 2 — Pocket8086 / real-mode 16-bit (committed direction, not
+  started).** "KB of RAM" and 16-bit x86 are **physically outside what any
+  Linux can do** — no MMU-less 8086 runs a mainline kernel, and CPython
+  won't fit in kilobytes. There is no configuration flag that gets there;
+  pretending otherwise would be the faking we don't do. The honest path is
+  the same one MS-DOS itself took: a from-scratch real-mode program in
+  C/asm, booting from a floppy/BIOS or hosted on FreeDOS, driving BIOS
+  text output directly — with the Hub's highlight-and-Enter UX and Frank's
+  rule engine/enforcement/ledger reimplemented small (no GC, no runtime).
+  Shares design and wording with this repo, zero code. Design-doc-first,
+  like the roguelike (see `docs/BUILD-QUEUE.md` §6).

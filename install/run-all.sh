@@ -22,7 +22,7 @@ read -rp "Continue? [y/N] " ans
 [[ "${ans,,}" == "y" ]] || { c_info "aborted"; exit 0; }
 
 for step in \
-  00-base-packages 01-kernel 02-cage-kiosk 03-plymouth-grub \
+  00-base-packages 01-kernel 02-console-kiosk 03-plymouth-grub \
   04-hub 05-frank 06-theme-sound 07-hardware-profile 08-games 09-media; do
   "$REPO_ROOT/install/$step.sh"
 done

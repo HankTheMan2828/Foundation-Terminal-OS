@@ -4,7 +4,8 @@
 
 A fully console-based Arch Linux system. This is the parent project: a
 generic core that targets no specific device — any x86_64 machine that can
-run Arch and a Wayland compositor works — from which per-device **hardware
+boot Linux to a text console works; there is **no GPU, compositor, or
+graphical-terminal requirement** — from which per-device **hardware
 profiles** are built and refined (see [`docs/PROFILES.md`](docs/PROFILES.md)).
 It ships with one profile so far, for the 2024 Asus Zenbook Duo (UX8406MA),
 which is where the project started. No desktop environment, no window-manager
@@ -61,24 +62,29 @@ This is **not** a disk image. It is a set of:
 ## Target hardware
 
 The core (`install/00`–`06`) assumes nothing beyond "x86_64 machine that can
-run Arch Linux and a Wayland kiosk compositor." Device-specific hardware is
-opt-in via a profile:
+boot Arch Linux to the kernel text console." The Hub draws with curses on the
+VT the same way DOS programs drew on the BIOS console — no GPU driver, no
+Wayland, no X. Device-specific hardware is opt-in via a profile:
 
 - **`zenbook-duo-2024`** — Asus Zenbook Duo 2024 (UX8406MA), Intel Meteor
   Lake, dual eDP panels (`eDP-1` top, `eDP-2` bottom), detachable Bluetooth
   keyboard, plus the manual kernel-regression gate that only applies to this
-  device. See [`profiles/zenbook-duo-2024/README.md`](profiles/zenbook-duo-2024/README.md).
+  device. Its dual-panel glue needs a Wayland session (`wlr-randr`), so this
+  profile — and only this profile — installs a cage+kitty display stack as a
+  plugin. See [`profiles/zenbook-duo-2024/README.md`](profiles/zenbook-duo-2024/README.md).
 
 With no profile selected you get the generic kiosk core with no laptop-specific
 services, udev rules, or polkit grants installed.
 
 Hardware profiles solve *which device*, not *how powerful a device*: the core
-still assumes an MMU-capable CPU, a GPU/DRM driver for the Wayland compositor,
-and enough RAM for systemd + CPython — workstation-class hardware. Two lower
-capability tiers are planned but not yet built: a console-mode backend that
-drops the Wayland/GPU requirement for cheap SBCs and thin clients, and a
-from-scratch embedded port for sub-MMU hardware. See "Future portability
-tiers" in [`docs/PROFILES.md`](docs/PROFILES.md).
+still assumes an MMU-capable CPU and enough RAM for systemd + CPython — but
+nothing graphical, so cheap SBC-class x86 boxes and thin clients qualify.
+The standing direction is DOS-grade minimalism, in two further steps: a
+**lean base** (Alpine/busybox, no systemd — MB-class RAM, same code) and
+**Pocket8086** (real-mode 16-bit x86, KB-class RAM — a from-scratch
+implementation in the MS-DOS mold, since Linux/Python physically cannot go
+there; design-doc-first). See "Capability tiers" in
+[`docs/PROFILES.md`](docs/PROFILES.md) and [`docs/BUILD-QUEUE.md`](docs/BUILD-QUEUE.md) §6.
 
 ## Quick start (on the target machine)
 
@@ -143,6 +149,6 @@ frank/       frankd — the overseer daemon (rules, enforcement, ledger, AI)
 games/       Foundation Arcade, Foundation Chess, and (designed) the roguelike(s)
 media/       foundationmedia — the in-house audio player
 profiles/    Optional per-device hardware profiles (e.g. zenbook-duo-2024)
-theme/       kitty/foot config, CRT palettes, Plymouth text theme
+theme/       CRT palettes (kernel-VT font + colors), Plymouth text theme
 sounds/      Retro soundscape assets + playback hooks
 ```

@@ -22,14 +22,24 @@ getty@tty1 autologin  ──────────────►      user "o
 login shell = /usr/local/bin/foundationhub-session
   │   (this is the user's actual shell via chsh; exiting it logs out)
   ▼
-cage (Wayland kiosk compositor)
-  └── launches ONE fullscreen kitty
-        └── runs `python -m foundationhub`  ◄──── LOGIN screen, then the Home Hub
+`python -m foundationhub` on the kernel VT   ◄──── LOGIN screen, then the Home Hub
+      (curses on the text console — no compositor, no graphical
+       terminal, no GPU. The session script sets the console font
+       and retunes the VT palette to phosphor amber/green first.)
 ```
 
 Key property from the spec: **the TUI is the login shell.** There is no bash
-prompt behind it. `foundationhub-session` execs cage→kitty→foundationhub; when foundationhub exits,
-the whole chain unwinds and the session ends. No shell to drop to.
+prompt behind it. `foundationhub-session` execs foundationhub; when foundationhub
+exits, the session ends. No shell to drop to.
+
+**No display stack in the core.** The Hub draws on the kernel's own text
+console the way DOS programs drew on the BIOS console. A hardware profile
+whose glue genuinely needs a display stack installs
+`/usr/local/lib/foundationhub/display-stack`, which `foundationhub-session`
+execs instead when present — the zenbook-duo-2024 profile does this (cage +
+kitty) because its dual-panel topology is driven through `wlr-randr`, which
+needs a Wayland compositor. On a generic install that file doesn't exist and
+nothing graphical is even installed.
 
 Multi-user (docs/USERS.md): foundationhub now opens on a **login screen** — up to 8
 tiered accounts per machine. In the interim layering, the Linux user
@@ -39,10 +49,11 @@ so Frank attributes events per person, and Frank's session-scope locks gate
 the login screen via the public `/run/frank/login.locks` summary (usernames +
 expiry timestamps only). Real per-account Linux sessions are `TODO(hardware)`.
 
-The session wrapper is a thin script rather than making cage itself the shell so
-we can (a) start the per-session sound daemon, (b) export the CRT theme env, and
-(c) guarantee that an unexpected foundationhub crash still logs out rather than
-exposing a shell.
+The session wrapper is a thin script rather than exec'ing the Hub directly so
+we can (a) start the per-session sound daemon, (b) set the console font/palette
+and export the CRT theme env, (c) hand off to a profile's display-stack plugin
+when one is installed, and (d) guarantee that an unexpected foundationhub crash
+still logs out rather than exposing a shell.
 
 ## Processes on a running system
 
@@ -51,7 +62,7 @@ Generic core (present regardless of hardware profile):
 | Unit / process                | Scope      | Runs as | Purpose |
 |-------------------------------|------------|---------|---------|
 | `getty@tty1` (autologin)      | system     | root→operator | drops into the session |
-| `foundationhub-session` → cage→kitty | user login | operator | the kiosk surface |
+| `foundationhub-session` → foundationhub | user login | operator | the kiosk surface (kernel VT) |
 | `python -m foundationhub`            | user login | operator | Home Hub TUI (the shell) |
 | `frankd.service`              | system     | `frank`  | overseer daemon — decides (§6) |
 | `frank-enforcer.service`      | system     | **root** | applies lockouts the operator can't bypass (§6) |
@@ -64,6 +75,7 @@ Added by the `zenbook-duo-2024` hardware profile only (see
 |-------------------------------|------------|---------|---------|
 | `frank-ledger.service`        | system     | `frank`  | pipes timestamp ledger to eDP-2 on keyboard detach |
 | `duo-hardware.service`        | system     | root/polkit | display/rotation/brightness/battery glue |
+| cage + kitty (display-stack)  | user login | operator | this profile's Wayland session, needed by its wlr-randr glue |
 
 Frank runs as its **own system user** (`frank`), not as `operator`. This is the
 core of the §6 config-protection model: the `operator` account has no read/write
@@ -298,6 +310,9 @@ device identity.
 The one shipped profile, `zenbook-duo-2024`, is ported from
 `alesya-h/zenbook-duo-2024-ux8406ma-linux` with GNOME parts replaced:
 
+- `display-stack` — the profile's own cage+kitty Wayland session (the core
+  runs on the plain VT and needs none); required because everything below
+  drives displays through `wlr-randr`.
 - `duo-watch-displays` — was GNOME session watcher; now drives `wlr-randr`
   against cage.
 - `duo-screen-toggle` — was `gnome-monitor-config`; now `wlr-randr`.

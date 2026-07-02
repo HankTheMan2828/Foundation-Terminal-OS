@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# display-stack — zenbook-duo-2024's Wayland session (a profile plugin).
+#
+# The generic core runs the Hub directly on the kernel VT with no GPU or
+# compositor. THIS device needs a Wayland session because its dual-panel glue
+# (duo-screen-toggle, duo-watch-displays, rotation) drives display topology
+# through wlr-randr, which requires a compositor to talk to. So this profile
+# — and only this profile — installs the cage+kitty stack and this script;
+# foundationhub-session execs it when present (see that script's header).
+#
+# Contract with foundationhub-session: end up running `python -m foundationhub`
+# fullscreen with no shell behind it; when the Hub exits, exit (== logout).
+set -euo pipefail
+exec cage -- kitty --class foundationhub \
+    -o "include=${FOUNDATIONHUB_ETC:-/etc/foundationhub}/kitty.conf" \
+    python -m foundationhub

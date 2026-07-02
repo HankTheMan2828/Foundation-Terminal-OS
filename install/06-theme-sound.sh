@@ -4,11 +4,10 @@ source "$(dirname "$0")/common.sh"
 require_root
 c_step "Theme + sound"
 
-# kitty CRT config (amber default, scanline/glow) already installed to
-# /etc/foundationhub/kitty.conf by step 06; refresh it here in case theme changed.
-install_file "etc/foundationhub/kitty.conf" "/etc/foundationhub/kitty.conf" 0644
-
-# Optional: bitmap font for the phosphor look (spec §2).
+# Console CRT look (spec §2): the VT font and phosphor palette are applied
+# per-session by foundationhub-session (setfont + VT palette escapes) — a
+# kernel console feature, no display stack involved. Nothing to install here
+# beyond the font package (also in packages.txt; kept for standalone runs).
 pac terminus-font || true
 
 # Sound: install the per-session sound daemon + assets (spec §8).

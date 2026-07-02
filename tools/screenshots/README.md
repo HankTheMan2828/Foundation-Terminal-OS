@@ -18,13 +18,14 @@ the overview; the numbered PNGs are the full-res individual screens.
 
 ### Honest caveats
 - The CRT styling (amber, scanlines, glow) is applied by the **renderer**, not
-  the terminal. On the real device the look comes from kitty's config + the
-  TUI's own drawing; the *content* here is authentic, the exact glow/font
+  the terminal. On the real device the look comes from the kernel console's
+  retuned font/palette (set by `foundationhub-session`) + the TUI's own
+  drawing; the *content* here is authentic, the exact glow/font
   (DejaVu Sans Mono here vs. Terminus on device) will differ.
 - Box-drawing borders are redrawn by the renderer (pyte returns raw VT100
-  charset codes); on real kitty they'll be proper Unicode box lines.
-- Colors are the 8-color approximation; true amber (#FFB000) needs a terminal
-  that can redefine its palette (the target kitty config does).
+  charset codes); the real console draws its own line characters.
+- Colors are the 8-color approximation; on the device the VT palette is
+  retuned so those same 8 slots land on true amber (#FFB000).
 
 ## Regenerate
 

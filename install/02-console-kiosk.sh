@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# 02 — cage + kitty kiosk, autologin, boot to multi-user (spec §2, §4, §11.3).
+# 02 — kernel-console kiosk + autologin, boot to multi-user (spec §2, §4, §11.3).
+#
+# There is deliberately NO display stack here: no compositor, no graphical
+# terminal, no GPU/DRM requirement. The Hub runs with curses directly on the
+# kernel VT. A hardware profile whose device glue needs a display stack
+# installs its own on top (see docs/PROFILES.md).
 source "$(dirname "$0")/common.sh"
 require_root
-c_step "Kiosk layer: cage + kitty, autologin"
-
-pac cage kitty wlr-randr seatd
+c_step "Console kiosk: autologin straight to the kernel VT"
 
 # Boot to multi-user.target — NO display manager, NO graphical.target (spec §2).
 if is_arch; then
@@ -15,7 +18,7 @@ fi
 # Create the operator account if missing.
 if ! id "$OPERATOR" >/dev/null 2>&1; then
   c_info "creating operator user '$OPERATOR'"
-  useradd -m -G video,input,seat,wheel "$OPERATOR" || useradd -m "$OPERATOR"
+  useradd -m -G video,input,wheel "$OPERATOR" || useradd -m "$OPERATOR"
 fi
 
 # getty autologin (spec §4 — decided: autologin straight to Hub).
@@ -29,4 +32,4 @@ sed -i "s/@OPERATOR@/$OPERATOR/g" \
 install_file "usr/local/bin/foundationhub-session" "/usr/local/bin/foundationhub-session" 0755
 
 if is_arch; then systemctl daemon-reload; fi
-c_ok "kiosk layer configured (login shell wired in step 06)"
+c_ok "console kiosk configured (login shell wired in step 06)"

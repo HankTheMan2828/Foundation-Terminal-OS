@@ -32,7 +32,7 @@ or individually, verifying between steps (recommended for the first install):
 ```sh
 sudo ./install/00-base-packages.sh     # package set (§1)
 sudo ./install/01-kernel.sh            # pin linux-lts (§1)
-sudo ./install/02-cage-kiosk.sh        # cage+kitty kiosk, autologin, login shell (§2,§4)
+sudo ./install/02-console-kiosk.sh     # kernel-VT kiosk, autologin, login shell (§2,§4)
 sudo ./install/03-plymouth-grub.sh     # text plymouth + strip quiet/rhgb (§3)
 sudo ./install/04-hub.sh               # install foundationhub as the login shell (§4,§5)
 sudo ./install/05-frank.sh             # frank user, daemon, isolation (§6)
@@ -51,8 +51,11 @@ verify the bottom panel (eDP-2) actually works on the installed kernel.**
 Step 07 finishes by printing the check:
 
 ```sh
-wlr-randr            # (from within a cage session) should list eDP-1 AND eDP-2
+wlr-randr            # (from within the profile's cage session) should list eDP-1 AND eDP-2
 ```
+
+(`wlr-randr` and the cage session it runs in are installed *by this profile*
+— the generic core has no display stack to run it from.)
 
 If eDP-2 is missing or glitching, the LTS point release has a known i915
 regression on this device; follow the profile's printed fallback to pin a
@@ -89,9 +92,11 @@ configured" screen. Everything else works.
 chsh -s /usr/local/bin/foundationhub-session operator
 ```
 
-After this, the operator has **no bash shell** — logging in execs
-cage→kitty→foundationhub, and exiting foundationhub logs out. Keep a separate root TTY or a
-rescue path available until you've confirmed it works (see "Recovery" below).
+After this, the operator has **no bash shell** — logging in execs foundationhub
+directly on the kernel VT (or via the hardware profile's display-stack plugin
+if one is installed), and exiting foundationhub logs out. Keep a separate root
+TTY or a rescue path available until you've confirmed it works (see "Recovery"
+below).
 
 ## 4. Frank isolation checks (spec §6)
 

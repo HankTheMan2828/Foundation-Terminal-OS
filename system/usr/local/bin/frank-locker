@@ -9,10 +9,13 @@
 #
 # Usage: frank-locker <end_epoch>
 #
-# TODO(hardware): on the real UX8406MA the operator's cage session holds DRM
-# master on tty1; finalize taking the VT/DRM master so this reliably covers the
-# panel(s). The security guarantee (no operator session runs during lockout) is
-# provided by frank-enforcer regardless of this display.
+# On the generic core the operator's session is a plain VT — once
+# frank-enforcer kills it and stops getty, printing here covers the console
+# with nothing to fight. TODO(hardware): on the UX8406MA, whose PROFILE runs a
+# cage/Wayland session holding DRM master on tty1, finalize taking the VT/DRM
+# master so this reliably covers the panel(s). The security guarantee (no
+# operator session runs during lockout) is provided by frank-enforcer
+# regardless of this display.
 set -euo pipefail
 END="${1:?usage: frank-locker <end_epoch>}"
 END="${END%.*}"

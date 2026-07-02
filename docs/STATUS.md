@@ -13,7 +13,7 @@ Legend: ✅ working · 🟨 skeleton/partial · ⬜ stub/placeholder · ⏸ defe
 |---|------|-------|-------|
 | 1 | Base Arch install, linux-lts, minimal packages | 🟨 | `install/00`,`install/01`, `install/packages.txt`. Scripts written; not run on hardware yet. |
 | 2 | Verify second-screen on chosen kernel | ⬜ | Cannot verify off-device. Device-specific; gate now lives in `profiles/zenbook-duo-2024/install.sh`, not the generic core. |
-| 3 | cage + kitty kiosk, boot past any DM | 🟨 | `install/02`, `system/.../getty autologin`, `foundationhub-session`. |
+| 3 | Console kiosk (kernel VT, no display stack), boot past any DM | 🟨 | `install/02-console-kiosk.sh`, `system/.../getty autologin`, `foundationhub-session`. No GPU/compositor in the core; cage+kitty moved to the zenbook profile's `display-stack` plugin. |
 | 4 | Plymouth text theme, GRUB cleanup | 🟨 | `install/03`, `theme/plymouth/`. |
 | 5 | Custom curses TUI shell (nav skeleton) | ✅ | `hub/foundationhub` runs now: `python3 -m foundationhub`. All 7 areas navigable. |
 | 6 | Zenbook hardware scripts | 🟨 | Moved to `profiles/zenbook-duo-2024/hardware/`, ported to wlr-randr; keyboard-detach event hook present. Not hardware-tested. Applied only via `HARDWARE_PROFILE=zenbook-duo-2024` — see `docs/PROFILES.md`. |

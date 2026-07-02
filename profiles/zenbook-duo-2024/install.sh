@@ -23,7 +23,7 @@ cat <<'EOF'
 
   ┌─ MANUAL GATE (profile: zenbook-duo-2024) ─────────────────────────────────┐
   │ Before continuing, confirm the BOTTOM panel (eDP-2) actually works on the  │
-  │ installed kernel. From inside a cage session (after install/02) run:       │
+  │ installed kernel. From inside the cage session THIS profile installs, run: │
   │                                                                            │
   │     wlr-randr        # must list BOTH eDP-1 and eDP-2, no glitching        │
   │                                                                            │
@@ -38,8 +38,25 @@ cat <<'EOF'
   └────────────────────────────────────────────────────────────────────────────┘
 EOF
 
-# --- hardware helper scripts, referenced by the Hub via FOUNDATIONHUB_HW_BIN (spec §7) ---
+# --- display stack (THIS device's plugin; the generic core has none) ---
+# The core runs the Hub straight on the kernel VT. This device's dual-panel
+# glue needs a Wayland session (wlr-randr), so the profile brings cage+kitty
+# and the display-stack script foundationhub-session execs when present.
 install -d /usr/local/lib/foundationhub
+install -Dm0755 "$PROFILE_ROOT/hardware/display-stack" \
+  /usr/local/lib/foundationhub/display-stack
+install -Dm0644 "$PROFILE_ROOT/system/etc/foundationhub/kitty.conf" \
+  /etc/foundationhub/kitty.conf
+install -Dm0644 "$PROFILE_ROOT/system/etc/foundationhub/colors-green.conf" \
+  /etc/foundationhub/colors-green.conf
+if is_arch; then
+  systemctl enable seatd.service 2>/dev/null || true
+  # cage needs the operator on the seat; the group exists once seatd is in.
+  id "$OPERATOR" >/dev/null 2>&1 && usermod -aG seat "$OPERATOR" 2>/dev/null || true
+fi
+c_ok "display stack installed (cage+kitty via /usr/local/lib/foundationhub/display-stack)"
+
+# --- hardware helper scripts, referenced by the Hub via FOUNDATIONHUB_HW_BIN (spec §7) ---
 for f in duo-screen-toggle duo-watch-displays duo-keyboard-detach \
          backlight-sync duo-battery-limit; do
   install -Dm0755 "$PROFILE_ROOT/hardware/$f" "/usr/local/lib/foundationhub/$f"

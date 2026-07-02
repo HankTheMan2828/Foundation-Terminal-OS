@@ -13,10 +13,9 @@ if is_arch && command -v pip >/dev/null 2>&1; then
     cp -r "$REPO_ROOT/hub/foundationhub" /usr/lib/python3*/site-packages/ 2>/dev/null || true
 fi
 
-# Config + data dirs (recreation list, kitty include, AI Chat key file).
+# Config + data dirs (recreation list, AI Chat key file).
 install -d -o root -g root -m 0755 /etc/foundationhub
 install_file "etc/foundationhub/recreation.toml" "/etc/foundationhub/recreation.toml" 0644
-install_file "etc/foundationhub/kitty.conf"       "/etc/foundationhub/kitty.conf"       0644
 
 # ── Multi-user login (docs/USERS.md) ─────────────────────────────────────────
 # Account registry: root writes (via foundationhub-account), the Hub only reads.

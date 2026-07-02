@@ -45,17 +45,24 @@ corporate-menacing personality.
 
 ## 2. Display Architecture
 
-- No display manager, no desktop environment.
+- No display manager, no desktop environment, **no display stack at all in
+  the core** (amended: this supersedes the original cage/kitty plan below).
 - systemd boots to `multi-user.target` (no `graphical.target`).
-- A Wayland kiosk compositor — **cage** — launches a single fullscreen
-  **kitty** (or foot) terminal instance on login. No window chrome, no window
-  switching, no multitasking surface beyond what's built into the nav system
-  itself.
-- Multi-monitor handling (enabling/disabling/positioning the second panel) via
-  **wlr-randr**, replacing the original community project's
-  `gnome-monitor-config` dependency.
+- The Home Hub runs with curses **directly on the kernel text console (VT)**
+  as the login shell. No compositor, no graphical terminal, no GPU/DRM
+  requirement — the machine works like a DOS box: boot, text screen, done.
+  No window chrome, no window switching, no multitasking surface beyond
+  what's built into the nav system itself.
+- *(Superseded original plan, kept for history: a Wayland kiosk compositor —
+  cage — launching a single fullscreen kitty. That stack is now strictly a
+  hardware-profile plugin: only a device whose glue needs a compositor
+  installs it — see §7 and docs/PROFILES.md.)*
+- Multi-monitor handling (enabling/disabling/positioning the second panel) is
+  a hardware-profile concern, via **wlr-randr** inside that profile's own
+  display stack — the generic core has a single console and no monitor glue.
 - Visual theme: amber/green CRT phosphor look, scanlines, glow. Monospace
-  bitmap-style font (e.g. Terminus or similar).
+  bitmap-style font (e.g. Terminus or similar) — on the core this is the
+  console font (`setfont`) plus the VT's retunable 16-color palette.
 
 ## 3. Boot Sequence
 
@@ -216,7 +223,10 @@ before finalizing.
 - **Replace GNOME-specific glue:** the "GNOME session watcher" scripts
   (`duo watch-displays`, `duo watch-rotation`, and the
   `gnome-monitor-config`-based screen toggling) need to be reimplemented against
-  `wlr-randr` / cage's compositor instead.
+  `wlr-randr` / cage's compositor instead. (Amended: since the core no longer
+  ships any display stack, the cage+kitty session itself is part of THIS
+  profile — installed as its `display-stack` plugin — solely because this
+  glue needs a Wayland compositor to drive.)
 - **Keyboard detach/attach detection:** reuse this existing mechanism as the
   trigger for Frank's ledger screen (Section 6), not just for display topology
   changes.
@@ -255,7 +265,8 @@ of visual/keypress feedback.
 
 1. Base Arch install, linux-lts, minimal package set
 2. Verify second-screen behavior on chosen kernel before going further
-3. cage + kitty kiosk layer, confirm boots straight past any DM
+3. Console kiosk layer (kernel VT, no display stack), confirm boots straight
+   past any DM
 4. Plymouth text theme, GRUB param cleanup
 5. Custom curses TUI shell (Home Hub nav skeleton, no content yet)
 6. Port/adapt Zenbook Duo hardware scripts (display, brightness, battery,

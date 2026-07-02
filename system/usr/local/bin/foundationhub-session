@@ -2,35 +2,55 @@
 # foundationhub-session — the operator's LOGIN SHELL (spec §4).
 #
 # This is set as the operator's shell via chsh (install/06). Because it IS the
-# shell, there is no bash prompt behind the Hub: this script execs the kiosk
-# stack, and when the Hub exits the whole chain unwinds and the session ends.
+# shell, there is no bash prompt behind the Hub: when the Hub exits, the
+# session ends. No shell to drop to.
 #
-# Chain:  login shell -> cage (Wayland kiosk) -> kitty (fullscreen) -> foundationhub
+# Chain (core):  getty autologin -> this script -> python -m foundationhub
 #
-# Only start the graphical kiosk on the primary VT. If somehow invoked
-# elsewhere (e.g. a rescue tty2), fall through to a plain logout rather than
-# stacking compositors.
+# That's the whole display stack: the Hub draws with curses on the kernel's
+# own text console (VT), the same console the boot log printed on. No
+# compositor, no graphical terminal, no GPU/DRM requirement — any machine
+# that boots Linux to a VT runs this, the way any PC that booted DOS got a
+# usable screen from the BIOS.
+#
+# Hardware-profile hook: a profile whose device glue genuinely needs a
+# display stack (e.g. zenbook-duo-2024 drives its dual-panel topology through
+# wlr-randr, which needs a Wayland compositor) installs
+# /usr/local/lib/foundationhub/display-stack. If that exists and we're on the
+# primary VT, it is exec'd instead of the direct console path; its contract
+# is to end up running `python -m foundationhub` with no shell behind it.
+# The generic core never installs one.
 set -euo pipefail
 
-# CRT theme + font for kitty (spec §2). Amber default; Settings can switch.
+# CRT theme (spec §2). Amber default; Settings can switch.
 export FOUNDATIONHUB_THEME="${FOUNDATIONHUB_THEME:-amber}"
 export FOUNDATIONHUB_ETC="${FOUNDATIONHUB_ETC:-/etc/foundationhub}"
-
-log_and_exit() { exit "${1:-0}"; }
 
 # Start the per-session ambient sound + event daemon if present (spec §8).
 if command -v foundationhub-sound >/dev/null 2>&1; then
   foundationhub-sound & disown || true
 fi
 
-if [[ "${XDG_VTNR:-1}" == "1" ]] && command -v cage >/dev/null 2>&1; then
-  # cage runs exactly one client fullscreen, no window chrome (spec §2).
-  # kitty runs the Hub; when foundationhub exits, kitty exits, cage exits, we log out.
-  exec cage -- kitty --class foundationhub \
-      -o "include=${FOUNDATIONHUB_ETC}/kitty.conf" \
-      python -m foundationhub
+# Hardware-profile display stack (plugin) — only ever on the primary VT.
+if [[ "${XDG_VTNR:-1}" == "1" && -x /usr/local/lib/foundationhub/display-stack ]]; then
+  exec /usr/local/lib/foundationhub/display-stack
 fi
 
-# Fallback path (no cage / not VT1): run the Hub directly in this terminal so
-# there is STILL no shell to drop to (spec §4). Exit == logout.
+# Core path: dress the kernel console, best-effort — a stock VT is fine too.
+if [[ "${TERM:-}" == "linux" ]]; then
+  # Bitmap console font for the phosphor look (spec §2), if terminus-font
+  # is installed.
+  setfont ter-v16b 2>/dev/null || true
+  # Retune the VT's 16-color palette (a kernel console feature: \e]PXRRGGBB)
+  # so the 8-color curses fallback in hub/foundationhub/theme.py lands on
+  # real phosphor hues instead of stock yellow/green.
+  if [[ "$FOUNDATIONHUB_THEME" == "green" ]]; then
+    printf '\033]P00a0a0a\033]P1ff5030\033]P233ff66\033]P333ff66\033]P77cff9c\033]P810361c'
+  else
+    printf '\033]P00a0a0a\033]P1ff5030\033]P2ffb000\033]P3ffb000\033]P7ffd060\033]P83a2a00'
+  fi
+  clear
+fi
+
+# Run the Hub directly on this console. Exit == logout (spec §4).
 exec python -m foundationhub

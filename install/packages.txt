@@ -12,11 +12,14 @@ linux-firmware
 # it's a no-op on non-Intel CPUs, but move it to a profile if that stops being true.
 intel-ucode
 
-# --- kiosk display stack (spec §2) ---
-cage            # Wayland kiosk compositor
-kitty           # terminal (foot is an alternative)
-wlr-randr       # multi-monitor control (replaces gnome-monitor-config)
-seatd           # seat management for cage without logind session juggling
+# --- console kiosk (spec §2: the kernel VT is the display; no GPU stack) ---
+# There is deliberately NO compositor or graphical terminal here. The Hub is a
+# curses app running directly on the kernel text console — any x86_64 machine
+# that boots Linux gets a working screen, the way any PC that booted DOS got
+# one from the BIOS. A hardware profile whose device glue genuinely needs a
+# display stack (e.g. zenbook-duo-2024's dual-panel Wayland/wlr-randr glue)
+# adds cage/kitty/wlr-randr/seatd in ITS packages.txt — see docs/PROFILES.md.
+terminus-font   # bitmap console font for the phosphor look (setfont ter-v16b)
 
 # --- boot (spec §3) ---
 grub

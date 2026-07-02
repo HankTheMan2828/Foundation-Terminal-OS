@@ -4,3 +4,11 @@
 iio-sensor-proxy  # rotation (dual-panel/tablet-mode sensing)
 libwacom          # bottom-panel digitizer quirks
 brightnessctl     # backlight helper (scoped via polkit, not NOPASSWD sudo)
+
+# Display stack for THIS device only. The generic core runs on the kernel VT
+# with no compositor/GPU; this device's dual-panel glue drives topology via
+# wlr-randr, which needs a Wayland session (see hardware/display-stack).
+cage              # Wayland kiosk compositor
+kitty             # graphical terminal the Hub runs in under cage
+wlr-randr         # eDP-1/eDP-2 topology control
+seatd             # seat management for cage
