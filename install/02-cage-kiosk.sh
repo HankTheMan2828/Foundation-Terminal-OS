@@ -26,7 +26,7 @@ sed -i "s/@OPERATOR@/$OPERATOR/g" \
   /etc/systemd/system/getty@tty1.service.d/autologin.conf
 
 # The session wrapper that becomes the login shell in step 06.
-install_file "usr/local/bin/zenhub-session" "/usr/local/bin/zenhub-session" 0755
+install_file "usr/local/bin/foundationhub-session" "/usr/local/bin/foundationhub-session" 0755
 
 if is_arch; then systemctl daemon-reload; fi
 c_ok "kiosk layer configured (login shell wired in step 06)"

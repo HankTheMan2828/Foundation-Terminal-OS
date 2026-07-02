@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# zenhub-session — the operator's LOGIN SHELL (spec §4).
+# foundationhub-session — the operator's LOGIN SHELL (spec §4).
 #
 # This is set as the operator's shell via chsh (install/06). Because it IS the
 # shell, there is no bash prompt behind the Hub: this script execs the kiosk
 # stack, and when the Hub exits the whole chain unwinds and the session ends.
 #
-# Chain:  login shell -> cage (Wayland kiosk) -> kitty (fullscreen) -> zenhub
+# Chain:  login shell -> cage (Wayland kiosk) -> kitty (fullscreen) -> foundationhub
 #
 # Only start the graphical kiosk on the primary VT. If somehow invoked
 # elsewhere (e.g. a rescue tty2), fall through to a plain logout rather than
@@ -13,24 +13,24 @@
 set -euo pipefail
 
 # CRT theme + font for kitty (spec §2). Amber default; Settings can switch.
-export ZENHUB_THEME="${ZENHUB_THEME:-amber}"
-export ZENHUB_ETC="${ZENHUB_ETC:-/etc/zenhub}"
+export FOUNDATIONHUB_THEME="${FOUNDATIONHUB_THEME:-amber}"
+export FOUNDATIONHUB_ETC="${FOUNDATIONHUB_ETC:-/etc/foundationhub}"
 
 log_and_exit() { exit "${1:-0}"; }
 
 # Start the per-session ambient sound + event daemon if present (spec §8).
-if command -v zenhub-sound >/dev/null 2>&1; then
-  zenhub-sound & disown || true
+if command -v foundationhub-sound >/dev/null 2>&1; then
+  foundationhub-sound & disown || true
 fi
 
 if [[ "${XDG_VTNR:-1}" == "1" ]] && command -v cage >/dev/null 2>&1; then
   # cage runs exactly one client fullscreen, no window chrome (spec §2).
-  # kitty runs the Hub; when zenhub exits, kitty exits, cage exits, we log out.
-  exec cage -- kitty --class zenhub \
-      -o "include=${ZENHUB_ETC}/kitty.conf" \
-      python -m zenhub
+  # kitty runs the Hub; when foundationhub exits, kitty exits, cage exits, we log out.
+  exec cage -- kitty --class foundationhub \
+      -o "include=${FOUNDATIONHUB_ETC}/kitty.conf" \
+      python -m foundationhub
 fi
 
 # Fallback path (no cage / not VT1): run the Hub directly in this terminal so
 # there is STILL no shell to drop to (spec §4). Exit == logout.
-exec python -m zenhub
+exec python -m foundationhub

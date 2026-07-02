@@ -15,8 +15,8 @@ Meteor Lake. This is what the generic Foundation TerminalOS core (`hub/`, `frank
 ## What it adds on top of the core
 
 - `packages.txt` — `iio-sensor-proxy`, `libwacom`, `brightnessctl`
-- `hardware/` — helper scripts installed to `/usr/local/lib/zenhub/`, invoked
-  by the Hub via `ZENHUB_HW_BIN` (see `hub/zenhub/session.py`): display
+- `hardware/` — helper scripts installed to `/usr/local/lib/foundationhub/`, invoked
+  by the Hub via `FOUNDATIONHUB_HW_BIN` (see `hub/foundationhub/session.py`): display
   topology (`duo-watch-displays`, `duo-screen-toggle`), keyboard detach
   (`duo-keyboard-detach`), backlight sync (`backlight-sync`), battery limiter
   (`duo-battery-limit`)

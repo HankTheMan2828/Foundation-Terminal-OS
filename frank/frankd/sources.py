@@ -24,8 +24,8 @@ OPERATOR = os.environ.get("FRANK_OPERATOR", "operator")
 # The Hub publishes which logical account holds the session (docs/USERS.md);
 # collectors stamp every event with it so records follow the person, not the
 # shared Linux session user.
-ACTIVE_USER_FILE = Path(os.environ.get("ZENHUB_ACTIVE_USER",
-                                       "/run/zenhub/active-user"))
+ACTIVE_USER_FILE = Path(os.environ.get("FOUNDATIONHUB_ACTIVE_USER",
+                                       "/run/foundationhub/active-user"))
 
 
 def active_user() -> str:

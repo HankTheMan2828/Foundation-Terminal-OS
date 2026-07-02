@@ -10,11 +10,11 @@
 
 # --- keyboard attached (add) ---
 ACTION=="add", SUBSYSTEM=="input", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="XXXX", \
-  RUN+="/usr/local/lib/zenhub/duo-keyboard-detach attached"
+  RUN+="/usr/local/lib/foundationhub/duo-keyboard-detach attached"
 
 # --- keyboard detached (remove) ---
 ACTION=="remove", SUBSYSTEM=="input", ENV{ID_VENDOR_ID}=="0b05", ENV{ID_MODEL_ID}=="XXXX", \
-  RUN+="/usr/local/lib/zenhub/duo-keyboard-detach detached"
+  RUN+="/usr/local/lib/foundationhub/duo-keyboard-detach detached"
 
 # --- bottom panel backlight (spec §7: backlight=card1-eDP-2-backlight) ---
 # Ensure the operator's group can drive the eDP-2 backlight sysfs (scoped;

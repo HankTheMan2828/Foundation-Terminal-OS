@@ -16,9 +16,9 @@ rm -f /etc/systemd/system/duo-battery-limit.service /etc/systemd/system/duo-hard
       /etc/systemd/system/frank-ledger.service
 rm -f /etc/udev/rules.d/90-zenbook-duo.rules
 rm -f /etc/polkit-1/rules.d/50-zenbook-backlight.rules
-rm -f /usr/local/lib/zenhub/duo-screen-toggle /usr/local/lib/zenhub/duo-watch-displays \
-      /usr/local/lib/zenhub/duo-keyboard-detach /usr/local/lib/zenhub/backlight-sync \
-      /usr/local/lib/zenhub/duo-battery-limit
+rm -f /usr/local/lib/foundationhub/duo-screen-toggle /usr/local/lib/foundationhub/duo-watch-displays \
+      /usr/local/lib/foundationhub/duo-keyboard-detach /usr/local/lib/foundationhub/backlight-sync \
+      /usr/local/lib/foundationhub/duo-battery-limit
 is_arch && udevadm control --reload-rules || true
 
 c_ok "zenbook-duo-2024 profile glue removed (generic core untouched)"

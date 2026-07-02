@@ -29,19 +29,31 @@ bluez-utils
 
 # --- the Hub + Frank runtime (spec §4, §6) ---
 python
-# (zenhub and frankd are pure-stdlib; no pip deps required for offline mode)
+# (foundationhub and frankd are pure-stdlib; no pip deps required for offline mode)
 
 # --- Programs area tools (spec §5) ---
 # DIRECTION: all of these are TEMPORARY stand-ins to be replaced in-house
 # (docs/OPEN-QUESTIONS.md §10). cmus and mpv are already dropped — media is
-# one in-house player (zenmedia) when it lands, not two borrowed ones.
-ranger          # file manager      -> native Hub screen (planned)
-btop            # system monitor    -> native Hub screen (planned)
-neovim          # text editor       -> in-house notes-suite editor (planned)
+# one in-house player (foundationmedia) when it lands, not two borrowed ones.
+# neovim RETIRED (BUILD-QUEUE §1): the in-house notes-suite editor
+# (hub/foundationhub/editor.py) is THE system editor now — one editor everywhere.
+# ranger RETIRED (BUILD-QUEUE §2): the in-house file manager
+# (hub/foundationhub/screens/files.py) is THE file manager now, scoped to the
+# account's own quota'd data space.
+# btop RETIRED (BUILD-QUEUE §3): the in-house system monitor
+# (hub/foundationhub/screens/monitor.py + hub/foundationhub/sysinfo.py) reads /proc
+# directly, stdlib only — view-only, no kill/renice.
 networkmanager  # nmtui network config
 
 # --- optional: AI features (spec §5, §6) need python-requests when a key is set ---
 python-requests
 
 # --- Recreation defaults (spec §5; final list TODO(approval), see recreation.toml) ---
+# nsnake/vitetris/ninvaders/2048/nudoku RETIRED (BUILD-QUEUE §5 item 1):
+# Foundation Arcade (games/foundation_arcade/, installed by install/08-games.sh)
+# is one in-house program replacing all five.
+# gnuchess RETIRED (BUILD-QUEUE §5 item 2): Foundation Chess
+# (games/foundation_chess/, same install/08-games.sh) plays vs. a built-in
+# minimax AI. gnuchess was never listed here; recreation.toml now execs
+# foundation-chess.
 nethack

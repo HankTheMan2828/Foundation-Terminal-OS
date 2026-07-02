@@ -3,13 +3,13 @@
 // The login screen's registration flow runs as the session user but must
 // mutate the root-owned account registry and create system users. Same
 // pattern as the backlight rule: allow pkexec of EXACTLY ONE helper, nothing
-// else. The helper (zenhub-account) revalidates everything — capacity,
+// else. The helper (foundationhub-account) revalidates everything — capacity,
 // username rules, the technician setup code for tiers above GUEST — so this
 // grant confers "may ask to register an account", not "may administer users".
 
 polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.policykit.exec" &&
-        action.lookup("program") == "/usr/local/bin/zenhub-account" &&
+        action.lookup("program") == "/usr/local/bin/foundationhub-account" &&
         subject.local && subject.active &&
         subject.isInGroup("operator")) {
         return polkit.Result.YES;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture the Home Hub screens from the REAL running zenhub app -> preview/."""
+"""Capture the Home Hub screens from the REAL running foundationhub app -> preview/."""
 import os
 import pathlib
 import sys
@@ -15,8 +15,8 @@ OUT = pathlib.Path(__file__).parent / "preview"
 def main():
     env = dict(os.environ, TERM="xterm-256color",
                PYTHONPATH=str(REPO / "hub"),
-               ZENHUB_ETC=str(REPO / "system/etc/zenhub"))
-    s = Session(["python3", "-m", "zenhub"], env)
+               FOUNDATIONHUB_ETC=str(REPO / "system/etc/foundationhub"))
+    s = Session(["python3", "-m", "foundationhub"], env)
     s.drain(1.4)
 
     def snap(name):

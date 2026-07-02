@@ -34,7 +34,7 @@ sudo ./install/00-base-packages.sh     # package set (§1)
 sudo ./install/01-kernel.sh            # pin linux-lts (§1)
 sudo ./install/02-cage-kiosk.sh        # cage+kitty kiosk, autologin, login shell (§2,§4)
 sudo ./install/03-plymouth-grub.sh     # text plymouth + strip quiet/rhgb (§3)
-sudo ./install/04-hub.sh               # install zenhub as the login shell (§4,§5)
+sudo ./install/04-hub.sh               # install foundationhub as the login shell (§4,§5)
 sudo ./install/05-frank.sh             # frank user, daemon, isolation (§6)
 sudo ./install/06-theme-sound.sh       # CRT theme + soundscape (§8,§10)
 sudo HARDWARE_PROFILE=zenbook-duo-2024 ./install/07-hardware-profile.sh   # optional (§7)
@@ -71,26 +71,26 @@ two Mistral integrations are isolated):
   sudo install -o root -g frank -m 0640 /dev/null /etc/frank/secrets.env
   echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/frank/secrets.env >/dev/null
   ```
-- **AI Chat's key** — `/etc/zenhub/aichat.env`, readable by the operator.
+- **AI Chat's key** — `/etc/foundationhub/aichat.env`, readable by the operator.
   ```sh
-  sudo install -o root -g operator -m 0640 /dev/null /etc/zenhub/aichat.env
-  echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/zenhub/aichat.env >/dev/null
+  sudo install -o root -g operator -m 0640 /dev/null /etc/foundationhub/aichat.env
+  echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/foundationhub/aichat.env >/dev/null
   ```
 
 **With no keys set (current default):** the rule engine runs fully offline,
 Frank speaks with the built-in fallback lines, and AI Chat shows a clear "no key
 configured" screen. Everything else works.
 
-## 3. Making zenhub the login shell (spec §4)
+## 3. Making foundationhub the login shell (spec §4)
 
-`04-hub.sh` installs `/usr/local/bin/zenhub-session` and runs:
+`04-hub.sh` installs `/usr/local/bin/foundationhub-session` and runs:
 
 ```sh
-chsh -s /usr/local/bin/zenhub-session operator
+chsh -s /usr/local/bin/foundationhub-session operator
 ```
 
 After this, the operator has **no bash shell** — logging in execs
-cage→kitty→zenhub, and exiting zenhub logs out. Keep a separate root TTY or a
+cage→kitty→foundationhub, and exiting foundationhub logs out. Keep a separate root TTY or a
 rescue path available until you've confirmed it works (see "Recovery" below).
 
 ## 4. Frank isolation checks (spec §6)

@@ -9,8 +9,8 @@
 # the state marker file.
 set -euo pipefail
 
-STATE_FILE="${DUO_KBD_STATE:-/run/zenhub/keyboard_state}"
-TOGGLE=/usr/local/lib/zenhub/duo-screen-toggle
+STATE_FILE="${DUO_KBD_STATE:-/run/foundationhub/keyboard_state}"
+TOGGLE=/usr/local/lib/foundationhub/duo-screen-toggle
 last=""
 
 # Baseline: keyboard attached -> single-panel; detached -> second panel on.

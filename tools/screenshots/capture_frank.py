@@ -34,9 +34,9 @@ def populated_ledger():
     led.write_text("\n".join(lines) + "\n")
     env = dict(os.environ, TERM="xterm-256color",
                PYTHONPATH=str(REPO / "hub"),
-               ZENHUB_ETC=str(REPO / "system/etc/zenhub"),
+               FOUNDATIONHUB_ETC=str(REPO / "system/etc/foundationhub"),
                FRANK_LEDGER=str(led))
-    s = Session(["python3", "-m", "zenhub"], env)
+    s = Session(["python3", "-m", "foundationhub"], env)
     s.drain(1.2)
     s.key(DOWN, 4); s.key(ENTER)     # -> Logs
     s.key(DOWN); s.key(ENTER)        # -> Overseer Ledger

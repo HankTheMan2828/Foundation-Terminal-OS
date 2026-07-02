@@ -5,17 +5,17 @@ require_root
 c_step "Theme + sound"
 
 # kitty CRT config (amber default, scanline/glow) already installed to
-# /etc/zenhub/kitty.conf by step 06; refresh it here in case theme changed.
-install_file "etc/zenhub/kitty.conf" "/etc/zenhub/kitty.conf" 0644
+# /etc/foundationhub/kitty.conf by step 06; refresh it here in case theme changed.
+install_file "etc/foundationhub/kitty.conf" "/etc/foundationhub/kitty.conf" 0644
 
 # Optional: bitmap font for the phosphor look (spec §2).
 pac terminus-font || true
 
 # Sound: install the per-session sound daemon + assets (spec §8).
 if [[ -d "$REPO_ROOT/sounds" ]]; then
-  install -Dm0755 "$REPO_ROOT/sounds/zenhub-sound" /usr/local/bin/zenhub-sound 2>/dev/null || true
-  install -d /usr/share/zenhub/sounds
-  cp -n "$REPO_ROOT"/sounds/assets/* /usr/share/zenhub/sounds/ 2>/dev/null || true
+  install -Dm0755 "$REPO_ROOT/sounds/foundationhub-sound" /usr/local/bin/foundationhub-sound 2>/dev/null || true
+  install -d /usr/share/foundationhub/sounds
+  cp -n "$REPO_ROOT"/sounds/assets/* /usr/share/foundationhub/sounds/ 2>/dev/null || true
   c_ok "sound daemon + assets installed (assets are placeholders — see sounds/README.md)"
 fi
 

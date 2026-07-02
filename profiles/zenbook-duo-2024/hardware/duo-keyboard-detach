@@ -11,10 +11,10 @@
 # marker udev writes, so both callers agree on current state.
 set -euo pipefail
 
-STATE_FILE="${DUO_KBD_STATE:-/run/zenhub/keyboard_state}"   # "attached"|"detached"
+STATE_FILE="${DUO_KBD_STATE:-/run/foundationhub/keyboard_state}"   # "attached"|"detached"
 BOTTOM="${DUO_BOTTOM_OUTPUT:-eDP-2}"
 LEDGER="${FRANK_LEDGER:-/var/lib/frank/ledger.timestamps}"
-TOGGLE=/usr/local/lib/zenhub/duo-screen-toggle
+TOGGLE=/usr/local/lib/foundationhub/duo-screen-toggle
 
 mkdir -p "$(dirname "$STATE_FILE")"
 
@@ -33,13 +33,13 @@ render_ledger() {
   # TODO(hardware): direct this to the eDP-2 framebuffer/output in the running
   # cage session. For now it writes to the ledger console sink if configured.
   if [[ -r "$LEDGER" ]]; then
-    tail -n 100 "$LEDGER" > "${DUO_LEDGER_SINK:-/run/zenhub/ledger.render}" 2>/dev/null || true
+    tail -n 100 "$LEDGER" > "${DUO_LEDGER_SINK:-/run/foundationhub/ledger.render}" 2>/dev/null || true
   fi
 }
 
 blank_ledger() {
   "$TOGGLE" off 2>/dev/null || true
-  : > "${DUO_LEDGER_SINK:-/run/zenhub/ledger.render}" 2>/dev/null || true
+  : > "${DUO_LEDGER_SINK:-/run/foundationhub/ledger.render}" 2>/dev/null || true
 }
 
 case "${1:-ledger-refresh}" in

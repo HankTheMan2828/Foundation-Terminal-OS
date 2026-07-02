@@ -6,10 +6,10 @@ from the Hub's Settings → Theme screen.
 
 Two layers combine for the look:
 
-1. **kitty** (`system/etc/zenhub/kitty.conf`, installed to `/etc/zenhub/`) —
+1. **kitty** (`system/etc/foundationhub/kitty.conf`, installed to `/etc/foundationhub/`) —
    sets the palette, font, no window chrome, block cursor. Amber by default.
    `colors-green.conf` here is the alt palette Settings can swap to.
-2. **The TUI itself** (`hub/zenhub/theme.py`) — draws the frame/bezel, the
+2. **The TUI itself** (`hub/foundationhub/theme.py`) — draws the frame/bezel, the
    scanline dimming on alternate rows, and the "glow" via inverse highlight on
    the selected row. It picks real amber (#FFB000) / phosphor green (#33FF66)
    when the terminal can redefine colors, and degrades to yellow/green

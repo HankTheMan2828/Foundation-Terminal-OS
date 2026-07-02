@@ -5,7 +5,7 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/lib/zenhub/duo-battery-limit 80
+ExecStart=/usr/local/lib/foundationhub/duo-battery-limit 80
 RemainAfterExit=yes
 
 [Install]

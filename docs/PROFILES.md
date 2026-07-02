@@ -39,9 +39,9 @@ profiles/<name>/
   install.sh      applies the profile (packages, files, services); run as root,
                   invoked by install/07-hardware-profile.sh or standalone
   uninstall.sh    reverses install.sh
-  hardware/       helper scripts/binaries, installed to /usr/local/lib/zenhub/
-                  (the Hub calls into this dir via ZENHUB_HW_BIN — see
-                  hub/zenhub/session.py — with graceful "not installed"
+  hardware/       helper scripts/binaries, installed to /usr/local/lib/foundationhub/
+                  (the Hub calls into this dir via FOUNDATIONHUB_HW_BIN — see
+                  hub/foundationhub/session.py — with graceful "not installed"
                   fallback if a profile isn't applied)
   system/         files copied onto the target root: udev rules, polkit
                   rules, systemd units, mirroring the layout of the repo's
@@ -66,7 +66,7 @@ Copy the shape above. Keep every device assumption inside `profiles/<name>/`
 — nothing in `hub/`, `frank/`, `install/00`–`06`, or `system/` should ever
 need to know a specific device exists. If you find yourself wanting to add a
 device check to core code, that's a signal the feature belongs in
-`hub/zenhub/session.py`'s hardware-helper indirection (call an external
+`hub/foundationhub/session.py`'s hardware-helper indirection (call an external
 binary, degrade gracefully if it's missing) rather than as a branch in the
 core.
 
@@ -79,11 +79,11 @@ and enough RAM to run systemd + CPython. That's fine for engineer-grade
 workstations; it's overkill for a fleet of cheap deployment hardware, which is
 the likely long-run majority case. Planned, not started:
 
-- **Tier 2 — console-mode backend.** `zenhub` is a plain `curses` app; it does
+- **Tier 2 — console-mode backend.** `foundationhub` is a plain `curses` app; it does
   not need Wayland/`cage`/a GPU at all. Add an alternative to
   `install/02-cage-kiosk.sh` (e.g. `install/02-console-kiosk.sh`) that has
-  `zenhub-session` exec the Hub directly on the Linux console/tty instead of
-  `cage → kitty → zenhub`, selectable the same way hardware profiles are
+  `foundationhub-session` exec the Hub directly on the Linux console/tty instead of
+  `cage → kitty → foundationhub`, selectable the same way hardware profiles are
   (an env var, e.g. `KIOSK_BACKEND=console`). Same Python code, same Hub,
   same Frank — this drops the GPU/DRM requirement and runs on cheap SBCs,
   thin clients, and old x86 hardware. Optionally pair with a lighter base

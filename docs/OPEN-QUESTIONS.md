@@ -13,7 +13,7 @@ Legend: ⬜ needs your decision · 🟨 drafted, awaiting sign-off · ✅ approv
 
 The operator approved the primary draft set; the alternate options are
 dropped. The locked set, all in
-[`hub/zenhub/labels.py`](../hub/zenhub/labels.py): `TERMINAL // MAIN`,
+[`hub/foundationhub/labels.py`](../hub/foundationhub/labels.py): `TERMINAL // MAIN`,
 `PROGRAMS`, `RECREATION`, `FUNCTIONS`, `SYSTEM STATUS`, `LOGS`,
 `PERSONAL FILE`, `ASSISTANT`, plus the new login-screen set
 (`TERMINAL // ACCESS` etc.). Future edits are ordinary changes, not pending
@@ -39,7 +39,7 @@ Genre buckets from the spec, with concrete Arch-available titles proposed:
 
 Open sub-questions: ⬜ include the heavier ones (Cataclysm, DCSS tiles) or keep
 it lean? ⬜ any specific titles you already love? The Recreation screen reads its
-list from [`system/etc/zenhub/recreation.toml`], so adding/removing a game is a
+list from [`system/etc/foundationhub/recreation.toml`], so adding/removing a game is a
 config edit, not a code change.
 
 ## 3. Frank rule/keyword lists + severity tiers (spec §6, §10) — ✅ RESOLVED
@@ -118,7 +118,7 @@ accounts per machine, fixed per-tier storage, guest self-service,
 technician setup code (placeholder `1234`) for everything above guest, and
 a future company user-ID system for provisioning. Full spec:
 [`docs/USERS.md`](USERS.md). The getty autologin conf survives, but it now
-lands on the login screen, not the Hub; `ZENHUB_USER=<name>` is the
+lands on the login screen, not the Hub; `FOUNDATIONHUB_USER=<name>` is the
 skip-login hook for dev and future per-user sessions.
 
 ## 7. Theme defaults — ✅ decided (tunable later)
@@ -188,7 +188,7 @@ The operator's finalized vision, decided in one pass:
   **Hybrid architecture:** core apps (notes, file manager, system monitor)
   become native Hub screens; heavy apps (media playback, games) become
   separate in-house TUI programs the Hub launches.
-- ✅ **Redundancy cuts approved:** ONE in-house media player (`zenmedia`,
+- ✅ **Redundancy cuts approved:** ONE in-house media player (`foundationmedia`,
   audio+video — cmus and mpv both dropped from the package set); ONE editor
   everywhere (the notes suite's editor becomes the system editor; nvim is
   interim-only); LOGS is confirmed as the single records surface (system
@@ -196,7 +196,8 @@ The operator's finalized vision, decided in one pass:
   (§1).
 - ✅ **Notes = full in-house suite** (a key aspect of the system): built-in
   curses editor plus a note browser — dated journal, tagged notes, search by
-  tag/text — all inside the Hub. No external editor. *Build next.*
+  tag/text — all inside the Hub. No external editor. *Built 2026-07-01
+  (BUILD-QUEUE §1); nvim retired — see STATUS row 12.*
 - ✅ **Web integration: none in v1.** The terminal stays offline-first. The
   chosen future direction is a **retrieval terminal** backed by a search API
   — operator's candidates: **Kagi API or Brave Search API** (AI-mediated

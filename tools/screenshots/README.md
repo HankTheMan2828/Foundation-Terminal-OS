@@ -9,7 +9,7 @@
 ## What you're looking at
 
 The PNGs in [`preview/`](preview/) are captured from the **actual running code**
-— not mockups. The harness runs `python -m zenhub` (and the real `frank-locker`)
+— not mockups. The harness runs `python -m foundationhub` (and the real `frank-locker`)
 inside a pseudo-terminal, reads back the terminal's character grid with `pyte`,
 and renders it with an amber-phosphor style (scanlines, glow, highlight bar).
 
@@ -45,7 +45,7 @@ fresh clone with no device.
 ```
 _render.py        shared CRT renderer (grid -> PNG)
 _pty.py           pty driver: run app, feed vim keys, snapshot the grid
-capture_hub.py    drives zenhub through all Home Hub areas
+capture_hub.py    drives foundationhub through all Home Hub areas
 capture_frank.py  frank-locker lockout + a populated (seeded) Overseer Ledger
 contact_sheet.py  stitches preview/*.png into 00_contact_sheet.png
 preview/          the committed PNGs (so you can see them without running)

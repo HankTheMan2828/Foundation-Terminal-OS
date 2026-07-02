@@ -38,12 +38,12 @@ cat <<'EOF'
   └────────────────────────────────────────────────────────────────────────────┘
 EOF
 
-# --- hardware helper scripts, referenced by the Hub via ZENHUB_HW_BIN (spec §7) ---
-install -d /usr/local/lib/zenhub
+# --- hardware helper scripts, referenced by the Hub via FOUNDATIONHUB_HW_BIN (spec §7) ---
+install -d /usr/local/lib/foundationhub
 for f in duo-screen-toggle duo-watch-displays duo-keyboard-detach \
          backlight-sync duo-battery-limit; do
-  install -Dm0755 "$PROFILE_ROOT/hardware/$f" "/usr/local/lib/zenhub/$f"
-  c_ok "installed /usr/local/lib/zenhub/$f"
+  install -Dm0755 "$PROFILE_ROOT/hardware/$f" "/usr/local/lib/foundationhub/$f"
+  c_ok "installed /usr/local/lib/foundationhub/$f"
 done
 
 # --- udev: keyboard detach/attach + eDP-2 backlight naming ---

@@ -9,7 +9,7 @@ After=multi-user.target
 Type=simple
 # Runs in the operator's graphical session context; WAYLAND_DISPLAY is provided
 # by the cage session environment. Started by the session, or as a user service.
-ExecStart=/usr/local/lib/zenhub/duo-watch-displays
+ExecStart=/usr/local/lib/foundationhub/duo-watch-displays
 Restart=always
 RestartSec=2
 

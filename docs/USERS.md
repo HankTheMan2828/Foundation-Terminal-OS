@@ -30,22 +30,22 @@ machines: boot lands on a **login screen**, not the Hub.
 
 ## How it's built (scaffold reality)
 
-- **Registry:** `/etc/zenhub/users.json` — root writes, the Hub reads
+- **Registry:** `/etc/foundationhub/users.json` — root writes, the Hub reads
   (`root:operator 0640`). Password + setup-code hashes are salted
-  PBKDF2-SHA256, pure stdlib. Dev override: `ZENHUB_USERS=<path>` makes the
+  PBKDF2-SHA256, pure stdlib. Dev override: `FOUNDATIONHUB_USERS=<path>` makes the
   registry directly writable, so the whole flow runs off-target.
 - **Registration:** the Hub pre-validates for UX, but the authoritative path
-  is the root helper `zenhub-account` via `pkexec`, allowed by a polkit rule
+  is the root helper `foundationhub-account` via `pkexec`, allowed by a polkit rule
   scoped to exactly that program. The helper revalidates capacity, username
   rules, and the setup code, then creates the Linux user and applies the
   tier quota (`setquota`, `TODO(hardware)`: quota-enabled `/home`).
 - **Session layering (interim):** the Linux user `operator` hosts the
-  console session; zenhub accounts are *logical* users on top of it. The Hub
-  publishes the active account to `/run/zenhub/active-user` so Frank
+  console session; foundationhub accounts are *logical* users on top of it. The Hub
+  publishes the active account to `/run/foundationhub/active-user` so Frank
   attributes events per person. Real per-account Linux sessions (PAM /
   `loginctl` user switch at the greeter) are the target design —
   `TODO(hardware)`. Until then, per-user notes/data live namespaced under the
-  shared data dir; `ZENHUB_USER=<name>` starts a session pre-authenticated
+  shared data dir; `FOUNDATIONHUB_USER=<name>` starts a session pre-authenticated
   (the hook that per-user sessions will use).
 - **Hardening note (future):** with the registry group-readable, one user
   could offline-attack teammates' password hashes. Acceptable for the

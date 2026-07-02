@@ -94,7 +94,7 @@ The Hub is pure-stdlib Python curses, so you can run the nav skeleton on any
 machine:
 
 ```sh
-python3 -m zenhub            # from inside hub/, or with hub/ on PYTHONPATH
+python3 -m foundationhub            # from inside hub/, or with hub/ on PYTHONPATH
 ```
 
 And Frank's offline rule engine is unit-tested with no external services:
@@ -116,7 +116,7 @@ locked until you sign off.
 docs/        Spec, architecture, install guide, open decisions, status
 install/     Ordered, idempotent installer scripts + package lists (generic core)
 system/      Files copied onto the target root (/etc, /usr/local, ...)
-hub/         zenhub — the curses login-shell TUI (Home Hub)
+hub/         foundationhub — the curses login-shell TUI (Home Hub)
 frank/       frankd — the overseer daemon (rules, enforcement, ledger, AI)
 profiles/    Optional per-device hardware profiles (e.g. zenbook-duo-2024)
 theme/       kitty/foot config, CRT palettes, Plymouth text theme

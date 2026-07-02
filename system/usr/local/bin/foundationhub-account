@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""zenhub-account — ROOT helper for account provisioning (docs/USERS.md).
+"""foundationhub-account — ROOT helper for account provisioning (docs/USERS.md).
 
-The registry (/etc/zenhub/users.json) is root-owned: the Hub can read it to
+The registry (/etc/foundationhub/users.json) is root-owned: the Hub can read it to
 list accounts and verify passwords, but cannot write it. All mutation goes
 through this helper, invoked from the login screen's registration flow via
-pkexec (see /etc/polkit-1/rules.d/50-zenhub-account.rules).
+pkexec (see /etc/polkit-1/rules.d/50-foundationhub-account.rules).
 
-    zenhub-account create <username> <tier-int>
+    foundationhub-account create <username> <tier-int>
         stdin line 1: password
         stdin line 2: technician setup code (may be empty for GUEST)
 
@@ -34,11 +34,11 @@ except ImportError:          # non-POSIX dev box; system-user provisioning skipp
 
 # The deployed repo carries the Hub package; the registry logic lives there so
 # helper and Hub can never disagree about the schema.
-sys.path.insert(0, os.environ.get("ZENHUB_LIB", "/opt/terminal-os/hub"))
+sys.path.insert(0, os.environ.get("FOUNDATIONHUB_LIB", "/opt/terminal-os/hub"))
 
-from zenhub.accounts import Registry, RegistryError, Tier, TIERS  # noqa: E402
+from foundationhub.accounts import Registry, RegistryError, Tier, TIERS  # noqa: E402
 
-REGISTRY_GROUP = os.environ.get("ZENHUB_OPERATOR", "operator")
+REGISTRY_GROUP = os.environ.get("FOUNDATIONHUB_OPERATOR", "operator")
 
 
 def _fail(msg: str) -> int:
@@ -70,7 +70,7 @@ def _provision_system_user(username: str, tier: Tier) -> None:
 
 def cmd_create(username: str, tier_raw: str) -> int:
     if os.name == "posix" and os.geteuid() != 0:
-        return _fail("zenhub-account must run as root (via pkexec)")
+        return _fail("foundationhub-account must run as root (via pkexec)")
     try:
         tier = Tier(int(tier_raw))
     except ValueError:
@@ -101,7 +101,7 @@ def main(argv: list[str]) -> int:
     if len(argv) == 4 and argv[1] == "create":
         return cmd_create(argv[2], argv[3])
     return _fail(__doc__.strip().splitlines()[0]
-                 + "\nusage: zenhub-account create <username> <tier-int>")
+                 + "\nusage: foundationhub-account create <username> <tier-int>")
 
 
 if __name__ == "__main__":

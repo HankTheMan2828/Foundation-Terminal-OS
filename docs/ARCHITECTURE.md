@@ -19,29 +19,29 @@ systemd → multi-user.target                NO display manager, NO graphical.ta
 getty@tty1 autologin  ──────────────►      user "operator" (spec §4)
   │
   ▼
-login shell = /usr/local/bin/zenhub-session
+login shell = /usr/local/bin/foundationhub-session
   │   (this is the user's actual shell via chsh; exiting it logs out)
   ▼
 cage (Wayland kiosk compositor)
   └── launches ONE fullscreen kitty
-        └── runs `python -m zenhub`  ◄──── LOGIN screen, then the Home Hub
+        └── runs `python -m foundationhub`  ◄──── LOGIN screen, then the Home Hub
 ```
 
 Key property from the spec: **the TUI is the login shell.** There is no bash
-prompt behind it. `zenhub-session` execs cage→kitty→zenhub; when zenhub exits,
+prompt behind it. `foundationhub-session` execs cage→kitty→foundationhub; when foundationhub exits,
 the whole chain unwinds and the session ends. No shell to drop to.
 
-Multi-user (docs/USERS.md): zenhub now opens on a **login screen** — up to 8
+Multi-user (docs/USERS.md): foundationhub now opens on a **login screen** — up to 8
 tiered accounts per machine. In the interim layering, the Linux user
-`operator` hosts the console session and zenhub accounts are logical users on
-top of it; the Hub publishes the active account to `/run/zenhub/active-user`
+`operator` hosts the console session and foundationhub accounts are logical users on
+top of it; the Hub publishes the active account to `/run/foundationhub/active-user`
 so Frank attributes events per person, and Frank's session-scope locks gate
 the login screen via the public `/run/frank/login.locks` summary (usernames +
 expiry timestamps only). Real per-account Linux sessions are `TODO(hardware)`.
 
 The session wrapper is a thin script rather than making cage itself the shell so
 we can (a) start the per-session sound daemon, (b) export the CRT theme env, and
-(c) guarantee that an unexpected zenhub crash still logs out rather than
+(c) guarantee that an unexpected foundationhub crash still logs out rather than
 exposing a shell.
 
 ## Processes on a running system
@@ -51,11 +51,11 @@ Generic core (present regardless of hardware profile):
 | Unit / process                | Scope      | Runs as | Purpose |
 |-------------------------------|------------|---------|---------|
 | `getty@tty1` (autologin)      | system     | root→operator | drops into the session |
-| `zenhub-session` → cage→kitty | user login | operator | the kiosk surface |
-| `python -m zenhub`            | user login | operator | Home Hub TUI (the shell) |
+| `foundationhub-session` → cage→kitty | user login | operator | the kiosk surface |
+| `python -m foundationhub`            | user login | operator | Home Hub TUI (the shell) |
 | `frankd.service`              | system     | `frank`  | overseer daemon — decides (§6) |
 | `frank-enforcer.service`      | system     | **root** | applies lockouts the operator can't bypass (§6) |
-| `zenhub-sound.service`        | user login | operator | ambient hum + event sounds |
+| `foundationhub-sound.service`        | user login | operator | ambient hum + event sounds |
 
 Added by the `zenbook-duo-2024` hardware profile only (see
 [`PROFILES.md`](PROFILES.md)) — absent on a generic-core install:
@@ -141,7 +141,7 @@ path:
   the same secrets file (`FRANK_SIFT_API_KEY` / `FRANK_OVERSEER_API_KEY`), so
   spend is attributable per tier the same way the operator already wanted
   commentary spend attributable.
-- **AI Chat** (`hub/zenhub/aichat.py`): called by the Hub (user `operator`) only
+- **AI Chat** (`hub/foundationhub/aichat.py`): called by the Hub (user `operator`) only
   when the user opens the AI Chat screen and sends a message. Uses a *separate*
   key file the operator can read. This assistant has no access to Frank's data
   or verdict logic.
@@ -251,7 +251,7 @@ by this session — see "Three tiers, one enforcement path" above):
   doesn't keyword-match. It is bounded by running through the same
   `Enforcer.process()`, not by being forbidden to decide.
 
-## The Home Hub (zenhub)
+## The Home Hub (foundationhub)
 
 A pure-stdlib `curses` app so it has zero install-time dependencies and can be
 smoke-tested off-device. Structure:
@@ -279,7 +279,7 @@ surfaces; it does not reimplement those tools.
 None of the above (boot chain, Hub, Frank) depends on any specific device.
 Device-specific glue lives entirely under `profiles/<name>/` and is only
 applied when `HARDWARE_PROFILE` is set (see [`PROFILES.md`](PROFILES.md)).
-The Hub calls into hardware helpers only through `hub/zenhub/session.py`'s
+The Hub calls into hardware helpers only through `hub/foundationhub/session.py`'s
 `HW_BIN` indirection, which degrades gracefully to "not available" when no
 profile — or a different one — is installed; nothing in the core branches on
 device identity.

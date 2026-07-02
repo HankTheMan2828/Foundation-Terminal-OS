@@ -6,6 +6,8 @@
 # Steps 00-06 are the generic core — no device assumed. Step 07 is the optional
 # hardware profile (see docs/PROFILES.md); set HARDWARE_PROFILE=<name> to apply
 # one, e.g.:  HARDWARE_PROFILE=zenbook-duo-2024 sudo -E ./install/run-all.sh
+# Step 08 (games) is generic core too; it just numbers after the optional
+# profile step since it was added later.
 source "$(dirname "$0")/common.sh"
 require_root
 
@@ -21,7 +23,7 @@ read -rp "Continue? [y/N] " ans
 
 for step in \
   00-base-packages 01-kernel 02-cage-kiosk 03-plymouth-grub \
-  04-hub 05-frank 06-theme-sound 07-hardware-profile; do
+  04-hub 05-frank 06-theme-sound 07-hardware-profile 08-games; do
   "$REPO_ROOT/install/$step.sh"
 done
 

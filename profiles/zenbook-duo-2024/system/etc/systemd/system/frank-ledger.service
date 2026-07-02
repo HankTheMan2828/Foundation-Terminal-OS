@@ -13,7 +13,7 @@ User=frank
 Group=frank
 # The helper turns eDP-2 on and renders the timestamps-only ledger to it, or
 # turns it off, based on the KEYBOARD_STATE passed by the udev hook.
-ExecStart=/usr/local/lib/zenhub/duo-keyboard-detach ledger-refresh
+ExecStart=/usr/local/lib/foundationhub/duo-keyboard-detach ledger-refresh
 RemainAfterExit=no
 NoNewPrivileges=true
 
