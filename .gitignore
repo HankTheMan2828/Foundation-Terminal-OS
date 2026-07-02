@@ -14,3 +14,7 @@ aichat.env
 # Local scratch
 *.log
 .venv/
+
+# Flashable-ISO build scratch + output (image/build-iso.sh)
+image/work/
+image/out/

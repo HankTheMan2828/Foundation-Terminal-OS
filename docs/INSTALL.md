@@ -4,13 +4,29 @@
 > that can restrict access. **Not on a machine you need a normal shell on.**
 > Do a dry read of every script first; they print what they'll do.
 
+## The flashable installer (mini PCs, or any machine from bare metal)
+
+You don't need a hand-done Arch base install anymore: `image/build-iso.sh`
+produces a bootable **installer ISO** that embeds this repo plus an offline
+copy of every package the OS needs. Flash it to USB, boot the target from it,
+and the on-screen installer handles profile choice, disk selection (wipe is
+gated behind typing `ERASE`), partitioning, and the entire install below —
+non-interactively, offline — then reboots into the Home Hub. See
+[`image/README.md`](../image/README.md). The rest of this guide is the manual
+path, and it's also precisely what the ISO's installer executes inside the
+target chroot (`FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1
+install/run-all.sh`), so everything here — Frank isolation checks §4
+included — applies to both.
+
 ## 0. Prerequisites
 
 1. A **minimal Arch base install** already booted:
    - `pacstrap /mnt base linux-lts linux-firmware` (LTS kernel — spec §1)
    - working network, a user account you'll turn into the operator, `sudo`,
      `git`.
-2. This repo cloned to the target, e.g. `/opt/terminal-os`.
+2. This repo cloned to the target — `/opt/terminal-os` by convention, but any
+   path works: `install/04` records the real location in
+   `/etc/foundationhub/install-root`, nothing assumes the conventional one.
 3. Decide whether you're installing the **generic core** (any x86_64 machine)
    or building a **release for a specific device** — see
    [`PROFILES.md`](PROFILES.md). For the latter, set `HARDWARE_PROFILE=<name>`

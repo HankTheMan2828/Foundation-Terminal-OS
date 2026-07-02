@@ -31,10 +31,15 @@ in-house; the few remaining open-source stand-ins are marked for replacement.
 
 ## What this repo is
 
-This is **not** a disk image. It is a set of:
+The deployable source for the OS, plus the pipeline that packages it into a
+flashable installer:
 
+- **Installer-ISO pipeline** (`image/`) — builds a bootable ISO that embeds
+  this repo and an offline package repo; flash to USB, boot the target, and
+  an on-screen installer does the rest. See [`image/README.md`](image/README.md).
 - **Install scripts** (`install/`) — run in order on a fresh, minimal Arch
-  base to turn it into Foundation TerminalOS.
+  base to turn it into Foundation TerminalOS (this is also exactly what the
+  ISO's installer runs inside the target chroot).
 - **System files** (`system/`) — configs, systemd units, polkit rules, and
   udev rules that get copied onto the target under `/`.
 - **The Home Hub** (`hub/`) — the curses TUI that serves as the login shell.
@@ -86,14 +91,31 @@ implementation in the MS-DOS mold, since Linux/Python physically cannot go
 there; design-doc-first). See "Capability tiers" in
 [`docs/PROFILES.md`](docs/PROFILES.md) and [`docs/BUILD-QUEUE.md`](docs/BUILD-QUEUE.md) §6.
 
-## Quick start (on the target machine)
+## Quick start — flash it (recommended)
+
+Build the **installer ISO** once, flash it to a USB stick, and boot any
+x86_64 machine (mini PC, thin client, the Zenbook) from it — the on-screen
+installer partitions the disk (gated behind typing `ERASE`), installs the
+whole OS from packages embedded in the ISO (no network needed on the target),
+and reboots into the Home Hub:
+
+```sh
+sudo ./image/build-iso.sh        # on Arch with `archiso` (or the Docker
+                                 # one-liner in image/README.md)
+sudo dd if=image/out/foundation-terminalos-*.iso of=/dev/sdX bs=4M \
+        status=progress oflag=sync
+```
+
+See [`image/README.md`](image/README.md) for the details.
+
+## Quick start — script install onto an existing Arch base
 
 > Do a minimal Arch base install first (`pacstrap` base + `linux-lts`), boot
 > it, then:
 
 ```sh
-git clone <this-repo> /opt/terminal-os
-cd /opt/terminal-os
+git clone <this-repo> /opt/terminal-os     # any path works; it's recorded at
+cd /opt/terminal-os                        # install time, not assumed after
 sudo ./install/run-all.sh        # generic core only
 
 # or, building a release for a specific device:
@@ -142,6 +164,7 @@ items mirrored in `OPEN-QUESTIONS.md` §11 — no code exists yet.
 
 ```
 docs/        Spec, architecture, install guide, open decisions, status
+image/       Flashable installer-ISO pipeline (archiso profile + build script)
 install/     Ordered, idempotent installer scripts + package lists (generic core)
 system/      Files copied onto the target root (/etc, /usr/local, ...)
 hub/         foundationhub — the curses login-shell TUI (Home Hub)
