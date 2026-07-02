@@ -11,15 +11,15 @@ games = [
 ]
 
 [bucket.arcade]
+# One in-house program, five games (BUILD-QUEUE §5 item 1). Retires
+# nsnake, vitetris, ninvaders, 2048, and nudoku in one shot.
 games = [
-  { name = "Snake",     exec = ["nsnake"] },
-  { name = "Tetris",    exec = ["vitetris"] },
-  { name = "Invaders",  exec = ["ninvaders"] },
+  { name = "Foundation Arcade", exec = ["foundation-arcade"] },
 ]
 
 [bucket."puzzle / strategy"]
+# Chess is in-house now (BUILD-QUEUE §5 item 2): foundation-chess replaces
+# gnuchess — vs. a built-in minimax AI, same CRT register.
 games = [
-  { name = "Chess",   exec = ["gnuchess"] },
-  { name = "2048",    exec = ["2048"] },
-  { name = "Sudoku",  exec = ["nudoku"] },
+  { name = "Chess",   exec = ["foundation-chess"] },
 ]

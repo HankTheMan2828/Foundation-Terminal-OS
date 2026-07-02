@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foundation-games"
+version = "0.1.0"
+description = "Foundation TerminalOS in-house terminal games (arcade cabinet, chess)"
+requires-python = ">=3.10"
+# Pure-stdlib curses, zero pip deps — same portability rule as the Hub.
+dependencies = []
+
+# One console script per game program. Each is the argv[0] that a
+# recreation.toml entry names and the Hub's Launch() resolves via PATH.
+[project.scripts]
+foundation-arcade = "foundation_arcade.__main__:main"
+foundation-chess = "foundation_chess.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["foundation_arcade*", "foundation_chess*"]
