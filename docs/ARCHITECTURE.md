@@ -267,12 +267,23 @@ smoke-tested off-device. Structure:
 - `screens/` — one module per Home Hub area (Programs, Recreation, Functions
   Control, Settings, Log, Personal Notes, AI Chat).
 - `session.py` — the Frank IPC client (receives warn/lockout, renders banners
-  and the lock screen) and the launch helpers that shell out to ranger/btop/
-  games/etc. with graceful "not installed" handling.
+  and the lock screen) and the launch helpers used by the hybrid model below.
 
-Everything the user "does" that isn't navigation is a `launch()` into a real
-program (ranger, btop, nethack, …). The Hub is glue + chrome + the Frank-facing
-surfaces; it does not reimplement those tools.
+**Hybrid model (decided, `OPEN-QUESTIONS.md` §10):** not everything the user
+"does" is a `launch()` anymore. Core apps — notes, file manager, system
+monitor — are native Hub screens (`screens/notes.py`, `screens/files.py`,
+`screens/monitor.py`) with their own testable backends (`notesdb.py`,
+`fileops.py`, `sysinfo.py`); the Hub draws them directly. Heavier apps — the
+media player and the games — are separate in-house programs the Hub still
+reaches with `launch()`, now pointed at our own binaries
+(`foundation-arcade`, `foundation-chess`, `foundationmedia`, and eventually
+`foundation-rogue`/`foundation-depths`, see `docs/ROGUELIKE-DESIGN.md`)
+instead of borrowed ones. `ranger`, `btop`, and `nvim` are retired; `nethack`
+and `crawl` remain in `recreation.toml` until the roguelike design is
+approved and built (BUILD-QUEUE §5 item 3). The Hub is glue + chrome + the
+Frank-facing surfaces; it does not reimplement the in-house programs — those
+live in their own top-level `games/`/`media/` packages and import
+`foundationhub.theme`/`ui` for chrome rather than the other way around.
 
 ## Hardware glue is a profile, not core
 

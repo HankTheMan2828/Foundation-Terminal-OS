@@ -37,8 +37,18 @@ This is **not** a disk image. It is a set of:
 - **System files** (`system/`) — configs, systemd units, polkit rules, and
   udev rules that get copied onto the target under `/`.
 - **The Home Hub** (`hub/`) — the curses TUI that serves as the login shell.
+  Core apps (notes, file manager, system monitor) live here as native
+  screens.
 - **Frank** (`frank/`) — the overseer daemon: rule engine, enforcement,
   ledger, optional Mistral commentary.
+- **Games** (`games/`) — standalone in-house TUI programs launched from the
+  Hub's Recreation area: Foundation Arcade (Snake, Falling Blocks, 2048,
+  Sudoku, Invaders) and Foundation Chess today; a two-vintage Rogue
+  re-implementation plus a modernized "Foundation Depths" are designed
+  (see [`docs/ROGUELIKE-DESIGN.md`](docs/ROGUELIKE-DESIGN.md)) and awaiting
+  approval before build.
+- **Media** (`media/`) — Foundation Media, the in-house audio player,
+  launched the same way.
 - **Hardware profiles** (`profiles/`) — optional, per-device glue (display
   topology, brightness sync, keyboard detach, rotation, battery limit),
   applied only when selected. The core never depends on one existing. See
@@ -103,12 +113,24 @@ And Frank's offline rule engine is unit-tested with no external services:
 cd frank && python3 -m pytest
 ```
 
+The in-house games and media player also run off-device (pure-stdlib,
+`windows-curses` on Windows):
+
+```sh
+cd games && python3 -m pytest              # game logic: arcade + chess, curses-free
+cd games && python3 -m foundation_arcade   # or: python3 -m foundation_chess
+cd media && python3 -m pytest         # playlist/library/PCM/decoder logic
+cd media && python3 -m foundationmedia
+```
+
 ## Design decisions still open
 
 Menu wording, Frank's voice lines, rule/keyword lists, and the game list are
 all **drafted for your review, not finalized**. See
 [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md). Nothing user-facing is
-locked until you sign off.
+locked until you sign off. The roguelike specifically has its own design
+doc, [`docs/ROGUELIKE-DESIGN.md`](docs/ROGUELIKE-DESIGN.md), with six open
+items mirrored in `OPEN-QUESTIONS.md` §11 — no code exists yet.
 
 ## Repository layout
 
@@ -118,6 +140,8 @@ install/     Ordered, idempotent installer scripts + package lists (generic core
 system/      Files copied onto the target root (/etc, /usr/local, ...)
 hub/         foundationhub — the curses login-shell TUI (Home Hub)
 frank/       frankd — the overseer daemon (rules, enforcement, ledger, AI)
+games/       Foundation Arcade, Foundation Chess, and (designed) the roguelike(s)
+media/       foundationmedia — the in-house audio player
 profiles/    Optional per-device hardware profiles (e.g. zenbook-duo-2024)
 theme/       kitty/foot config, CRT palettes, Plymouth text theme
 sounds/      Retro soundscape assets + playback hooks
