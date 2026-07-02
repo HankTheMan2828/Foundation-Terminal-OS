@@ -15,7 +15,9 @@
 # The installed system never depends on the install-time machine: paths are
 # recorded/searched (see /etc/foundationhub/install-root), the operator's home
 # is resolved from the passwd db, and the generic core assumes no device.
-set -euo pipefail
+# -E so the ERR trap fires for failures inside main() (function bodies don't
+# inherit the trap without errtrace).
+set -Eeuo pipefail
 
 REPO=/opt/terminal-os                 # embedded by image/build-iso.sh
 PKGREPO=/opt/foundation/pkgs          # embedded offline package repo (optional)
@@ -86,8 +88,12 @@ main() {
   local live_disk=""
   local live_src
   live_src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
-  [[ -n "$live_src" && -b "$live_src" ]] && \
+  if [[ -n "$live_src" && -b "$live_src" ]]; then
     live_disk="$(lsblk -no pkname "$live_src" 2>/dev/null | head -1 || true)"
+    # A dd'd ISO may be mounted from the whole device, not a partition —
+    # pkname is empty then, and the device itself is the disk to exclude.
+    [[ -z "$live_disk" ]] && live_disk="$(basename "$live_src")"
+  fi
 
   local disks=() lines=() name size model
   while read -r name size model; do

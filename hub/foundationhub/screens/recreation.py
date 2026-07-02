@@ -2,8 +2,8 @@
 
 Reads /etc/foundationhub/recreation.toml so adding/removing a game is a config edit.
 Ships a genre-organized default matching the spec's direction (roguelikes /
-arcade / puzzle-strategy). Final list is [TODO(approval)] — see
-docs/OPEN-QUESTIONS.md §2.
+arcade / puzzle-strategy). The list follows the in-house mandate — see
+docs/OPEN-QUESTIONS.md §2/§10: in-house games plus interim NetHack.
 """
 from __future__ import annotations
 
@@ -19,9 +19,11 @@ except ModuleNotFoundError:  # pragma: no cover
 
 # Fallback list used off-device or before the config is installed.
 _DEFAULT = {
+    # NetHack is the interim stand-in until the in-house roguelikes land
+    # (docs/ROGUELIKE-DESIGN.md). Dungeon Crawl was dropped — `crawl` was
+    # never in install/packages.txt, so it was a dead entry on target.
     "roguelikes": [
         ("NetHack", ["nethack"]),
-        ("Dungeon Crawl", ["crawl"]),
     ],
     # One in-house program, five games (BUILD-QUEUE §5 item 1) — retires
     # nsnake, vitetris, ninvaders, 2048, and nudoku.

@@ -27,20 +27,21 @@ a read-only USER line (username + uid), and a FUNCTIONS list of basic
 functioning/not-functioning checks (network, audio, the Frank overseer).
 THEME & SOUND moved to `FUNCTIONS` alongside the other real hardware toggles.
 
-## 2. Recreation game list (spec §5, §10)
+## 2. Recreation game list (spec §5, §10) — ✅ SUPERSEDED by the in-house mandate
 
-Genre buckets from the spec, with concrete Arch-available titles proposed:
+The original question (which Arch packages to ship) was answered by §10's
+in-house mandate: arcade titles and chess are in-house programs now
+(Foundation Arcade, Foundation Chess — see STATUS row 12), so the old
+proposed-package table is moot. What remains:
 
-| Bucket             | 🟨 Proposed titles (packages)                          |
-|--------------------|--------------------------------------------------------|
-| Roguelikes         | NetHack (`nethack`), DCSS (`crawl` / `crawl-tiles`), Cataclysm-DDA console (`cataclysm-dda`) |
-| Arcade / simple    | `nsnake` (snake), `bastet`/`vitetris` (tetris-like), `ninvaders` (invaders) |
-| Puzzle / strategy  | `gnuchess` + `cchess`/`scid` front, `2048` (terminal 2048), `nudoku` (sudoku) |
-
-Open sub-questions: ⬜ include the heavier ones (Cataclysm, DCSS tiles) or keep
-it lean? ⬜ any specific titles you already love? The Recreation screen reads its
-list from [`system/etc/foundationhub/recreation.toml`], so adding/removing a game is a
-config edit, not a code change.
+- **NetHack** is the one interim external game still shipped (the only game
+  left in `install/packages.txt`), holding the roguelike slot until the
+  in-house roguelikes are approved and built (§11). Dungeon Crawl's menu
+  entry was removed 2026-07-02 — `crawl` was never actually in
+  `packages.txt`, so it was a dead item on a real install.
+- The Recreation screen still reads
+  [`system/etc/foundationhub/recreation.toml`], so list edits stay config,
+  not code.
 
 ## 3. Frank rule/keyword lists + severity tiers (spec §6, §10) — ✅ RESOLVED
 
