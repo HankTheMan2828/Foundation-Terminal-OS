@@ -6,28 +6,31 @@ THIRD, equally separate trust domain — and it works differently on purpose:
 
   * frankd/mistral.py's Commentator — phrasing ONLY. Invoked per flagged
     rule-engine event. Never sees matched content, never decides severity.
-  * frankd/ai.py (here) — DOES make judgment calls. This is the deliberate
-    exception the operator asked for this session: a scheduled/periodic
-    AI-driven review sitting ABOVE the realtime rule engine, for exactly the
-    gap the rule layer left open on purpose (docs/OPEN-QUESTIONS.md §3 —
-    a broad hate-speech/extremism word list was NOT authored because bare
-    keyword lists misfire constantly; the operator asked for that category to
-    go through periodic review instead).
+  * frankd/ai.py (here) — the two roles below.
 
-This is bounded, not a loophole: whatever the Overseer decides is expressed as
-a `Finding` and run through the SAME `Enforcer.process()` the rule engine
-uses (see overseer.py). Severity->duration, scope, and the hard lockout
-ceiling behave identically regardless of which tier produced the Finding —
-the Overseer cannot exceed invariants that already bind Frank as a whole
-(operator-confirmed this session: same hard ceiling applies to the Overseer).
+Operator direction: Frank is a **primarily rule-based overseer system**
+(OPEN-QUESTIONS.md §5) — the AI layer stays secondary, keeping detection
+strength in the rules, not in model judgment. Both roles here are narrower
+than they were first drafted:
 
-Two roles, one wire shape:
-  * Sifter   — classifies a batch of raw text against the parked content
-    categories. Runs often (see config.TriageConfig), so cheap/fast matters.
-  * Overseer brain — reasons over an already-organized digest (+ optionally a
-    directly-queried raw window) and returns one verdict. Runs rarely (a
-    couple of times a day, or on a SERIOUS trigger), so a stronger model is
-    affordable even on a tight budget.
+  * Sifter — a SENSOR, not a judge. It classifies raw text against the one
+    parked content category (docs/OPEN-QUESTIONS.md §3 — a broad
+    hate-speech/extremism word list was NOT authored because bare keyword
+    lists misfire constantly; the operator asked for that category to go
+    through periodic review instead). Its readings become findings only when
+    the Overseer's deterministic Rulebook thresholds say so (overseer.py) —
+    the model never decides anything by itself. Runs often (see
+    config.TriageConfig), so cheap/fast matters.
+  * Overseer brain — an OPTIONAL second opinion, off by default
+    (config.OverseerConfig.ai_enabled). Consulted only when the Rulebook
+    flagged nothing and the period still looks noteworthy; it can add a
+    verdict but never veto one. Runs rarely even when enabled.
+
+Bounded either way: whatever the Overseer decides — rulebook or brain — is
+expressed as a `Finding` and run through the SAME `Enforcer.process()` the
+rule engine uses (see overseer.py). Severity->duration, scope, and the hard
+lockout ceiling behave identically regardless of which tier produced the
+Finding (operator-confirmed: same hard ceiling applies to the Overseer).
 
 Model choice is NOT hardcoded — see docs/OPEN-QUESTIONS.md for researched
 recommendations (kept as an open operator decision, same as sensitivity was).
@@ -128,22 +131,23 @@ class OfflineSifter:
     """No key configured: cannot do semantic content classification.
 
     Mirrors mistral.py's offline-mode philosophy — the realtime/structured
-    layers (rules.py, and triage.py's own statistical clustering) still run
-    fully offline; only the free-text judgment call needs a model. Being
-    honest that this tier is a no-op offline beats a false sense of coverage.
+    layers (rules.py, triage.py's statistical clustering, and the Overseer's
+    Rulebook) still run fully offline; only this free-text sensor needs a
+    model. Being honest that this sensor reads nothing offline beats a false
+    sense of coverage — everything rule-based keeps working identically.
     """
     def analyze(self, texts: list[str]) -> list[SiftFinding]:
         return []
 
 
 class OfflineOverseer:
-    """No key configured: fall back to a conservative, purely statistical
-    verdict computed by the caller (triage.py hands us the summary text; we
-    have no model to reason over it further, so we default to inaction).
+    """No key configured for the (opt-in) second-opinion role: render no
+    verdict. The deterministic Rulebook (overseer.py) is the actual brain
+    and has already had its say by the time this would be consulted.
 
     This is deliberately timid: an unattended offline heuristic escalating on
-    its own judgment is a worse failure mode than under-triggering while
-    everything the rule engine already covers keeps working normally.
+    its own free-text judgment is a worse failure mode than under-triggering
+    while everything rule-based keeps working normally.
     """
     def decide(self, context: str) -> OverseerVerdict:
         return OverseerVerdict(False, None, None,

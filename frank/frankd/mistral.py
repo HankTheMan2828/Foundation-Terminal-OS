@@ -1,10 +1,18 @@
-"""The AI commentary layer (spec §6) — phrasing only, never verdicts.
+"""Frank's voice (spec §6) — how a decided reaction gets phrased for the user.
 
-Invoked ONLY on flagged/ambiguous findings the rule layer already decided on —
-not polling — to keep monthly cost within ~$10–20. The model writes Frank's
-line in the corporate/menacing register (docs/FRANK-VOICE.md). It does not
-decide guilt or severity, is never handed the matched content, and any
-out-of-band response falls back to the offline line.
+Operator direction: talking to the user is RULE-BASED — Frank is a primarily
+rule-based overseer system (OPEN-QUESTIONS.md §5), and that extends to how it
+speaks. The line bank below (`_LINES`, mirroring docs/FRANK-VOICE.md, finalized
+via a line-by-line approval review) is Frank's PRIMARY voice — it needs no
+key, no network, no model, and behaves identically on every machine, online
+or off. AI phrasing (`MistralCommentator`) is an opt-in garnish: it requires
+BOTH a key and the root-only `commentary.ai_enabled` flag
+(config.CommentaryConfig, default off), and any out-of-band response falls
+back to the line bank.
+
+Either way, phrasing only, never verdicts: invoked ONLY on flagged findings
+the rule layer already decided on. The model never decides guilt or severity
+and is never handed the matched content.
 
 `Commentator` is an interface so a local model can be dropped in later (spec §6
 local-model fallback) without touching enforcement/rules.
@@ -19,8 +27,10 @@ from typing import Protocol
 from .enforcement import Reaction, ReactionKind, Scope
 from .model import Severity
 
-# Offline fallback lines, grouped by situation. Mirror docs/FRANK-VOICE.md.
-# Used verbatim when no API key is set OR the model misbehaves.
+# The approved line bank, grouped by situation. Mirrors docs/FRANK-VOICE.md
+# (finalized via a line-by-line approval review, 2026-07-02). This is Frank's
+# primary voice (rule-based, offline-first); also the fallback whenever the
+# opt-in AI phrasing misbehaves.
 _LINES: dict[str, list[str]] = {
     "warn_minor": [
         "Minor infraction.",
@@ -78,11 +88,17 @@ class Commentator(Protocol):
     def comment(self, reaction: Reaction) -> str: ...
 
 
-class OfflineCommentator:
-    """Deterministic-enough fallback; needs no network or key."""
+class LineBankCommentator:
+    """Frank's primary, rule-based voice: picks from the approved bank for
+    the situation the enforcer already decided. Needs no network or key."""
 
     def comment(self, reaction: Reaction) -> str:
         return random.choice(_LINES[_situation(reaction)])
+
+
+# Historical name from when the bank was framed as a fallback rather than
+# the primary voice; kept so nothing that imported it breaks.
+OfflineCommentator = LineBankCommentator
 
 
 class MistralCommentator:
@@ -93,7 +109,7 @@ class MistralCommentator:
 
     def __init__(self, model: str = "mistral-small-latest",
                  secrets: Path = Path("/etc/frank/secrets.env")):
-        self._offline = OfflineCommentator()
+        self._offline = LineBankCommentator()
         self.model = model
         self.api_key = self._load_key(secrets)
 
@@ -143,9 +159,11 @@ class MistralCommentator:
         return text
 
 
-def build(api_enabled: bool = True) -> Commentator:
-    """Factory: Mistral if a key is configured, else the offline commentator."""
-    if not api_enabled:
-        return OfflineCommentator()
+def build(ai_enabled: bool = False) -> Commentator:
+    """Factory. The rule-based line bank is the default voice; AI phrasing
+    requires the root-only opt-in flag (config.CommentaryConfig.ai_enabled)
+    AND a configured key."""
+    if not ai_enabled:
+        return LineBankCommentator()
     c = MistralCommentator()
-    return c if c.api_key else OfflineCommentator()
+    return c if c.api_key else LineBankCommentator()

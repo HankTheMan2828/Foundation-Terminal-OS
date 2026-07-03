@@ -96,8 +96,8 @@ Implementation approach:
   `0640`/`0600` on files. `operator` cannot read it.
 - Findings/detail live at `/var/lib/frank/incidents.db` — `frank:frank`, `0600`.
   Never surfaced through any Hub screen.
-- The sorting/sifting and Overseer tiers (added this session, see below) keep
-  their own frank-only stores under the same isolation model: raw base logs
+- The sorting/sifting and Overseer tiers (see below) keep their own
+  frank-only stores under the same isolation model: raw base logs
   at `/var/lib/frank/events.log`, sifted digests at `/var/lib/frank/triage.jsonl`,
   and the Overseer's own decision audit trail at `/var/lib/frank/verdicts.jsonl`
   — all `frank:frank`, `0600`, never surfaced through any interface.
@@ -140,19 +140,24 @@ physical/USB, which the spec places out of scope.
 
 ## The AI integrations are separate trust domains
 
-Three, as of this session — same provider(s) available, different clients,
-different invocation, different power, never sharing a credential or a code
-path:
+Three — same provider(s) available, different clients, different invocation,
+different power, never sharing a credential or a code path:
 
-- **Frank commentary** (`frank/frankd/mistral.py`): called by `frankd` (user
-  `frank`) *only* when the rule layer flags an ambiguous/serious event. Uses the
-  key from `/etc/frank/secrets.env` (root:frank, 0640). The user's account never
-  sees this key. **Phrasing only — never decides guilt or severity** (spec §6).
+- **Frank commentary** (`frank/frankd/mistral.py`): the approved line bank is
+  Frank's **primary, rule-based voice** (operator direction: Frank is a
+  primarily rule-based overseer system, OPEN-QUESTIONS.md §5). AI phrasing is
+  a double opt-in — the root-only `commentary.ai_enabled` flag AND a key from
+  `/etc/frank/secrets.env` (root:frank, 0640; the user's account never sees
+  it) — and even then it is **phrasing only — never decides guilt or
+  severity** (spec §6), falling back to the bank on any misbehavior.
 - **The AI layer** (`frank/frankd/ai.py`, used by `triage.py`/`overseer.py`):
-  the deliberate exception to "AI never decides" — see below. Own key lines in
-  the same secrets file (`FRANK_SIFT_API_KEY` / `FRANK_OVERSEER_API_KEY`), so
-  spend is attributable per tier the same way the operator already wanted
-  commentary spend attributable.
+  two narrow roles — the Sifter (a *sensor* whose classifications only become
+  findings via the Overseer's deterministic Rulebook thresholds) and the
+  Overseer brain (an *opt-in second opinion*, `overseer.ai_enabled`, default
+  off) — see below. Own key lines in the same secrets file
+  (`FRANK_SIFT_API_KEY` / `FRANK_OVERSEER_API_KEY`), so spend is attributable
+  per tier the same way the operator already wanted commentary spend
+  attributable.
 - **AI Chat** (`hub/foundationhub/aichat.py`): called by the Hub (user `operator`) only
   when the user opens the AI Chat screen and sends a message. Uses a *separate*
   key file the operator can read. This assistant has no access to Frank's data
@@ -161,52 +166,72 @@ path:
 Keeping them separate keeps costs attributable and prevents the general
 assistant from becoming a side channel into Frank.
 
-## Three tiers, one enforcement path (this session)
+## Three tiers, one enforcement path
 
 The rule engine was always described as "the primary, always-on mechanism,"
 with Mistral commentary explicitly barred from deciding anything (spec §6:
-"AI never decides violations"). This session adds two tiers *above* it, at
-the operator's request, to cover a gap the rule engine deliberately left open
-— docs/OPEN-QUESTIONS.md §3 parked a broad hate-speech/extremism category for
-"a scheduled/periodic AI-layer review instead of realtime keyword matching."
-That review needed somewhere to live; these two tiers are it.
+"AI never decides violations"). Two tiers sit *above* it, covering a gap the
+rule engine deliberately left open — docs/OPEN-QUESTIONS.md §3 parked a broad
+hate-speech/extremism category for periodic review instead of realtime
+keyword matching. **Operator direction: Frank is a primarily rule-based
+overseer system** (OPEN-QUESTIONS.md §5) — so all three tiers now *decide*
+with deterministic rules; AI appears only as a sensor and an opt-in second
+opinion, so the whole system runs identically on any machine, online or off.
 
 1. **Rule engine** (`rules.py`) — unchanged. Realtime, offline, every tick.
    Decides what's flagged and how severe, for the categories it has patterns
    for.
-2. **Sorting/sifting Frank** (`frank/frankd/triage.py`) — new. Runs on its own
+2. **Sorting/sifting Frank** (`frank/frankd/triage.py`) — runs on its own
    short interval (`config.TriageConfig`, default 15 min). Reduces recent
    `incidents.db` entries to counts/rule-hit stats (no AI), and runs the raw
    base-log text (`eventlog.py`, shell/browser sources only) through a cheap
    classifier (`ai.py`'s `Sifter`) for the one category that needed periodic
-   review instead of keyword matching. **Never enforces anything and never
-   decides a violation** — it produces a `TriageReport`, organized material
-   for the next tier, same spirit as the rule-engine/commentary split.
-3. **The Overseer — "main Frank"** (`frank/frankd/overseer.py`) — new. This is
-   the deliberate exception to "AI never decides": it DOES render a verdict.
-   Two activation paths (operator-confirmed this session):
+   review instead of keyword matching. The Sifter is a **sensor**: its
+   readings carry no authority of their own. This tier **never enforces
+   anything and never decides a violation** — it produces a `TriageReport`,
+   organized material for the next tier.
+3. **The Overseer — "main Frank"** (`frank/frankd/overseer.py`) — the tier
+   that renders verdicts. Its brain is the **deterministic `Rulebook`**:
+   threshold rules over structured data (root-only values in
+   `config.OverseerConfig`), fully offline, every verdict reproducible from
+   the logs —
+   - *sift accumulation*: confident Sifter readings accumulated across the
+     check-in period cross count thresholds → minor/elevated/serious on the
+     legal-ethical track (the decision is the threshold, not the model);
+   - *slow burn*: many enforced incidents on one track scattered across a
+     period, each too far apart to stack the enforcer's 5-minute-decay
+     warning score → elevated;
+   - *burst*: a SERIOUS finding arriving amid a wide spray of other
+     incidents (volume + distinct rules) → serious escalation.
+
+   An **AI second opinion** exists but is OFF by default
+   (`overseer.ai_enabled`, root-only, plus a key): it is consulted only when
+   the Rulebook flagged nothing and a report still looks noteworthy, and it
+   can only *add* a verdict, never veto one.
+
+   Two activation paths (operator-confirmed):
    - **Periodic check-in**, `config.OverseerConfig.checkin_interval_seconds`
      (default twice a day). Reads every `TriageReport` since the last
-     check-in, plus a bounded live-activity snapshot ("the user's current
-     happenings"). If a report looks noteworthy, the Overseer queries
-     `IncidentStore`/`EventLog` directly for that report's time window — a
-     plain method call, not a subagent, to save context/cost (operator's
-     explicit direction this session).
+     check-in plus the raw `incidents.db` window for the whole period (the
+     Rulebook counts real entries, not just digests), plus a bounded
+     live-activity snapshot.
    - **Immediate wake on a SERIOUS finding** (only SERIOUS — lesser
      lockouts/warnings wait for the next scheduled check-in; operator-
      confirmed scope). Pulls a short lookback window around the trigger.
 
-   Whatever the Overseer decides to flag is expressed as an ordinary
-   `Finding` (any track, any severity — this is the "intervene on any and all
-   levels" the operator described) and runs through the **exact same**
+   Whatever the Overseer decides to flag — Rulebook or second opinion — is
+   expressed as an ordinary `Finding` (any track, any severity — this is the
+   "intervene on any and all levels" the operator described), routed by
+   `UserEnforcers` to the finding's user, and runs through the **exact same**
    `Enforcer.process()` a rule-engine Finding does. There is no second
    enforcement path. That is what makes "the same hard ceiling applies to the
-   Overseer" (operator-confirmed this session) true by construction: the
-   Overseer literally cannot reach a different lockout/scope/ceiling
-   calculation than the rule engine can, because it's the same function.
+   Overseer" (operator-confirmed) true by construction: the Overseer
+   literally cannot reach a different lockout/scope/ceiling calculation than
+   the rule engine can, because it's the same function.
 
-See `frank/frankd/ai.py` for the model-choice discussion — kept as an open,
-swappable config choice rather than hardcoded, same as sensitivity was.
+See `frank/frankd/ai.py` for the model-choice discussion for the two optional
+AI roles — kept as an open, swappable config choice rather than hardcoded,
+same as sensitivity was.
 
 ## Detection data flow (Frank)
 
@@ -228,7 +253,9 @@ data sources (sources.py)                rule engine (rules.py)
          │                                                              │
          ▼ read at its own cadence, OR immediately on a SERIOUS Finding│
    overseer.py — Overseer ("main Frank")                                │
-     ai.OverseerBrain renders a verdict; flagged => synthetic Finding ──┤
+     Rulebook (deterministic thresholds) renders the verdict;           │
+     optional AI second opinion (off by default) only if rules          │
+     found nothing; flagged => synthetic Finding ───────────────────────┤
                                                                          ▼
                             flagged/ambiguous only            enforcement.py
                                               mistral.py       (warn → lockout
@@ -255,13 +282,14 @@ by this session — see "Three tiers, one enforcement path" above):
 - **Ledger shows timestamps only.** The visible ledger is machine-formatted
   timestamps — no category, severity, description, or content. Detail is
   frank-only.
-- **The rule engine never decides on AI say-so.** Mistral commentary
-  (`mistral.py`) only writes the words for a verdict the rule layer already
-  reached — unchanged. The Overseer (`overseer.py`) is the one deliberate,
-  bounded exception the operator asked for this session: its AI call CAN
-  produce a Finding, for the one category the rule layer intentionally
-  doesn't keyword-match. It is bounded by running through the same
-  `Enforcer.process()`, not by being forbidden to decide.
+- **Rules decide; AI is a sensor or a second opinion, never the authority.**
+  Mistral commentary (`mistral.py`) only writes the words for a verdict the
+  rule layer already reached — and the rule-based line bank is the primary
+  voice even for that. The Sifter's classifications become Findings only when
+  the Overseer Rulebook's deterministic thresholds say so, and the Overseer's
+  AI brain is an opt-in (default-off) second opinion consulted only when the
+  Rulebook found nothing — additive, never a veto. Everything that CAN
+  produce a Finding is bounded by the same `Enforcer.process()`.
 
 ## The Home Hub (foundationhub)
 

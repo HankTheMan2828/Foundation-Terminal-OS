@@ -72,11 +72,49 @@ class TriageConfig:
 
 @dataclass
 class OverseerConfig:
-    """Main Frank / the Overseer (frankd/overseer.py) — operator-confirmed
-    this session: periodic check-in 1-2x/day, PLUS an immediate wake on any
-    SERIOUS-severity finding (not on lesser lockouts/warnings)."""
+    """Main Frank / the Overseer (frankd/overseer.py) — operator-confirmed:
+    periodic check-in 1-2x/day, PLUS an immediate wake on any SERIOUS-severity
+    finding (not on lesser lockouts/warnings).
+
+    Operator direction: Frank is a primarily rule-based overseer system —
+    the AI layer stays secondary (OPEN-QUESTIONS.md §5). Verdicts come from
+    the deterministic thresholds below (overseer.Rulebook), which run
+    identically online or offline. The AI brain is an optional second
+    opinion, OFF by default, consulted only when the rulebook found nothing
+    and the period still looks noteworthy — and it can only add a verdict,
+    never veto one."""
     checkin_interval_seconds: int = 12 * 3600   # twice a day
     wake_on_serious: bool = True
+    # ── deterministic rulebook thresholds (all root-only, like sensitivity) ──
+    # Sift findings (ai.Sifter's classifications of the one parked content
+    # category) below this confidence are ignored entirely.
+    sift_confidence_threshold: float = 0.75
+    # Confident sift findings accumulated across a check-in period:
+    # 1..elevated_count-1 -> MINOR, >=elevated_count -> ELEVATED,
+    # >=serious_count -> SERIOUS (all on the legal_ethical track).
+    sift_elevated_count: int = 2
+    sift_serious_count: int = 5
+    # Slow-burn: this many enforced (non-OBSERVE) incidents on one track
+    # across a whole check-in period -> ELEVATED, catching scatter that the
+    # enforcer's 5-minute warning-score decay deliberately lets slide.
+    slow_burn_count: int = 12
+    # Burst rule for the immediate SERIOUS-trigger path: at least this many
+    # incidents, across at least this many distinct rules, in the short
+    # lookback window around the trigger -> SERIOUS (extends the lockout
+    # through the same Enforcer, still under the same hard ceiling).
+    burst_incident_count: int = 10
+    burst_distinct_rules: int = 3
+    # Optional AI second opinion. Requires a key AND this flag; default off.
+    ai_enabled: bool = False
+
+
+@dataclass
+class CommentaryConfig:
+    """Frank's voice (frankd/mistral.py). Operator direction: talking to the
+    user is rule-based — the approved line bank in docs/FRANK-VOICE.md is
+    the PRIMARY voice, not a fallback. AI phrasing is an opt-in garnish that
+    needs both a key and this root-only flag."""
+    ai_enabled: bool = False
 
 
 @dataclass
@@ -85,6 +123,7 @@ class FrankConfig:
     enforcement: EnforcementConfig = field(default_factory=EnforcementConfig)
     triage: TriageConfig = field(default_factory=TriageConfig)
     overseer: OverseerConfig = field(default_factory=OverseerConfig)
+    commentary: CommentaryConfig = field(default_factory=CommentaryConfig)
     ledger_path: Path = Path("/var/lib/frank/ledger.timestamps")
     incidents_path: Path = Path("/var/lib/frank/incidents.db")
     events_path: Path = Path("/var/lib/frank/events.log")
@@ -125,4 +164,15 @@ def load(path: Path = DEFAULT_CONFIG) -> FrankConfig:
             cfg.overseer.checkin_interval_seconds = int(overseer["checkin_interval_seconds"])
         if "wake_on_serious" in overseer:
             cfg.overseer.wake_on_serious = bool(overseer["wake_on_serious"])
+        if "ai_enabled" in overseer:
+            cfg.overseer.ai_enabled = bool(overseer["ai_enabled"])
+        if "sift_confidence_threshold" in overseer:
+            cfg.overseer.sift_confidence_threshold = float(overseer["sift_confidence_threshold"])
+        for key in ("sift_elevated_count", "sift_serious_count", "slow_burn_count",
+                    "burst_incident_count", "burst_distinct_rules"):
+            if key in overseer:
+                setattr(cfg.overseer, key, int(overseer[key]))
+        commentary = data.get("commentary", {})
+        if "ai_enabled" in commentary:
+            cfg.commentary.ai_enabled = bool(commentary["ai_enabled"])
     return cfg

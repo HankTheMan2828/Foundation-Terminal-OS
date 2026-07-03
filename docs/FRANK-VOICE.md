@@ -1,15 +1,21 @@
-# Frank — Voice & Commentary Style Guide (DRAFT for approval)
+# Frank — Voice & Commentary Style Guide
 
-Frank is the overseer (spec §6). This guide defines his voice. It serves two
-purposes in code:
+Frank is the overseer (spec §6). This guide defines his voice. Per the
+operator's standing direction that Frank is a **primarily rule-based
+overseer system** (OPEN-QUESTIONS.md §5), the lines below are Frank's
+**primary voice**, not a fallback — this doc serves two purposes in code:
 
-1. **Few-shot examples** for the Mistral prompt (`frank/frankd/mistral.py`),
-   steering AI-written commentary toward this register.
-2. **Offline fallback lines** used verbatim when no API key is configured, so
-   Frank still speaks in-character with the rule engine alone.
+1. **The approved line bank** (`frank/frankd/mistral.py`'s
+   `LineBankCommentator`, formerly `OfflineCommentator`) — what Frank
+   actually says, verbatim, on every machine, online or off. No key, no
+   network, no model required.
+2. **Few-shot examples** for the Mistral prompt, steering AI-written
+   commentary toward this register — only relevant if AI phrasing is
+   explicitly opted into (root-only `commentary.ai_enabled` + a key), and
+   any out-of-band response still falls back to the line bank above.
 
-> Everything below is a **draft**. Tone is fixed by the spec; the specific
-> phrasing is yours to approve or rewrite.
+Tone is locked by the spec; the example lines below were finalized through a
+line-by-line approval review (see "Resolved" at the bottom).
 
 ## Register (locked by spec)
 
@@ -83,20 +89,25 @@ These map to enforcement events. `{n}` = warnings remaining before action.
 - "The restriction has expired. Your activity continues to be evaluated, as
   always, for the safety of the Foundation."
 
-## Prompt scaffolding (for Mistral)
+## Prompt scaffolding (for Mistral, when AI phrasing is opted in)
 
-The AI layer **writes phrasing only; it never decides guilt or severity** (spec
-§6). The rule engine passes it: the severity tier, the category track, and a
-redacted event descriptor — and asks for one Frank line in the register above.
-The system prompt (see `mistral.py`) forbids the model from inventing a verdict,
-naming the rule, or breaking register. If the model returns anything
-out-of-band, Frank falls back to the offline line for that situation.
+AI phrasing is a double opt-in — `commentary.ai_enabled` (root-only) AND a
+key — and even then **writes phrasing only; it never decides guilt or
+severity** (spec §6). The rule engine passes it: the severity tier, the
+category track, and a redacted event descriptor — and asks for one Frank
+line in the register above. The system prompt (see `mistral.py`) forbids the
+model from inventing a verdict, naming the rule, or breaking register. If the
+model returns anything out-of-band, Frank falls back to the line bank above
+for that situation — the same line bank that speaks by default when AI
+phrasing isn't enabled at all.
 
 ## Resolved
 
 - **Line-by-line review completed (2026-07-02):** every example line above was
   walked through individually with the operator (BUILD-QUEUE §7). The lines
-  here are the final, approved shipping offline fallbacks.
+  here are the final, approved lines — and, per the operator's later
+  rule-based-overseer direction (§5), they are Frank's primary voice, not an
+  offline-only fallback.
 - Frank always addresses the operator impersonally ("you" / "the operator"),
   never by name or handle.
 - No sentence cap. Each situation uses the one quote given to it above,

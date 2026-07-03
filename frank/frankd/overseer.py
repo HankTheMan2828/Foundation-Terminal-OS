@@ -1,41 +1,45 @@
-"""Main Frank — the Overseer (this session's addition; see docs/ARCHITECTURE.md).
+"""Main Frank — the Overseer (see docs/ARCHITECTURE.md).
 
-What the operator described this session: a tier above the rule engine and
-sorting/sifting Frank (triage.py) that can "intervene on any and all levels."
-Concretely, that means it can produce a `Finding` of any track/severity —
-same as the rule engine can — and that Finding runs through the exact same
-`Enforcer.process()`. There is no separate enforcement path for the Overseer,
-which is what makes "the same hard ceiling applies to the Overseer"
-(operator-confirmed this session) true structurally rather than by promise.
+Operator direction: Frank is a **primarily rule-based overseer system**
+(OPEN-QUESTIONS.md §5) — the AI layer stays secondary. Verdicts come from
+`Rulebook` — deterministic thresholds over the structured material the lower
+tiers already produce (triage digests, incident windows) — so the tier works
+identically on every machine, online or off. The AI brain (`ai.OverseerBrain`)
+is demoted to an optional second opinion:
 
-Two activation paths (operator-confirmed this session):
+  * OFF by default (`config.OverseerConfig.ai_enabled`), requires a key too;
+  * consulted only when the rulebook flagged NOTHING and the period still
+    looks noteworthy — never to second-guess a verdict the rulebook reached;
+  * its verdict is bounded exactly like the rulebook's (below).
+
+What survives unchanged from the original design: the Overseer sits above
+the rule engine and sorting/sifting tier (triage.py) and can "intervene on
+any and all levels" — it can produce a `Finding` of any track/severity, and
+that Finding runs through the exact same `Enforcer.process()` (routed by
+`UserEnforcers` per the multi-user model). There is no separate enforcement
+path for the Overseer, which is what makes "the same hard ceiling applies to
+the Overseer" (operator-confirmed) true structurally rather than by promise.
+
+Two activation paths (operator-confirmed):
   * Periodic check-in — `check_in()`, called by the daemon on
-    config.OverseerConfig.checkin_interval_hours (1-2x/day). Reads every
-    `TriageReport` accumulated since the last check-in.
+    config.OverseerConfig.checkin_interval_seconds (1-2x/day). Reads every
+    `TriageReport` accumulated since the last check-in, plus the raw
+    incident window for the whole period (the rulebook counts real entries,
+    not just digests).
   * Immediate trigger — `on_serious_finding()`, called the moment the rule
     engine's Enforcer processes a SERIOUS-severity finding. Lesser
     warnings/lockouts do NOT wake the Overseer early; they wait for the next
-    scheduled check-in (operator-confirmed scope: "serious-severity findings
-    only" for the immediate path).
-
-When a triage report looks worth a closer look (`TriageReport.noteworthy()`),
-the Overseer queries `IncidentStore`/`EventLog` directly for that report's
-time window — a plain method call, not a subagent — because one judgment
-call doesn't need the isolation or ceremony of spinning up a separate agent,
-and skipping that round-trip is the context/cost saving the operator asked
-for. Same idea on the immediate path: it pulls its own short lookback window
-around the triggering finding.
+    scheduled check-in (operator-confirmed scope).
 """
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
-from . import ai
+from . import ai, config
 from .eventlog import EventLog
 from .incidents import IncidentStore
-from .model import Event, Finding, Source
+from .model import Event, Finding, Severity, Source, Track
 from .triage import TriageReport, TriageStore
 
 # How far back the immediate SERIOUS-trigger path looks for context. Kept
@@ -44,10 +48,110 @@ from .triage import TriageReport, TriageStore
 # job, via triage's own longer window).
 SERIOUS_CONTEXT_WINDOW_SECONDS = 300
 
-# Cap on how many raw incident lines go into one prompt. This is a judgment
-# call, not a forensic export — bounding it keeps cost predictable and
-# matches the "one review, not a dump" intent.
+# Cap on how many raw incident lines go into one AI prompt (second-opinion
+# path only). This is a judgment call, not a forensic export — bounding it
+# keeps cost predictable and matches the "one review, not a dump" intent.
 MAX_CONTEXT_INCIDENTS = 50
+
+# Findings the Overseer itself produced, as recorded in incidents.db. The
+# rulebook must never count these — an Overseer verdict feeding the next
+# Overseer verdict would be a feedback loop.
+_OVERSEER_RULE_PREFIX = "overseer-"
+
+_TRACKS = {t.value: t for t in Track}
+
+
+class Rulebook:
+    """The Overseer's deterministic brain. Pure arithmetic over structured
+    data — no model, no network, no nondeterminism — so every verdict is
+    reproducible from the logs and works on an offline machine.
+
+    Each rule covers a pattern the realtime rule engine deliberately cannot
+    see (its horizon is one event; the enforcer's warning score decays after
+    5 quiet minutes):
+
+      * sift accumulation — ai.Sifter classifications of the one parked
+        content category (docs/OPEN-QUESTIONS.md §3) are treated as SENSOR
+        readings, not verdicts: the decision is this threshold, applied to
+        confident readings accumulated across the whole check-in period.
+      * slow burn — many enforced incidents on one track scattered across
+        the period, each too far apart to stack a warning score.
+      * burst (SERIOUS-trigger path) — a serious finding arriving in the
+        middle of a wide spray of other incidents is treated as part of a
+        campaign, not an isolated event.
+    """
+
+    def __init__(self, cfg: config.OverseerConfig | None = None):
+        self.cfg = cfg or config.OverseerConfig()
+
+    # ── check-in rules ───────────────────────────────────────────────────
+    def checkin_verdict(self, reports: list[TriageReport],
+                        incidents: list[dict]) -> ai.OverseerVerdict:
+        candidates = []
+        sift = self._sift_rule(reports)
+        if sift:
+            candidates.append(sift)
+        burn = self._slow_burn_rule(incidents)
+        if burn:
+            candidates.append(burn)
+        if not candidates:
+            return ai.OverseerVerdict(False, None, None,
+                                      "rulebook: no threshold crossed")
+        return max(candidates, key=lambda v: v.severity)
+
+    def _sift_rule(self, reports: list[TriageReport]) -> ai.OverseerVerdict | None:
+        confident = [f for r in reports for f in r.sift_findings
+                     if f.confidence >= self.cfg.sift_confidence_threshold]
+        n = len(confident)
+        if n == 0:
+            return None
+        if n >= self.cfg.sift_serious_count:
+            severity = Severity.SERIOUS
+        elif n >= self.cfg.sift_elevated_count:
+            severity = Severity.ELEVATED
+        else:
+            severity = Severity.MINOR
+        cats = sorted({f.category for f in confident})
+        return ai.OverseerVerdict(
+            True, Track.LEGAL_ETHICAL, severity,
+            f"rulebook/sift: {n} confident sift finding(s) "
+            f"(>= {self.cfg.sift_confidence_threshold:.2f}) in {cats} "
+            f"since last check-in")
+
+    def _slow_burn_rule(self, incidents: list[dict]) -> ai.OverseerVerdict | None:
+        counts: dict[str, int] = {}
+        for entry in incidents:
+            if str(entry.get("rule_id", "")).startswith(_OVERSEER_RULE_PREFIX):
+                continue   # never count our own prior verdicts
+            if str(entry.get("severity", "")).upper() == Severity.OBSERVE.name:
+                continue   # observe-tier stays outside the punitive pipeline
+            track = entry.get("track", "")
+            counts[track] = counts.get(track, 0) + 1
+        worst = max(counts, key=counts.get, default=None)
+        if worst is None or counts[worst] < self.cfg.slow_burn_count or worst not in _TRACKS:
+            return None
+        return ai.OverseerVerdict(
+            True, _TRACKS[worst], Severity.ELEVATED,
+            f"rulebook/slow-burn: {counts[worst]} enforced incidents on the "
+            f"{worst} track across one check-in period "
+            f"(threshold {self.cfg.slow_burn_count})")
+
+    # ── SERIOUS-trigger rule ─────────────────────────────────────────────
+    def serious_verdict(self, finding: Finding,
+                        recent: list[dict]) -> ai.OverseerVerdict:
+        others = [e for e in recent
+                  if not str(e.get("rule_id", "")).startswith(_OVERSEER_RULE_PREFIX)]
+        distinct = {e.get("rule_id") for e in others}
+        if (len(others) >= self.cfg.burst_incident_count
+                and len(distinct) >= self.cfg.burst_distinct_rules):
+            return ai.OverseerVerdict(
+                True, finding.track, Severity.SERIOUS,
+                f"rulebook/burst: serious finding {finding.rule_id} arrived "
+                f"amid {len(others)} incidents across {len(distinct)} rules "
+                f"in the last {SERIOUS_CONTEXT_WINDOW_SECONDS}s")
+        return ai.OverseerVerdict(False, None, None,
+                                  "rulebook: serious finding stands alone; "
+                                  "enforcer already handled it")
 
 
 class VerdictLog:
@@ -64,10 +168,11 @@ class VerdictLog:
             self.path.touch(mode=0o600)
 
     def append(self, now: float, trigger: str, verdict: ai.OverseerVerdict,
-               context: str) -> None:
+               context: str, engine: str = "rules") -> None:
         entry = {
             "ts": now,
             "trigger": trigger,
+            "engine": engine,   # "rules" (the norm) or "ai" (second opinion)
             "flagged": verdict.flagged,
             "track": verdict.track.value if verdict.track else None,
             "severity": verdict.severity.name if verdict.severity else None,
@@ -81,21 +186,31 @@ class VerdictLog:
 class Overseer:
     def __init__(self, triage: TriageStore, incidents: IncidentStore,
                  eventlog: EventLog, verdicts: VerdictLog,
+                 rulebook: Rulebook | None = None,
                  brain: ai.OverseerBrain | None = None,
                  last_checkin: float | None = None):
         self.triage = triage
         self.incidents = incidents
         self.eventlog = eventlog
         self.verdicts = verdicts
-        self.brain = brain or ai.build_overseer_brain()
+        self.rulebook = rulebook or Rulebook()
+        # brain=None is the DEFAULT posture: no AI consult at all. The daemon
+        # only passes one when root config sets overseer.ai_enabled AND a key
+        # exists — and even then it is a second opinion, never a veto.
+        self.brain = brain
         self._last_checkin = 0.0 if last_checkin is None else last_checkin
 
     # ── periodic path ────────────────────────────────────────────────────
     def check_in(self, now: float, activity_snapshot: str = "") -> list[Finding]:
         reports = self.triage.since(self._last_checkin)
+        window = self.incidents.between(self._last_checkin, now)
         context = self._checkin_context(reports, activity_snapshot)
-        verdict = self.brain.decide(context)
-        self.verdicts.append(now, "checkin", verdict, context)
+        verdict = self.rulebook.checkin_verdict(reports, window)
+        engine = "rules"
+        if (not verdict.flagged and self.brain is not None
+                and any(r.noteworthy() for r in reports)):
+            verdict, engine = self.brain.decide(context), "ai"
+        self.verdicts.append(now, "checkin", verdict, context, engine)
         self._last_checkin = now
         return self._to_findings(verdict, "overseer-checkin")
 
@@ -122,8 +237,11 @@ class Overseer:
     def on_serious_finding(self, finding: Finding, now: float) -> list[Finding]:
         recent = self.incidents.between(now - SERIOUS_CONTEXT_WINDOW_SECONDS, now)
         context = self._serious_context(finding, recent)
-        verdict = self.brain.decide(context)
-        self.verdicts.append(now, "serious_trigger", verdict, context)
+        verdict = self.rulebook.serious_verdict(finding, recent)
+        engine = "rules"
+        if not verdict.flagged and self.brain is not None:
+            verdict, engine = self.brain.decide(context), "ai"
+        self.verdicts.append(now, "serious_trigger", verdict, context, engine)
         return self._to_findings(verdict, "overseer-serious-trigger")
 
     def _serious_context(self, finding: Finding, recent: list[dict]) -> str:

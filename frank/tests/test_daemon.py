@@ -143,6 +143,27 @@ def test_findings_are_recorded_per_user(tmp_path):
     assert not f.enforcers.enforcer_for("bob").is_locked(100)
 
 
+def test_default_posture_is_fully_rule_based(tmp_path):
+    """Operator direction: Frank is a primarily rule-based overseer system
+    (OPEN-QUESTIONS.md §5). Out of the box the daemon wires NO AI brain into
+    the Overseer (rulebook only) and speaks from the approved line bank —
+    no network needed anywhere in the loop."""
+    from frankd.mistral import LineBankCommentator
+    f = Frank(_cfg(tmp_path))
+    assert f.overseer.brain is None
+    assert f.overseer.rulebook is not None
+    assert isinstance(f.commentator, LineBankCommentator)
+
+
+def test_ai_second_opinion_is_opt_in_via_root_config(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.overseer.ai_enabled = True
+    f = Frank(cfg)
+    # No key in the test environment -> the safe OfflineOverseer, but the
+    # consult path now exists at all, which it doesn't by default.
+    assert f.overseer.brain is not None
+
+
 def test_only_content_bearing_sources_are_persisted_to_the_raw_eventlog():
     """tick() gates eventlog.record() on this set -- process/network events
     are numeric/destination signals with no text for a content review to

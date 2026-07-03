@@ -83,19 +83,18 @@ See the top of each rules file for the tier model
 (`observe` / `minor` / `elevated` / `serious`) and how tiers map to warning counts and
 lockout scope.
 
-## 4. Frank voice lines / commentary style guide (spec §6, §10)
+## 4. Frank voice lines / commentary style guide (spec §6, §10) — ✅ RESOLVED
 
 Tone is locked by the spec: **cold, corporate, procedural, faintly
-threatening — "this is being recorded and evaluated," not comic snark.** A
-starter style guide + example lines are in
-[`docs/FRANK-VOICE.md`](FRANK-VOICE.md). These double as few-shot examples for
-the Mistral prompt and as offline fallback lines when no API key is set.
-**Status (2026-07-02): 🟨 partially reviewed.** The serious-tier pun line was
-reworded per the operator ("You be frank with me and I will be frank with
-you."), and the operator directed a **line-by-line review session** — every
-example line pulled up individually for keep/rewrite/drop via the question
-tool. That session is specced as **BUILD-QUEUE §7** (Sonnet 5, zero
-deviation); the current lines ship as the offline fallbacks until it runs.
+threatening — "this is being recorded and evaluated," not comic snark.** The
+style guide + finalized example lines are in
+[`docs/FRANK-VOICE.md`](FRANK-VOICE.md), finalized via the line-by-line
+review (BUILD-QUEUE §7, completed 2026-07-02). Per the operator's standing
+direction that Frank is a primarily rule-based overseer system (§5), this
+line bank is now Frank's **primary voice**, not an offline fallback — AI
+phrasing (`mistral.py`'s `MistralCommentator`) is a double opt-in
+(`commentary.ai_enabled` + a key) that falls back to these same lines on any
+misbehavior, and doubles as few-shot examples for its prompt when enabled.
 
 ## 5. Frank sensitivity — ✅ RESOLVED: operator has NO power over Frank
 
@@ -146,10 +145,25 @@ root-owned secret files; nothing secret is committed. See
 
 ## 9. AI-layer session (sorting/sifting Frank + the Overseer) — 🟨 partially resolved
 
-The three-tier Frank model requested this session is built and tested — see
+The three-tier Frank model is built and tested — see
 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) "Three tiers, one enforcement path."
 What was decided vs. what's still open:
 
+- ✅ **Primarily rule-based, per the operator's standing direction (§5).**
+  The Overseer's verdicts now come from a deterministic `Rulebook`
+  (threshold rules in root-only `config.OverseerConfig`: sift-accumulation,
+  slow-burn, burst) that behaves identically on every machine, online or
+  off. AI is reduced to (a) the Sifter, a classification *sensor* whose
+  readings only become findings via those thresholds, and (b) an Overseer
+  *second opinion* that is OFF by default (`overseer.ai_enabled`), consulted
+  only when the rulebook found nothing, and can add but never veto. Frank's
+  voice defaults to the approved line bank (`commentary.ai_enabled` opt-in
+  for AI phrasing). With both flags off — the default — nothing in Frank's
+  loop touches a network.
+  ⬜ Sub-question: the rulebook thresholds shipped with defaults (confidence
+  ≥ 0.75; 1/2/5 confident sift findings → minor/elevated/serious; 12
+  same-track incidents per period → elevated; 10 incidents across ≥3 rules
+  around a SERIOUS finding → serious). Tune freely — root-only config.
 - ✅ **Same hard ceiling applies to the Overseer** (not an exception to it).
   The Overseer expresses every decision as a `Finding` run through the exact
   `Enforcer.process()` the rule engine uses — no parallel enforcement path,
@@ -161,11 +175,10 @@ What was decided vs. what's still open:
 - ✅ **Immediate-trigger scope:** only a SERIOUS-severity finding wakes the
   Overseer early; lesser lockouts/warnings wait for the next scheduled
   check-in (`config.OverseerConfig.wake_on_serious`).
-- ⬜ **Model choice for the two new AI roles — still open**, and now
-  explicitly low-priority: the operator's direction (2026-07-02) is that
-  Frank moves toward a **primarily rule-based** overseer, so both AI roles
-  stay secondary and keep their offline-default posture. Same as
-  sensitivity, the choice is a config value rather than hardcoded. Both roles
+- ⬜ **Model choice for the two AI roles — still open** (and now lower
+  stakes: the Sifter is a sensor behind deterministic thresholds, and the
+  Overseer brain is off unless you flip `overseer.ai_enabled`), same as
+  sensitivity was left as a config value rather than hardcoded. Both roles
   default to the existing Mistral integration's wire shape (`ai.py`'s
   `ChatCompletionClient`, OpenAI/Mistral-style `/v1/chat/completions`) so
   nothing new has to be stood up to try it, but the model string is a config

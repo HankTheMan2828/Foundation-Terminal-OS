@@ -6,7 +6,7 @@ timestamp, incidents store records full detail (frank-only) -> pending warn is
 queued for the Hub to *display*, and the current lock decision is published for
 the ROOT enforcer to *apply*.
 
-Three tiers now feed the same Enforcer (this session added the second two):
+Three tiers feed the same Enforcer:
   1. Rule engine (rules.py) — realtime, offline, every tick. Primary/always-on.
   2. Sorting/sifting Frank (triage.py) — periodic, organizes recent incidents
      + raw log content into a digest. Never enforces anything itself.
@@ -15,6 +15,12 @@ Three tiers now feed the same Enforcer (this session added the second two):
      Finding, which flows through the identical `_handle_finding` path as a
      rule-engine Finding — same ledger entry, same incidents record, same
      Enforcer state machine, same hard ceiling.
+
+Operator direction: Frank is a primarily rule-based overseer system
+(OPEN-QUESTIONS.md §5). The Overseer's verdicts come from a deterministic
+Rulebook; its AI brain and the AI phrasing of Frank's voice are both opt-in
+flags in root-only config (overseer.ai_enabled / commentary.ai_enabled,
+default off) — with them off, nothing in this loop ever needs a network.
 
 The operator has NO power over Frank. Nothing here reads operator-supplied
 configuration at runtime and there is no command that lets the operator tune,
@@ -29,14 +35,14 @@ from __future__ import annotations
 import time
 from collections import deque
 
-from . import config, lockstate, sources
+from . import ai, config, lockstate, sources
 from .enforcement import ReactionKind, UserEnforcers
 from .eventlog import EventLog
 from .incidents import IncidentStore
 from .ledger import TimestampLedger
 from .mistral import build as build_commentator
 from .model import Severity, Source
-from .overseer import Overseer, VerdictLog
+from .overseer import Overseer, Rulebook, VerdictLog
 from .rules import RuleEngine
 from .triage import TriageEngine, TriageStore
 
@@ -64,9 +70,14 @@ class Frank:
         self.eventlog = EventLog(self.cfg.events_path)
         self.triage_store = TriageStore(self.cfg.triage_path)
         self.triage = TriageEngine(self.incidents, self.eventlog, self.triage_store)
-        self.overseer = Overseer(self.triage_store, self.incidents, self.eventlog,
-                                  VerdictLog(self.cfg.verdicts_path))
-        self.commentator = build_commentator()
+        self.overseer = Overseer(
+            self.triage_store, self.incidents, self.eventlog,
+            VerdictLog(self.cfg.verdicts_path),
+            rulebook=Rulebook(self.cfg.overseer),
+            # AI second opinion only with the root-only opt-in flag (plus a
+            # key); the deterministic rulebook is the brain either way.
+            brain=(ai.build_overseer_brain() if self.cfg.overseer.ai_enabled else None))
+        self.commentator = build_commentator(self.cfg.commentary.ai_enabled)
         self.poll_interval = poll_interval
         self.lock_state_path = self.cfg.incidents_path.parent / "lockout.state"
         self._src_state: dict = {}
