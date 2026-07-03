@@ -223,8 +223,23 @@ public static class RawDisk {
 }
 
 $n = $target.Number
-Say 'Preparing the stick (dismounting its volumes)...'
+Say 'Preparing the stick (removing its old partitions)...'
 try { Set-Disk -Number $n -IsReadOnly $false -ErrorAction SilentlyContinue } catch {}
+# diskpart clean wipes the partition table, so no partition on the stick can
+# have a volume object Windows would protect against raw writes.
+$null = @"
+select disk $n
+clean
+rescan
+exit
+"@ | diskpart
+if ($LASTEXITCODE -ne 0) {
+  Bad "Windows (diskpart) could not clean the stick (exit code $LASTEXITCODE)."
+  Bad 'Unplug it, plug it back in, and run this again.'
+  Read-Host 'Press ENTER to close'
+  exit 1
+}
+Start-Sleep -Seconds 2
 $volHandles = @()
 $volPaths = @(Get-Partition -DiskNumber $n -ErrorAction SilentlyContinue |
               ForEach-Object { $_.AccessPaths } |
@@ -250,7 +265,14 @@ $src = [IO.File]::OpenRead($IsoPath)
 $dst = New-Object IO.FileStream(([RawDisk]::Open("\\.\PHYSICALDRIVE$n", $true)),
         [IO.FileAccess]::Write)
 try {
+  # The image's first chunk holds the MBR/partition table. If it goes in
+  # first, Windows spots the new partitions while we're still streaming,
+  # mounts volumes over them, and denies every later write. So: skip the
+  # first chunk, write the rest, then drop the first chunk in LAST — the
+  # disk has no partition table (nothing to automount) until we're done.
   $buf = New-Object byte[] (4MB)
+  $firstChunk = $null
+  $firstLen = 0
   $done = [long]0
   $sw = [Diagnostics.Stopwatch]::StartNew()
   while (($read = $src.Read($buf, 0, $buf.Length)) -gt 0) {
@@ -260,7 +282,13 @@ try {
       [Array]::Clear($buf, $read, $padded - $read)
       $read = $padded
     }
-    $dst.Write($buf, 0, $read)
+    if ($null -eq $firstChunk) {
+      $firstChunk = $buf.Clone()
+      $firstLen = $read
+      $null = $dst.Seek($read, [IO.SeekOrigin]::Begin)
+    } else {
+      $dst.Write($buf, 0, $read)
+    }
     $done += $read
     $pct = [int](100 * $done / $IsoSize)
     $mbs = if ($sw.Elapsed.TotalSeconds -gt 0) { $done / 1MB / $sw.Elapsed.TotalSeconds } else { 0 }
@@ -268,6 +296,8 @@ try {
       -Status ("{0:N0} / {1:N0} MB  ({2:N1} MB/s)" -f ($done / 1MB), ($IsoSize / 1MB), $mbs) `
       -PercentComplete ([math]::Min($pct, 100))
   }
+  $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
+  $dst.Write($firstChunk, 0, $firstLen)
   $dst.Flush($true)
 } catch [System.UnauthorizedAccessException] {
   Bad 'Windows refused the raw write even with the stick''s volumes locked.'
