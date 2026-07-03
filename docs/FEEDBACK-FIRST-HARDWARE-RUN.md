@@ -1,0 +1,84 @@
+# Operator feedback — first successful hardware run (2026-07-03, mini PC)
+
+The first end-to-end hardware install (USB creator → boot → installer →
+Home Hub) succeeded on the mini PC testbed. This is the operator's raw
+feedback from that first session, itemized for follow-up work. Items are
+UX-focused; none block installs.
+
+## 1. Text size (setup + settings)  — HIGH
+- The console text is too small. **Default should be twice the current
+  size**, and the installer/first-boot setup should *ask* about text size.
+- Users must also be able to change text size later in **Settings**.
+- Pointers: the console font is set with `setfont` (currently
+  `ter-v16b` — `ter-v32b` is the 2× Terminus bitmap; see
+  `install/02-console-kiosk.sh` / theme). A per-user setting needs a hook in
+  `hub/foundationhub/screens/settings.py` plus persistence.
+
+## 2. Rogue is missing from Recreation  — expected, but wants prioritizing
+- Operator looked for **Rogue (the original)** and the **1985-style visual
+  remake** and couldn't find them. They were never built — the two-vintage
+  Rogue re-implementation is designed but awaiting approval
+  (`docs/ROGUELIKE-DESIGN.md`, `OPEN-QUESTIONS.md` §11).
+- Treat this as a signal of operator interest: surface the open design
+  questions and get the build approved/started.
+
+## 3. Arcade games: center + border  — polish
+- Games play great. They should render **centered on screen** with a
+  **visible border** around the playfield (currently corner-anchored /
+  borderless on large consoles).
+- `games/foundation_arcade/`.
+
+## 4. Esc-to-go-back has a noticeable delay  — polish, quick fix
+- Backspace navigates back near-instantly; **Esc has a lag**.
+- Almost certainly curses' default escape-sequence wait (`ESCDELAY`,
+  default ~1000ms). Set it low (~25ms) at Hub startup
+  (`hub/foundationhub/app.py`) and in the standalone games/media apps.
+
+## 5. Notes area: rename + new-note flow  — HIGH
+- The area is currently labeled **"text editor" — confusing**. Rename to
+  **"Notes Area"**.
+- Flow: opening it goes to the **folder of notes to choose from**. The top
+  first option — visually separated (a little space) from the note list —
+  is **`--- create new note ---`**; pressing Enter on it prompts **"Name?"**
+  then proceeds into the editor.
+- Later (explicitly deferred by operator): **folders** and a **search**
+  feature.
+- `hub/foundationhub/screens/notes.py` + `editor.py`, menu labels in
+  `labels.py`.
+
+## 6. Game scores: belong to the user, live in Recreation  — HIGH
+- Scores should be **attributed to the user** who set them.
+- Scores must **not** appear in the file/folder area; they should show as a
+  **list in the games (Recreation) area**.
+
+## 7. Dated-entry feature for general notes  — feature
+- The **personal file area's dated-entry thing** (journal-style entries)
+  should also exist in the **general notes area**, under a different name.
+
+## 8. Home Hub information architecture  — think piece
+- The ordering of the Home Hub and its sub-areas **"feels a little
+  hectic."** Operator explicitly invites proposals for re-working the
+  ordering/grouping of the Hub and sub-areas. Draft options, don't just
+  pick one — menu wording is operator-approval territory
+  (`OPEN-QUESTIONS.md`).
+
+## 9. Highlight bars don't always reach the screen edge  — polish
+- Some selection/highlight bars stop short of the right edge; make bar
+  width consistent (full width) across all screens.
+
+## 10. BUG: colors shift to "super amber" after a few interactions
+- Reproduced by the operator: after a few clicks inside a **user's area**,
+  the palette shifts to a much more saturated amber.
+- Smells like a color-pair/attribute leak (re-initializing pairs, or bold
+  attribute stacking) in `hub/foundationhub/theme.py` / screen redraw
+  paths. Needs investigation — find the repro, then the leak.
+
+## Also fixed during this run (already committed, for context)
+- Exec bits stripped from the embedded repo by mkarchiso → restored at
+  install time (`foundation-install`), plus five files' modes fixed in git.
+- `install/03` ran `grub-mkconfig` before `/boot/grub` existed on the
+  bare-metal path → creates the dir now.
+- Root-password prompt now echoes `*` per keystroke.
+- Live ISO: root unlocked (rescue shells work), gpt-auto generator masked,
+  and the initramfs preset actually wires in the archiso config (the bug
+  that made every pre-2026-07-03 ISO unbootable on hardware).
