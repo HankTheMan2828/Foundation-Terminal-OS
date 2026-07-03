@@ -24,6 +24,7 @@ _MIN_H, _MIN_W = 16, 34
 
 def main(stdscr) -> None:
     """Entry point (via curses.wrapper). Loops: start menu -> play -> menu."""
+    curses.set_escdelay(25)  # default ~1000ms made Esc feel laggy vs. Backspace
     chrome.init(stdscr)
     curses.curs_set(0)
     stdscr.keypad(True)

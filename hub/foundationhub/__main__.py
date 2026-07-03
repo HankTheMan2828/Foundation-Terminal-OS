@@ -21,6 +21,7 @@ from .screens import build_home
 
 
 def _main(stdscr) -> None:
+    curses.set_escdelay(25)  # default ~1000ms made Esc feel laggy vs. Backspace
     theme.init(stdscr)
     preset = os.environ.get("FOUNDATIONHUB_USER")
     if preset:

@@ -242,13 +242,15 @@ class Editor:
             self._draw_menu(win, top, left)
 
     def _draw_menu(self, win, top: int, left: int) -> None:
+        _, w = win.getmaxyx()
+        width = max(0, w - 2 * left)  # match ui.Menu.draw's full-width highlight bar
         for i, label in enumerate(self._MENU):
             selected = i == self.menu_index
             a = theme.attr(theme.PAIR_HILITE if selected else theme.PAIR_NORMAL,
                            bold=selected)
             marker = "▶ " if selected else "  "
             try:
-                win.addstr(top + i, left, f"{marker}{label}".ljust(20), a)
+                win.addstr(top + i, left, f"{marker}{label}".ljust(width)[:width], a)
             except curses.error:
                 pass
 

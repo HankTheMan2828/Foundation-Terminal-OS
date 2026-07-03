@@ -16,6 +16,7 @@ from .tui import MediaTUI
 
 
 def _main(stdscr) -> None:
+    curses.set_escdelay(25)  # default ~1000ms made Esc feel laggy vs. Backspace
     h, w = stdscr.getmaxyx()
     if h < 16 or w < 50:
         stdscr.erase()

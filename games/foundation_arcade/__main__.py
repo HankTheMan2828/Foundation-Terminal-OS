@@ -71,6 +71,7 @@ def _play(stdscr, game_run) -> None:
 
 
 def _main(stdscr) -> None:
+    curses.set_escdelay(25)  # default ~1000ms made Esc feel laggy vs. Backspace
     _menu(stdscr)
 
 
