@@ -98,6 +98,13 @@ else
     fi
   fi
 
+  # Optional persistent cache (CI sets FOUNDATION_PKG_CACHE): pre-seed the
+  # download dir so only new/changed packages are fetched from mirrors.
+  if [[ -n "${FOUNDATION_PKG_CACHE:-}" && -d "${FOUNDATION_PKG_CACHE}" ]]; then
+    cp -an "$FOUNDATION_PKG_CACHE/." "$PKGDIR/" 2>/dev/null || true
+    c_info "pre-seeded from cache: $(ls "$PKGDIR" 2>/dev/null | wc -l) files"
+  fi
+
   c_info "downloading ${#PKGS[@]} packages (plus dependencies)…"
   # pacman ≥7 drops downloads to an unprivileged `alpm` user, which cannot
   # write into our root-owned work/temp dirs ("could not open ... .part:
@@ -105,7 +112,17 @@ else
   # host — run the download unsandboxed where the flag exists.
   SANDBOX=()
   pacman -S --help 2>&1 | grep -q -- --disable-sandbox && SANDBOX=(--disable-sandbox)
-  pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}"
+  # one retry: rolling mirrors reset connections often enough to matter in CI
+  pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}" || {
+    c_warn "package download failed once — retrying in 15s"
+    sleep 15
+    pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}"
+  }
+
+  if [[ -n "${FOUNDATION_PKG_CACHE:-}" ]]; then
+    mkdir -p "$FOUNDATION_PKG_CACHE"
+    cp -an "$PKGDIR/." "$FOUNDATION_PKG_CACHE/" 2>/dev/null || true
+  fi
   rm -rf "$DBTMP"
   rm -f "$PKGDIR"/*.sig
   repo-add --quiet "$PKGDIR/foundation.db.tar.gz" "$PKGDIR"/*.pkg.tar.*

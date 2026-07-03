@@ -58,6 +58,51 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Show-Banner
 
 # ── 1. find the ISO ──────────────────────────────────────────────────────────
+function Get-ReleaseIso {
+  # newest release ISO asset (+ its expected SHA256 when published); $null if
+  # offline or nothing released
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    # the release list (not /latest, which 404s on a repo with no releases yet)
+    $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
+  } catch { return $null }
+  $asset = $rels | ForEach-Object { $_.assets } |
+           Where-Object { $_.name -like '*.iso' } | Select-Object -First 1
+  if (-not $asset) {
+    return [pscustomobject]@{ ReleaseCount = $rels.Count; Name = $null }
+  }
+  $sha = $null
+  $sums = $rels | ForEach-Object { $_.assets } |
+          Where-Object { $_.name -eq 'SHA256SUMS' } | Select-Object -First 1
+  if ($sums) {
+    try {
+      $raw = (Invoke-WebRequest -UseBasicParsing $sums.browser_download_url).Content
+      if ($raw -is [byte[]]) { $raw = [Text.Encoding]::ASCII.GetString($raw) }
+      $line = $raw -split "`n" | Where-Object { $_ -like "*$($asset.name)*" } | Select-Object -First 1
+      if ($line) { $sha = ($line.Trim() -split '\s+')[0].ToLower() }
+    } catch {}
+  }
+  [pscustomobject]@{ ReleaseCount = $rels.Count; Name = $asset.name
+                     Url = $asset.browser_download_url; Size = $asset.size; Sha256 = $sha }
+}
+
+function Save-ReleaseIso {
+  param($Asset)
+  $dest = Join-Path (Join-Path $env:USERPROFILE 'Downloads') $Asset.Name
+  Say ("Downloading {0} ({1:N0} MB) to your Downloads folder..." -f $Asset.Name, ($Asset.Size / 1MB))
+  try {
+    Start-BitsTransfer -Source $Asset.Url -Destination $dest `
+      -DisplayName 'Foundation TerminalOS installer ISO'
+  } catch {
+    # BITS can be disabled; plain download works everywhere (just no progress bar)
+    $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
+    try { Invoke-WebRequest -UseBasicParsing $Asset.Url -OutFile $dest }
+    finally { $ProgressPreference = $old }
+  }
+  Good "Downloaded: $dest"
+  return $dest
+}
+
 function Find-Iso {
   param([string]$Given)
   if ($Given) {
@@ -65,46 +110,62 @@ function Find-Iso {
     Bad "ISO not found at: $Given"
     exit 1
   }
-  # next to this script (the "downloaded both files into one folder" case)
+  # a repo checkout two levels up (tools/usb-creator/ -> repo root): a dev's
+  # own build, taken as-is with no freshness check
   $here = Split-Path -Parent $PSCommandPath
-  $near = Get-ChildItem -Path $here -Filter 'foundation-terminalos-*.iso' -ErrorAction SilentlyContinue |
-          Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if ($near) { return $near.FullName }
-  # a repo checkout two levels up (tools/usb-creator/ -> repo root)
   $repoOut = Join-Path $here '..\..\image\out'
   if (Test-Path $repoOut) {
     $built = Get-ChildItem -Path $repoOut -Filter 'foundation-terminalos-*.iso' -ErrorAction SilentlyContinue |
              Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($built) { return $built.FullName }
   }
-  # Downloads folder
-  $dl = Join-Path $env:USERPROFILE 'Downloads'
-  if (Test-Path $dl) {
-    $down = Get-ChildItem -Path $dl -Filter 'foundation-terminalos-*.iso' -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($down) { return $down.FullName }
+  # next to this script, or in Downloads (the normal end-user case)
+  $cand = $null
+  foreach ($dir in @($here, (Join-Path $env:USERPROFILE 'Downloads'))) {
+    if (-not (Test-Path $dir)) { continue }
+    $found = Get-ChildItem -Path $dir -Filter 'foundation-terminalos-*.iso' -ErrorAction SilentlyContinue |
+             Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($found) { $cand = $found.FullName; break }
   }
-  # offer to download the latest release
+
+  if ($cand) {
+    # stale-ISO guard: compare with the current release so an old download
+    # never gets written by mistake — and a current one is never re-downloaded
+    $rel = Get-ReleaseIso
+    if ($rel -and $rel.Name) {
+      $stale = $false
+      if ((Split-Path -Leaf $cand) -ne $rel.Name) {
+        $stale = $true
+      } elseif ($rel.Sha256) {
+        Say 'Making sure your ISO matches the current release (takes a few seconds)...'
+        $localSha = (Get-FileHash -Algorithm SHA256 -Path $cand).Hash.ToLower()
+        if ($localSha -ne $rel.Sha256) { $stale = $true }
+      }
+      if ($stale) {
+        Say 'The ISO on this computer is OUTDATED - fetching the current release...'
+        return Save-ReleaseIso $rel
+      }
+      Good 'Your ISO matches the current release - no download needed.'
+    }
+    return $cand
+  }
+
+  # nothing local: offer to download the latest release
   Say 'No installer ISO found on this computer.'
   $ans = Read-Host '> download the latest release now? [Y/n]'
   if ($ans -and $ans.Trim().ToLower().StartsWith('n')) {
     Bad 'Nothing to write. Put the ISO next to this script, or pass -Iso <path>.'
     exit 1
   }
-  try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    # the release list (not /latest, which 404s on a repo with no releases yet)
-    $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
-  } catch {
-    Bad "Could not reach GitHub ($($_.Exception.Message))."
+  $rel = Get-ReleaseIso
+  if (-not $rel) {
+    Bad 'Could not reach GitHub.'
     Bad 'Check your internet connection and try again, or download the ISO'
     Bad 'manually from the Releases page and put it next to this script.'
     exit 1
   }
-  $asset = $rels | ForEach-Object { $_.assets } |
-           Where-Object { $_.name -like '*.iso' } | Select-Object -First 1
-  if (-not $asset) {
-    if ($rels.Count -eq 0) {
+  if (-not $rel.Name) {
+    if ($rel.ReleaseCount -eq 0) {
       Bad "The project hasn't published a release yet, so there is no ISO to download."
     } else {
       Bad "No release of $GitHubRepo has an ISO attached."
@@ -114,19 +175,7 @@ function Find-Iso {
     Bad 'and put the ISO next to this script, then run this again.'
     exit 1
   }
-  $dest = Join-Path (Join-Path $env:USERPROFILE 'Downloads') $asset.name
-  Say ("Downloading {0} ({1:N0} MB) to your Downloads folder..." -f $asset.name, ($asset.size / 1MB))
-  try {
-    Start-BitsTransfer -Source $asset.browser_download_url -Destination $dest `
-      -DisplayName 'Foundation TerminalOS installer ISO'
-  } catch {
-    # BITS can be disabled; plain download works everywhere (just no progress bar)
-    $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
-    try { Invoke-WebRequest -UseBasicParsing $asset.browser_download_url -OutFile $dest }
-    finally { $ProgressPreference = $old }
-  }
-  Good "Downloaded: $dest"
-  return $dest
+  return Save-ReleaseIso $rel
 }
 
 $IsoPath = Find-Iso $Iso

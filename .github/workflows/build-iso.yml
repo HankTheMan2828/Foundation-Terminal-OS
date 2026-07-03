@@ -12,6 +12,11 @@ name: build-iso
 
 on:
   workflow_dispatch:
+    inputs:
+      slim:
+        description: "Slim dev ISO: skip the offline package repo (small + fast; the target machine then needs network to install)"
+        type: boolean
+        default: false
   push:
     tags: ["TerminalOS-v*"]
 
@@ -31,10 +36,26 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # Two pacman caches survive between runs: the host cache (feeds the
+      # tool install above and mkarchiso's own pacstrap, which runs with -c)
+      # and the offline-repo cache (build-iso.sh pre-seeds its download from
+      # FOUNDATION_PKG_CACHE). Arch is rolling, so the run_id key means every
+      # run saves a fresh copy and the next one restores the newest.
+      - name: Cache pacman packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/pacman/pkg
+            /var/cache/foundation-pkgs
+          key: pacman-pkgs-${{ github.run_id }}
+          restore-keys: pacman-pkgs-
+
       - name: Build the ISO
+        env:
+          FOUNDATION_PKG_CACHE: /var/cache/foundation-pkgs
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          ./image/build-iso.sh
+          ./image/build-iso.sh ${{ inputs.slim && '--skip-offline-repo' || '' }}
 
       - name: Checksums
         run: cd image/out && sha256sum foundation-terminalos-*.iso > SHA256SUMS

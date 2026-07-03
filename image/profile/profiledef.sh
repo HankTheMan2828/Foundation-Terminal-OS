@@ -18,7 +18,9 @@ bootmodes=('bios.syslinux.mbr' 'bios.syslinux.eltorito' 'uefi.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
-airootfs_image_tool_options=('-comp' 'xz' '-Xbcj' 'x86' '-b' '1M' '-Xdict-size' '1M')
+# zstd over xz: image builds in roughly half the time and boots faster on
+# the target, for a mid-single-digit % size increase.
+airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '19' '-b' '1M')
 file_permissions=(
   # Unlocked, empty-password root (same as the official Arch ISO): the LIVE
   # medium only. Without it the rescue ttys and systemd's emergency shell
