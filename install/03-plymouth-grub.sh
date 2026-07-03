@@ -20,7 +20,12 @@ if [[ -f "$GRUB_DEF" ]]; then
   cp -n "$GRUB_DEF" "$GRUB_DEF.foundationhub.bak" || true
   sed -i -E 's/\bquiet\b//g; s/\brhgb\b//g; s/  +/ /g; s/" /"/; s/ "/"/' "$GRUB_DEF"
   c_ok "stripped quiet/rhgb from $GRUB_DEF"
-  if is_arch; then grub-mkconfig -o /boot/grub/grub.cfg; fi
+  # On a bare-metal install (the ISO path) grub-install hasn't run yet, so
+  # /boot/grub doesn't exist — grub-mkconfig can't create its own output dir.
+  if is_arch; then
+    install -d /boot/grub
+    grub-mkconfig -o /boot/grub/grub.cfg
+  fi
 else
   c_warn "$GRUB_DEF not found — if you use systemd-boot, edit the kernel cmdline there"
 fi
