@@ -22,17 +22,22 @@ UX-focused; none block installs.
 - Treat this as a signal of operator interest: surface the open design
   questions and get the build approved/started.
 
-## 3. Arcade games: center + border  — polish
+## 3. Arcade games: center + border  — polish — ✅ FIXED (2026-07-03)
 - Games play great. They should render **centered on screen** with a
   **visible border** around the playfield (currently corner-anchored /
   borderless on large consoles).
 - `games/foundation_arcade/`.
+- Fixed: new `chrome.draw_playfield()` centers the playfield in the
+  chrome's content area and draws a border, wired into all five games
+  (Snake, Falling Blocks, 2048, Sudoku, Invaders).
 
-## 4. Esc-to-go-back has a noticeable delay  — polish, quick fix
+## 4. Esc-to-go-back has a noticeable delay  — polish, quick fix — ✅ FIXED (2026-07-03)
 - Backspace navigates back near-instantly; **Esc has a lag**.
 - Almost certainly curses' default escape-sequence wait (`ESCDELAY`,
   default ~1000ms). Set it low (~25ms) at Hub startup
   (`hub/foundationhub/app.py`) and in the standalone games/media apps.
+- Fixed: `curses.set_escdelay(25)` set at all four curses entry points
+  (Hub, foundation-arcade, foundation-chess, foundationmedia).
 
 ## 5. Notes area: rename + new-note flow  — HIGH
 - The area is currently labeled **"text editor" — confusing**. Rename to
@@ -62,9 +67,14 @@ UX-focused; none block installs.
   pick one — menu wording is operator-approval territory
   (`OPEN-QUESTIONS.md`).
 
-## 9. Highlight bars don't always reach the screen edge  — polish
+## 9. Highlight bars don't always reach the screen edge  — polish — ✅ FIXED (2026-07-03)
 - Some selection/highlight bars stop short of the right edge; make bar
   width consistent (full width) across all screens.
+- Root cause: the in-house editor's Esc menu (SAVE/DISCARD/RETURN —
+  used on every journal/notes/scratch screen) padded its highlight to a
+  hardcoded 20 columns instead of the window width. Fixed in
+  `hub/foundationhub/editor.py` to scale like every other Hub menu
+  (`ui.Menu.draw`'s `w - 2*left`).
 
 ## 10. BUG: colors shift to "super amber" after a few interactions
 - Reproduced by the operator: after a few clicks inside a **user's area**,
