@@ -296,8 +296,15 @@ try {
       -Status ("{0:N0} / {1:N0} MB  ({2:N1} MB/s)" -f ($done / 1MB), ($IsoSize / 1MB), $mbs) `
       -PercentComplete ([math]::Min($pct, 100))
   }
+  # Data is streamed, but the job is NOT done: the boot record still has to
+  # go in, and Windows' write cache has to be flushed all the way to the
+  # stick — that flush alone can take a minute or more on a slow stick.
+  Write-Progress -Activity 'Writing installer to USB' `
+    -Status 'Finalizing - do NOT unplug the stick!' -PercentComplete 100
+  Say 'Data written. Finalizing the stick - do NOT unplug it yet...'
   $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
   $dst.Write($firstChunk, 0, $firstLen)
+  Say 'Flushing everything to the stick (can take a minute, still do NOT unplug)...'
   $dst.Flush($true)
 } catch [System.UnauthorizedAccessException] {
   Bad 'Windows refused the raw write even with the stick''s volumes locked.'
@@ -315,7 +322,7 @@ try {
 }
 
 # quick read-back sanity check of the first megabyte
-Say 'Verifying...'
+Say 'Verifying (almost done - keep the stick plugged in)...'
 $check = New-Object IO.FileStream("\\.\PHYSICALDRIVE$n",
           [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
 $srcCheck = [IO.File]::OpenRead($IsoPath)
@@ -338,6 +345,8 @@ try {
 
 # ── done ─────────────────────────────────────────────────────────────────────
 Write-Host ''
+Good 'All done - it is now safe to unplug the stick.'
+Write-Host ''
 Good 'Your Foundation TerminalOS install USB is ready. Next steps:'
 Write-Host ''
 Write-Host '  1. Unplug the stick. (If Windows offers to "format" it, say no -'
@@ -353,4 +362,5 @@ Write-Host '  WARNING: the installer turns that computer into a locked-down,'
 Write-Host '  no-shell kiosk with an always-on overseer. Not for a machine you'
 Write-Host '  still need as a normal PC.'
 Write-Host ''
-Read-Host 'Press ENTER to close'
+Write-Host 'This window stays open so you can read the steps - close it whenever'
+Write-Host 'you are ready.'

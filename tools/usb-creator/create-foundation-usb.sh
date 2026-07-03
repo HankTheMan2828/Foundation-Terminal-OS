@@ -126,6 +126,7 @@ if [[ "$OS" == "Darwin" ]]; then
   diskutil unmountDisk force "$DEV" >/dev/null
   rdev="${DEV/\/dev\//\/dev\/r}"          # raw device is much faster on macOS
   dd if="$ISO" of="$rdev" bs=4m
+  c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
   sync
   diskutil eject "$DEV" >/dev/null || true
 else
@@ -134,9 +135,12 @@ else
     umount "$part" 2>/dev/null || true
   done
   dd if="$ISO" of="$DEV" bs=4M status=progress conv=fsync
+  c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
   sync
 fi
 
+echo
+c_ok "All done — it is now safe to unplug the stick."
 echo
 c_ok "Your Foundation TerminalOS install USB is ready. Next steps:"
 echo
