@@ -109,7 +109,7 @@ function Find-Iso {
     } else {
       Bad "No release of $GitHubRepo has an ISO attached."
     }
-    Bad 'A maintainer publishes one by pushing a v* tag (CI builds and attaches'
+    Bad 'A maintainer publishes one by pushing a TerminalOS-v* tag (CI builds and attaches'
     Bad 'the ISO automatically). Until then: build it with image/build-iso.sh'
     Bad 'and put the ISO next to this script, then run this again.'
     exit 1

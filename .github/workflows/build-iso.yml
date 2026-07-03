@@ -4,15 +4,16 @@
 #
 #   - every manual run ("Run workflow" button) uploads the ISO as a build
 #     artifact you can download from the run page
-#   - pushing a tag like v2026.07 additionally creates a GitHub Release with
-#     the ISO, its SHA256SUMS, and the USB-creator programs attached — that
-#     release page is the end-user download, see tools/usb-creator/README.md
+#   - pushing a tag like TerminalOS-v0.0.1 (the operator's release naming
+#     convention) additionally creates a GitHub Release with the ISO, its
+#     SHA256SUMS, and the USB-creator programs attached — that release page
+#     is the end-user download, see tools/usb-creator/README.md
 name: build-iso
 
 on:
   workflow_dispatch:
   push:
-    tags: ["v*", "TerminalOS-v*"]
+    tags: ["TerminalOS-v*"]
 
 permissions:
   contents: write # release creation
@@ -48,7 +49,7 @@ jobs:
           if-no-files-found: error
 
       - name: Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/TerminalOS-v')
         uses: softprops/action-gh-release@v2
         with:
           body: |
