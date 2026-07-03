@@ -73,6 +73,33 @@ UX-focused; none block installs.
   attribute stacking) in `hub/foundationhub/theme.py` / screen redraw
   paths. Needs investigation — find the repro, then the leak.
 
+## 11. Update system (USB and/or network)  — NEW SUBSYSTEM, design first
+Operator direction (2026-07-03, right after the first successful install):
+
+- The installed OS needs **a way to update**: over the internet **or via
+  USB**.
+- **Transport policy is a per-machine setting**: in a company setting the
+  operator would restrict updates to **USB or hardwire (ethernet) only**;
+  **wireless should also exist, enabled/configured from the Settings
+  area** — i.e. allowed transports are configurable, not hardcoded.
+
+Design sketch to start from (not approved yet):
+- **USB path — reuse the installer medium.** The release ISO already
+  carries the full repo + offline package repo. `foundation-install`
+  could detect an existing Foundation TerminalOS on disk and offer
+  **UPDATE** (re-run `install/run-all.sh` + pacman upgrade from the
+  embedded repo, preserving `/home`, accounts, Frank state) alongside the
+  full ERASE install. Zero new artifacts; the USB creator already exists.
+- **Network path:** fetch the latest GitHub release (or a pacman repo)
+  from inside the OS — needs a Settings-area screen: check for updates,
+  show version, apply. Respect the transport policy (usb / wired-only /
+  wireless-allowed), with wireless setup (nmtui or in-house) reachable
+  from Settings only when policy allows.
+- **Trust questions for OPEN-QUESTIONS:** what verifies an update
+  (checksums are on the release; signing?), who may trigger one (operator
+  only? Frank-gated?), and updates must not create a path that weakens
+  Frank isolation.
+
 ## Also fixed during this run (already committed, for context)
 - Exec bits stripped from the embedded repo by mkarchiso → restored at
   install time (`foundation-install`), plus five files' modes fixed in git.
