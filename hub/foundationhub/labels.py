@@ -61,6 +61,7 @@ FN_BRIGHTNESS = "DISPLAY BRIGHTNESS"
 FN_SECOND_SCREEN = "SECOND PANEL"
 FN_POWER_PROFILE = "POWER PROFILE"
 FN_THEME = "THEME & SOUND"
+FN_TEXT_SIZE = "TEXT SIZE"
 
 # ── System Status (network config + read-only identity/health, no admin
 # knobs — resource limits and user/auth actions were dropped at the user's

@@ -38,9 +38,12 @@ fi
 
 # Core path: dress the kernel console, best-effort — a stock VT is fine too.
 if [[ "${TERM:-}" == "linux" ]]; then
-  # Bitmap console font for the phosphor look (spec §2), if terminus-font
-  # is installed.
-  setfont ter-v16b 2>/dev/null || true
+  # Bitmap console font for the phosphor look (spec §2), if terminus-font is
+  # installed. The face doubles as the text-size setting (feedback #1): honor
+  # the persisted choice from Settings > TEXT SIZE, defaulting to the 2× face.
+  # Kept in sync with hub/foundationhub/consolefont.py (same file, same default).
+  _font="$(cat "$FOUNDATIONHUB_ETC/console-font" 2>/dev/null || true)"
+  setfont "${_font:-ter-v32b}" 2>/dev/null || setfont ter-v16b 2>/dev/null || true
   # Retune the VT's 16-color palette (a kernel console feature: \e]PXRRGGBB)
   # so the 8-color curses fallback in hub/foundationhub/theme.py lands on
   # real phosphor hues instead of stock yellow/green.

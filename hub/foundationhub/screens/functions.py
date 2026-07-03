@@ -5,7 +5,7 @@ install/04, install/05). Off-device, calls return a clear status string.
 """
 from __future__ import annotations
 
-from .. import labels, session, theme
+from .. import consolefont, labels, session, theme
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
 
@@ -49,6 +49,21 @@ def _theme_screen():
     return MenuScreen(labels.FN_THEME, items)
 
 
+def _text_size_screen():
+    """Console text size (feedback #1) — a VT-wide setfont face. Applies live
+    and persists for next login."""
+    def _pick(font):
+        def action(app):
+            app.status_message = consolefont.set_font(font)
+        return action
+    items = [
+        MenuItem(f"{s.label}  ·  {s.note}", _pick(s.font))
+        for s in consolefont.SIZES
+    ]
+    return MenuScreen(labels.FN_TEXT_SIZE, items,
+                      subtitle="console font — resizes the whole terminal")
+
+
 def screen():
     items = [
         MenuItem(labels.FN_BRIGHTNESS, lambda a: _brightness_screen(),
@@ -62,5 +77,7 @@ def screen():
                  status=session.get_power_profile_status),
         MenuItem(labels.FN_THEME, lambda a: _theme_screen(),
                  status=lambda: theme.get_palette().upper()),
+        MenuItem(labels.FN_TEXT_SIZE, lambda a: _text_size_screen(),
+                 status=consolefont.current_label),
     ]
     return MenuScreen(labels.FUNCTIONS, items)

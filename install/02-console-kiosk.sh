@@ -21,6 +21,18 @@ if ! id "$OPERATOR" >/dev/null 2>&1; then
   useradd -m -G video,input,wheel "$OPERATOR" || useradd -m "$OPERATOR"
 fi
 
+# Console text size (feedback #1). Persist the machine's font face where both
+# the session wrapper (reads it at login) and the Hub's Functions > TEXT SIZE
+# (rewrites it live) can reach it. Operator-owned so the in-Hub change sticks
+# across reboots without a root helper. Default is the 2× face; the flashable
+# ISO installer overrides FOUNDATION_CONSOLE_FONT from its setup question.
+install -d -m0755 /etc/foundationhub
+_font="${FOUNDATION_CONSOLE_FONT:-ter-v32b}"
+printf '%s\n' "$_font" > /etc/foundationhub/console-font
+chmod 0644 /etc/foundationhub/console-font
+chown "$OPERATOR" /etc/foundationhub/console-font 2>/dev/null || true
+c_ok "console text size -> $_font (Settings > TEXT SIZE can change it)"
+
 # getty autologin (spec §4 — decided: autologin straight to Hub).
 install_file "etc/systemd/system/getty@tty1.service.d/autologin.conf" \
   "/etc/systemd/system/getty@tty1.service.d/autologin.conf" 0644

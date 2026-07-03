@@ -149,6 +149,23 @@ main() {
   local hostname
   read -rp "> hostname [foundation]: " hostname
   hostname="${hostname:-foundation}"
+
+  # Console text size (feedback #1): the operator asked to be *asked* at setup,
+  # with a 2× default. Applied VT-wide by the session wrapper; changeable later
+  # in Settings > TEXT SIZE.
+  echo
+  echo "Console text size (changeable later in Settings > TEXT SIZE):"
+  echo "  1) normal        (8×16)"
+  echo "  2) large         (12×24)"
+  echo "  3) extra large   (16×32)   [default — 2× normal]"
+  local sizepick font="ter-v32b"
+  read -rp "> text size [3]: " sizepick
+  case "$sizepick" in
+    1) font="ter-v16b" ;;
+    2) font="ter-v24b" ;;
+    *) font="ter-v32b" ;;
+  esac
+  c_info "text size: $font"
   echo
   echo "Root password: used only at the rescue shell (Ctrl-Alt-F2 / recovery)."
   echo "Leave empty to LOCK the root account (rescue then needs this USB)."
@@ -261,6 +278,7 @@ EOF
   arch-chroot "$MNT" /usr/bin/env \
     FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1 \
     HARDWARE_PROFILE="$profile" \
+    FOUNDATION_CONSOLE_FONT="$font" \
     "$REPO/install/run-all.sh"
 
   # ── 8. bootloader ───────────────────────────────────────────────────────────

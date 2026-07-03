@@ -5,7 +5,7 @@ Home Hub) succeeded on the mini PC testbed. This is the operator's raw
 feedback from that first session, itemized for follow-up work. Items are
 UX-focused; none block installs.
 
-## 1. Text size (setup + settings)  — HIGH
+## 1. Text size (setup + settings)  — HIGH — ✅ FIXED (2026-07-03)
 - The console text is too small. **Default should be twice the current
   size**, and the installer/first-boot setup should *ask* about text size.
 - Users must also be able to change text size later in **Settings**.
@@ -13,6 +13,21 @@ UX-focused; none block installs.
   `ter-v16b` — `ter-v32b` is the 2× Terminus bitmap; see
   `install/02-console-kiosk.sh` / theme). A per-user setting needs a hook in
   `hub/foundationhub/screens/settings.py` plus persistence.
+- Fixed: text size is now a VT-wide `setfont` face persisted in one
+  operator-writable file, `/etc/foundationhub/console-font`.
+  - **Default is now `ter-v32b`** (16×32, the 2× face) — the session wrapper
+    (`system/usr/local/bin/foundationhub-session`) reads the file and falls
+    back to that default.
+  - The **installer asks** ("normal / large / extra large", default 2×) and
+    seeds the file via `FOUNDATION_CONSOLE_FONT` →
+    `install/02-console-kiosk.sh`.
+  - **Settings** (`FUNCTIONS → TEXT SIZE`) changes it live and persists it —
+    logic in the new `hub/foundationhub/consolefont.py`
+    (`hub/tests/test_consolefont.py`). NOTE: the "settings.py" pointer was
+    stale — the settings area is Functions Control (`screens/functions.py`).
+    The setting is machine-wide (like theme/brightness), not per-user: real
+    per-account sessions are still `[TODO(hardware)]`, and `setfont` is a
+    VT-global op, so a true per-user font waits on that.
 
 ## 2. Rogue is missing from Recreation  — expected, but wants prioritizing
 - Operator looked for **Rogue (the original)** and the **1985-style visual

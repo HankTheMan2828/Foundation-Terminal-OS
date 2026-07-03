@@ -19,7 +19,8 @@ intel-ucode
 # one from the BIOS. A hardware profile whose device glue genuinely needs a
 # display stack (e.g. zenbook-duo-2024's dual-panel Wayland/wlr-randr glue)
 # adds cage/kitty/wlr-randr/seatd in ITS packages.txt — see docs/PROFILES.md.
-terminus-font   # bitmap console font for the phosphor look (setfont ter-v16b)
+terminus-font   # bitmap console faces for the phosphor look + text-size setting
+                # (feedback #1: ter-v16b/v24b/v32b; default ter-v32b, the 2× face)
 
 # --- boot (spec §3) ---
 grub
