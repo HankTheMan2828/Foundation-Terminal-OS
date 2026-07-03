@@ -176,19 +176,79 @@ if ($confirm -cne 'ERASE') {
 }
 
 # ── 3. write the image ───────────────────────────────────────────────────────
-$n = $target.Number
-Say 'Preparing the stick...'
-try { Set-Disk -Number $n -IsReadOnly $false -ErrorAction SilentlyContinue } catch {}
-try { Clear-Disk -Number $n -RemoveData -RemoveOEM -Confirm:$false } catch {
-  # a factory-blank / uninitialized stick has nothing to clear
+# Windows refuses raw writes to a disk while any volume on it counts as
+# mounted. The reliable sequence (same as Rufus/Win32DiskImager) is: lock and
+# dismount every volume on the stick, HOLD those locks, and only then stream
+# to \\.\PHYSICALDRIVEn.
+if (-not ([System.Management.Automation.PSTypeName]'RawDisk').Type) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+public static class RawDisk {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern SafeFileHandle CreateFile(string name, uint access, uint share,
+    IntPtr sec, uint disposition, uint flags, IntPtr template);
+  [DllImport("kernel32.dll", SetLastError = true)]
+  static extern bool DeviceIoControl(SafeFileHandle h, uint code,
+    IntPtr inBuf, uint inSize, IntPtr outBuf, uint outSize,
+    out uint returned, IntPtr overlapped);
+
+  const uint GENERIC_READ  = 0x80000000;
+  const uint GENERIC_WRITE = 0x40000000;
+  const uint SHARE_RW      = 0x3;          // FILE_SHARE_READ | FILE_SHARE_WRITE
+  const uint OPEN_EXISTING = 3;
+  public const uint FSCTL_LOCK_VOLUME     = 0x00090018;
+  public const uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
+
+  public static SafeFileHandle Open(string path, bool write) {
+    uint access = write ? (GENERIC_READ | GENERIC_WRITE) : GENERIC_READ;
+    var h = CreateFile(path, access, SHARE_RW, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+    if (h.IsInvalid)
+      throw new IOException(string.Format("CreateFile('{0}') failed (win32 error {1})",
+        path, Marshal.GetLastWin32Error()));
+    return h;
+  }
+
+  public static void Fsctl(SafeFileHandle h, uint code) {
+    uint ret;
+    if (!DeviceIoControl(h, code, IntPtr.Zero, 0, IntPtr.Zero, 0, out ret, IntPtr.Zero))
+      throw new IOException(string.Format("DeviceIoControl(0x{0:X}) failed (win32 error {1})",
+        code, Marshal.GetLastWin32Error()));
+  }
 }
-# Offline keeps Windows from grabbing the new partitions mid-write.
-try { Set-Disk -Number $n -IsOffline $true } catch {}
+'@
+}
+
+$n = $target.Number
+Say 'Preparing the stick (dismounting its volumes)...'
+try { Set-Disk -Number $n -IsReadOnly $false -ErrorAction SilentlyContinue } catch {}
+$volHandles = @()
+$volPaths = @(Get-Partition -DiskNumber $n -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.AccessPaths } |
+              Where-Object { $_ -like '\\?\Volume*' } |
+              ForEach-Object { $_.TrimEnd('\') } | Sort-Object -Unique)
+foreach ($vp in $volPaths) {
+  try {
+    $vh = [RawDisk]::Open($vp, $true)
+    [RawDisk]::Fsctl($vh, [RawDisk]::FSCTL_LOCK_VOLUME)
+    [RawDisk]::Fsctl($vh, [RawDisk]::FSCTL_DISMOUNT_VOLUME)
+    $volHandles += $vh
+  } catch {
+    Bad "Could not lock a volume on the stick ($vp): $($_.Exception.Message)"
+    Bad 'Close any Explorer window or program using the stick and run this again.'
+    foreach ($h in $volHandles) { $h.Close() }
+    Read-Host 'Press ENTER to close'
+    exit 1
+  }
+}
 
 Say 'Writing the installer (this takes a few minutes - do not unplug)...'
 $src = [IO.File]::OpenRead($IsoPath)
-$dst = New-Object IO.FileStream("\\.\PHYSICALDRIVE$n",
-        [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::None)
+$dst = New-Object IO.FileStream(([RawDisk]::Open("\\.\PHYSICALDRIVE$n", $true)),
+        [IO.FileAccess]::Write)
 try {
   $buf = New-Object byte[] (4MB)
   $done = [long]0
@@ -209,9 +269,18 @@ try {
       -PercentComplete ([math]::Min($pct, 100))
   }
   $dst.Flush($true)
+} catch [System.UnauthorizedAccessException] {
+  Bad 'Windows refused the raw write even with the stick''s volumes locked.'
+  Bad 'Usual causes: antivirus / Windows "Controlled folder access" blocking'
+  Bad 'disk writes, or something reopened the stick mid-write. Try excluding'
+  Bad 'PowerShell in your AV for a moment, or write the same ISO with Rufus'
+  Bad 'or balenaEtcher instead - the ISO itself is fine.'
+  Read-Host 'Press ENTER to close'
+  exit 1
 } finally {
   $dst.Close()
   $src.Close()
+  foreach ($h in $volHandles) { $h.Close() }
   Write-Progress -Activity 'Writing installer to USB' -Completed
 }
 
