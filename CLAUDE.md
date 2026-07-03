@@ -1,4 +1,7 @@
-# Project Rules — new-computer-land (Foundation TerminalOS)
+# Project Rules — Foundation-Terminal-OS (Foundation TerminalOS)
+
+> GitHub: `HankTheMan2828/Foundation-Terminal-OS` (renamed 2026-07-02 from
+> `new-computer-land` — update any lingering references you find).
 
 ## Branching policy — SINGLE MAINLINE ONLY (read this first)
 

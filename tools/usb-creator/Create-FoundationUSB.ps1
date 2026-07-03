@@ -24,7 +24,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$GitHubRepo = 'HankTheMan2828/new-computer-land'
+$GitHubRepo = 'HankTheMan2828/Foundation-Terminal-OS'
 
 function Say([string]$m)  { Write-Host "[*] $m" -ForegroundColor Yellow }
 function Good([string]$m) { Write-Host "[+] $m" -ForegroundColor Green }

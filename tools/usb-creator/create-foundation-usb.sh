@@ -9,7 +9,7 @@
 # system lives on — and the write is gated behind typing ERASE in full.
 set -euo pipefail
 
-GITHUB_REPO="HankTheMan2828/new-computer-land"
+GITHUB_REPO="HankTheMan2828/Foundation-Terminal-OS"
 
 c_info() { printf '\033[1;33m[*]\033[0m %s\n' "$*"; }
 c_ok()   { printf '\033[1;32m[+]\033[0m %s\n' "$*"; }

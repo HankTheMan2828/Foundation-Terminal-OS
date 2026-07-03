@@ -98,7 +98,7 @@ carries the whole OS plus an offline copy of every package, and any ordinary
 PC (Windows, macOS, or Linux) can write it to a USB stick:
 
 1. **Get the ISO** — download `foundation-terminalos-<date>-x86_64.iso` from
-   the [Releases page](https://github.com/HankTheMan2828/new-computer-land/releases)
+   the [Releases page](https://github.com/HankTheMan2828/Foundation-Terminal-OS/releases)
    (CI builds it automatically), or build it yourself with
    `sudo ./image/build-iso.sh` (Arch or the Docker one-liner in
    [`image/README.md`](image/README.md)).
