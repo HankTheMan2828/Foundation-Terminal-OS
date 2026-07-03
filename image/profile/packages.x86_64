@@ -20,6 +20,10 @@ e2fsprogs
 grub
 efibootmgr
 
+# the live medium's own BIOS bootloader (archiso's bios.syslinux.* modes pull
+# the binaries from this package inside the live rootfs)
+syslinux
+
 # optional network fallback (only needed if the ISO was built without the
 # embedded offline package repo) + rescue-shell comfort
 networkmanager

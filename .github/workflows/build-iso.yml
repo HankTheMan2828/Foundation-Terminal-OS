@@ -25,7 +25,8 @@ jobs:
       options: --privileged # mkarchiso/pacstrap need real mounts
     steps:
       - name: Install build tools
-        run: pacman -Syu --noconfirm archiso git
+        # grub: mkarchiso's uefi.grub boot mode runs grub-install on the host
+        run: pacman -Syu --noconfirm archiso grub git
 
       - uses: actions/checkout@v4
 

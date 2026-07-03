@@ -13,7 +13,7 @@
 # No Arch box? From this repo's root, with Docker:
 #
 #   docker run --privileged --rm -v "$PWD:/repo" archlinux:latest \
-#     bash -c 'pacman -Syu --noconfirm archiso git && /repo/image/build-iso.sh'
+#     bash -c 'pacman -Syu --noconfirm archiso grub git && /repo/image/build-iso.sh'
 #
 # Flags/env:
 #   --skip-offline-repo   build a smaller ISO with no embedded packages; the

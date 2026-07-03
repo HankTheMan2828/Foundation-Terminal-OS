@@ -28,7 +28,7 @@ runs on Arch. Two ways:
 **On an Arch machine** (root, network required for the build itself):
 
 ```sh
-pacman -S archiso
+pacman -S archiso grub      # grub: the uefi.grub boot mode runs grub-install on the host
 sudo ./image/build-iso.sh
 ```
 
@@ -36,7 +36,7 @@ sudo ./image/build-iso.sh
 
 ```sh
 docker run --privileged --rm -v "$PWD:/repo" archlinux:latest \
-  bash -c 'pacman -Syu --noconfirm archiso git && /repo/image/build-iso.sh'
+  bash -c 'pacman -Syu --noconfirm archiso grub git && /repo/image/build-iso.sh'
 ```
 
 Output: `image/out/foundation-terminalos-<date>-x86_64.iso`.
@@ -92,10 +92,11 @@ from there (see `docs/USERS.md`).
 ```
 build-iso.sh          the whole pipeline (stage → embed → offline repo → mkarchiso)
 profile/              archiso profile
-  profiledef.sh       ISO identity, GRUB boot modes (BIOS + UEFI), file perms
+  profiledef.sh       ISO identity, boot modes (BIOS syslinux + UEFI GRUB), file perms
   packages.x86_64     LIVE environment packages only (installer tooling)
   pacman.conf         build-time pacman config
-  grub/               ISO boot menu
+  grub/               ISO boot menu (UEFI)
+  syslinux/           ISO boot menu (BIOS) — keep entries in step with grub/
   airootfs/           overlaid onto the live image's /
     usr/local/bin/foundation-install    the installer TUI
     root/.bash_profile                  autolaunch on tty1
