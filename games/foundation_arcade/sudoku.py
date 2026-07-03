@@ -116,6 +116,8 @@ def run(win) -> int:
 
     while True:
         top, left = chrome.draw_chrome(win, labels.GAME_SUDOKU, labels.SUDOKU_HINT)
+        # N cells + 2 box-gap rows/double-cols (see _draw_board's gap_r/gap_c).
+        top, left = chrome.draw_playfield(win, top, left, N + 2, N * 2 + 4)
         _draw_board(win, top, left, game)
         if game.solved:
             chrome.draw_statusbar(win, labels.SUDOKU_SOLVED)

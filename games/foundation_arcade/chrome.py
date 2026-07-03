@@ -86,6 +86,36 @@ def draw_chrome(win, title: str, subtitle: str = "") -> tuple[int, int]:
     return (5, 4)
 
 
+def draw_playfield(win, top: int, left: int, height: int, width: int) -> tuple[int, int]:
+    """Center a `height` x `width` playfield inside the chrome's content area
+    and draw a border around it (feedback: games were corner-anchored and
+    borderless on large consoles). Returns the interior (top, left); games
+    keep drawing cells exactly as before, just from this recentered origin."""
+    h, w = win.getmaxyx()
+    avail_h = max(0, (h - 3) - top)
+    avail_w = max(0, (w - 1) - left)
+    box_h, box_w = height + 2, width + 2
+    box_top = top + max(0, (avail_h - box_h) // 2)
+    box_left = left + max(0, (avail_w - box_w) // 2)
+    a = attr(PAIR_ACCENT)
+    try:
+        win.attron(a)
+        try:
+            win.hline(box_top, box_left, curses.ACS_HLINE, box_w)
+            win.hline(box_top + box_h - 1, box_left, curses.ACS_HLINE, box_w)
+            win.vline(box_top, box_left, curses.ACS_VLINE, box_h)
+            win.vline(box_top, box_left + box_w - 1, curses.ACS_VLINE, box_h)
+            win.addch(box_top, box_left, curses.ACS_ULCORNER)
+            win.addch(box_top, box_left + box_w - 1, curses.ACS_URCORNER)
+            win.addch(box_top + box_h - 1, box_left, curses.ACS_LLCORNER)
+            win.addch(box_top + box_h - 1, box_left + box_w - 1, curses.ACS_LRCORNER)
+        except curses.error:
+            pass
+    finally:
+        win.attroff(a)
+    return box_top + 1, box_left + 1
+
+
 def draw_statusbar(win, text: str, *, warn: bool = False) -> None:
     if _ui is not None:
         _ui.draw_statusbar(win, text, warn=warn)

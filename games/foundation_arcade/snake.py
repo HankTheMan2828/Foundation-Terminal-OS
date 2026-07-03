@@ -76,6 +76,7 @@ def run(win) -> int:
 
     while True:
         top, left = chrome.draw_chrome(win, labels.GAME_SNAKE)
+        top, left = chrome.draw_playfield(win, top, left, game.height, game.width * 2)
         _draw_board(win, top, left, game)
         status = labels.PAUSED if paused else (
             f"{labels.SCORE} {game.score}   {labels.BEST} {max(best, game.score)}")

@@ -110,6 +110,7 @@ def run(win) -> int:
 
     while True:
         top, left = chrome.draw_chrome(win, labels.GAME_2048)
+        top, left = chrome.draw_playfield(win, top, left, game.size, game.size * 6)
         _draw_board(win, top, left, game)
         chrome.draw_statusbar(
             win, f"{labels.SCORE} {game.score}   {labels.BEST} {max(best, game.score)}")
