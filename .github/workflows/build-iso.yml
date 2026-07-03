@@ -12,7 +12,7 @@ name: build-iso
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
+    tags: ["v*", "TerminalOS-v*"]
 
 permissions:
   contents: write # release creation

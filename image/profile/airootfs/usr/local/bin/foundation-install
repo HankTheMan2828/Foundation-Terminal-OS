@@ -198,6 +198,9 @@ Architecture = x86_64
 # Our own offline mirror, populated at ISO build time from signed Arch
 # mirrors; the file:// copy itself is not re-signed.
 SigLevel = Never
+# pacman ≥7 sandboxes retrieval to the `alpm` user, which can't read/write
+# root-owned install paths; pointless for a local file:// copy anyway.
+DisableSandbox
 
 [foundation]
 Server = file://$PKGREPO

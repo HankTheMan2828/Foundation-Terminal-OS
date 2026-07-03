@@ -99,7 +99,13 @@ else
   fi
 
   c_info "downloading ${#PKGS[@]} packages (plus dependencies)…"
-  pacman -Syw --noconfirm --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}"
+  # pacman ≥7 drops downloads to an unprivileged `alpm` user, which cannot
+  # write into our root-owned work/temp dirs ("could not open ... .part:
+  # Permission denied"). We're root building an image, not touching this
+  # host — run the download unsandboxed where the flag exists.
+  SANDBOX=()
+  pacman -S --help 2>&1 | grep -q -- --disable-sandbox && SANDBOX=(--disable-sandbox)
+  pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}"
   rm -rf "$DBTMP"
   rm -f "$PKGDIR"/*.sig
   repo-add --quiet "$PKGDIR/foundation.db.tar.gz" "$PKGDIR"/*.pkg.tar.*
