@@ -50,12 +50,23 @@ find_iso() {
   c_info "No installer ISO found on this computer." >&2
   read -rp "> download the latest release now? [Y/n]: " ans
   [[ "${ans,,}" == n* ]] && { c_warn "nothing to write — pass an ISO path as the first argument"; exit 1; }
-  local url
-  url="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest" \
+  # the release list (not /latest, which 404s on a repo with no releases yet)
+  local json url
+  json="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases")" || {
+    c_warn "could not reach GitHub — check your internet connection, or download"
+    c_warn "the ISO manually from the Releases page and pass its path as an argument"
+    exit 1
+  }
+  url="$(printf '%s' "$json" \
          | grep -o '"browser_download_url": *"[^"]*\.iso"' | head -1 | cut -d'"' -f4 || true)"
   [[ -n "$url" ]] || {
-    c_warn "could not find an ISO in the latest GitHub release of $GITHUB_REPO"
-    c_warn "download it manually from the Releases page (or build it with image/build-iso.sh)"
+    if [[ "$(printf '%s' "$json" | tr -d '[:space:]')" == "[]" ]]; then
+      c_warn "the project hasn't published a release yet, so there is no ISO to download"
+    else
+      c_warn "no GitHub release of $GITHUB_REPO has an ISO attached"
+    fi
+    c_warn "a maintainer publishes one by pushing a v* tag (CI attaches the ISO);"
+    c_warn "until then, build it with image/build-iso.sh and pass its path as an argument"
     exit 1
   }
   cand="$SCRIPT_DIR/$(basename "$url")"

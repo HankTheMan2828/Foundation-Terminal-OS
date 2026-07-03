@@ -93,16 +93,25 @@ function Find-Iso {
   }
   try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $rel = Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases/latest"
+    # the release list (not /latest, which 404s on a repo with no releases yet)
+    $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
   } catch {
-    Bad "Could not reach GitHub releases for $GitHubRepo ($($_.Exception.Message))."
-    Bad 'Download the ISO manually from the Releases page (or build it with'
-    Bad 'image/build-iso.sh), then run this again.'
+    Bad "Could not reach GitHub ($($_.Exception.Message))."
+    Bad 'Check your internet connection and try again, or download the ISO'
+    Bad 'manually from the Releases page and put it next to this script.'
     exit 1
   }
-  $asset = $rel.assets | Where-Object { $_.name -like '*.iso' } | Select-Object -First 1
+  $asset = $rels | ForEach-Object { $_.assets } |
+           Where-Object { $_.name -like '*.iso' } | Select-Object -First 1
   if (-not $asset) {
-    Bad "The latest release ($($rel.tag_name)) has no ISO attached."
+    if ($rels.Count -eq 0) {
+      Bad "The project hasn't published a release yet, so there is no ISO to download."
+    } else {
+      Bad "No release of $GitHubRepo has an ISO attached."
+    }
+    Bad 'A maintainer publishes one by pushing a v* tag (CI builds and attaches'
+    Bad 'the ISO automatically). Until then: build it with image/build-iso.sh'
+    Bad 'and put the ISO next to this script, then run this again.'
     exit 1
   }
   $dest = Join-Path (Join-Path $env:USERPROFILE 'Downloads') $asset.name
