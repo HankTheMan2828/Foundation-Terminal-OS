@@ -1,0 +1,6 @@
+# The USB-creator files get attached to GitHub releases from a Linux CI
+# checkout — pin Windows-native formats to CRLF so downloads run correctly,
+# and everything shell-side to LF so it runs on the live ISO / target.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sh  text eol=lf

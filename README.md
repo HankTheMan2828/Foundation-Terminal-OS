@@ -91,27 +91,33 @@ implementation in the MS-DOS mold, since Linux/Python physically cannot go
 there; design-doc-first). See "Capability tiers" in
 [`docs/PROFILES.md`](docs/PROFILES.md) and [`docs/BUILD-QUEUE.md`](docs/BUILD-QUEUE.md) §6.
 
-## Quick start — flash it (recommended)
+## Quick start — make an install USB (recommended, no prerequisites)
 
-Build the **installer ISO** once, flash it to a USB stick, and boot any
-x86_64 machine (mini PC, thin client, the Zenbook) from it — the on-screen
-installer partitions the disk (gated behind typing `ERASE`), installs the
-whole OS from packages embedded in the ISO (no network needed on the target),
-and reboots into the Home Hub:
+Nothing needs to be installed first — not Arch, not Linux. The installer ISO
+carries the whole OS plus an offline copy of every package, and any ordinary
+PC (Windows, macOS, or Linux) can write it to a USB stick:
 
-```sh
-sudo ./image/build-iso.sh        # on Arch with `archiso` (or the Docker
-                                 # one-liner in image/README.md)
-sudo dd if=image/out/foundation-terminalos-*.iso of=/dev/sdX bs=4M \
-        status=progress oflag=sync
-```
+1. **Get the ISO** — download `foundation-terminalos-<date>-x86_64.iso` from
+   the [Releases page](https://github.com/HankTheMan2828/new-computer-land/releases)
+   (CI builds it automatically), or build it yourself with
+   `sudo ./image/build-iso.sh` (Arch or the Docker one-liner in
+   [`image/README.md`](image/README.md)).
+2. **Write the USB stick** with the creator in
+   [`tools/usb-creator/`](tools/usb-creator/README.md): on Windows,
+   double-click `FoundationUSBCreator.cmd` (it can even download the ISO for
+   you); on macOS/Linux, `sudo ./tools/usb-creator/create-foundation-usb.sh`.
+   Rufus/Etcher/Ventoy/`dd` work too.
+3. **Boot the target machine from the stick** (boot-menu key at power-on —
+   usually F12, F11, Esc, F2, or Del) and follow the on-screen installer. It
+   partitions the disk (gated behind typing `ERASE`), installs everything
+   offline, and reboots into the Home Hub.
 
-See [`image/README.md`](image/README.md) for the details.
+See [`docs/INSTALL.md`](docs/INSTALL.md) for the full walkthrough.
 
-## Quick start — script install onto an existing Arch base
+## Quick start — script install onto an existing Arch base (developers)
 
-> Do a minimal Arch base install first (`pacstrap` base + `linux-lts`), boot
-> it, then:
+> The manual path, for iterating on the OS from a shell. Do a minimal Arch
+> base install first (`pacstrap` base + `linux-lts`), boot it, then:
 
 ```sh
 git clone <this-repo> /opt/terminal-os     # any path works; it's recorded at

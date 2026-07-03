@@ -12,6 +12,14 @@ The ISO embeds two things at build time:
 2. **an offline package repo** with every package the installed system needs
    — so installing on the target requires **no network at all**.
 
+## Getting the ISO without building it
+
+CI builds the ISO automatically (`.github/workflows/build-iso.yml`): every
+tagged release has it attached on the GitHub Releases page, next to the USB
+creator programs from [`tools/usb-creator/`](../tools/usb-creator/README.md),
+and the workflow can be run by hand ("Run workflow") to get it as a build
+artifact. End users should start there — no Arch machine involved anywhere.
+
 ## Building the ISO
 
 Building uses [archiso](https://wiki.archlinux.org/title/Archiso), which only
@@ -43,13 +51,21 @@ Options:
 
 ## Flashing
 
+The friendly way, on any OS, is the USB creator in
+[`tools/usb-creator/`](../tools/usb-creator/README.md) — double-click
+`FoundationUSBCreator.cmd` on Windows, or
+`sudo ./tools/usb-creator/create-foundation-usb.sh` on macOS/Linux. It only
+offers removable USB disks and gates the write behind typing `ERASE`.
+
+By hand:
+
 ```sh
 lsblk                                        # find your USB stick — CAREFULLY
 sudo dd if=image/out/foundation-terminalos-*.iso \
         of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-Etcher and Ventoy also work (the ISO carries a `loopback.cfg`).
+Rufus, Etcher, and Ventoy also work (the ISO carries a `loopback.cfg`).
 
 ## What the installer does on the target
 

@@ -4,21 +4,37 @@
 > that can restrict access. **Not on a machine you need a normal shell on.**
 > Do a dry read of every script first; they print what they'll do.
 
-## The flashable installer (mini PCs, or any machine from bare metal)
+## The normal path: the install USB (no prerequisites)
 
-You don't need a hand-done Arch base install anymore: `image/build-iso.sh`
-produces a bootable **installer ISO** that embeds this repo plus an offline
-copy of every package the OS needs. Flash it to USB, boot the target from it,
-and the on-screen installer handles profile choice, disk selection (wipe is
-gated behind typing `ERASE`), partitioning, and the entire install below —
-non-interactively, offline — then reboots into the Home Hub. See
-[`image/README.md`](../image/README.md). The rest of this guide is the manual
-path, and it's also precisely what the ISO's installer executes inside the
-target chroot (`FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1
-install/run-all.sh`), so everything here — Frank isolation checks §4
-included — applies to both.
+**There is nothing to install first — no Arch, no Linux, nothing.** Arch is
+baked into the installer image itself: the ISO embeds this repo plus an
+offline copy of every package the OS needs, so the target machine starts
+from bare metal and needs no network. The whole flow is:
 
-## 0. Prerequisites
+1. **Get the installer ISO.** Download it from the repo's GitHub Releases
+   page (CI builds it automatically — see `.github/workflows/build-iso.yml`),
+   or build it yourself with [`image/build-iso.sh`](../image/README.md).
+2. **Write it to a USB stick (8 GB+) on any ordinary PC.** Use the USB
+   creator in [`tools/usb-creator/`](../tools/usb-creator/README.md) —
+   on Windows that's double-clicking `FoundationUSBCreator.cmd`; on
+   macOS/Linux it's `sudo ./create-foundation-usb.sh`. (Rufus, Etcher,
+   Ventoy, or `dd` work too.)
+3. **Boot the target machine from the stick** (boot-menu key at power-on:
+   usually F12, F11, Esc, F2, or Del) and follow the on-screen installer:
+   profile choice, disk selection (the wipe is gated behind typing `ERASE`),
+   hostname, root password — then it installs everything offline and reboots
+   into the Home Hub.
+
+The rest of this guide is the **manual path** for developers, and it's also
+precisely what the ISO's installer executes inside the target chroot
+(`FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1 install/run-all.sh`), so
+everything below — Frank isolation checks §4 included — applies to both.
+
+## 0. Manual-path prerequisites (developers only)
+
+> Skip this whole numbered guide if you're using the install USB above — the
+> ISO satisfies all of it automatically. This path exists for iterating on
+> the OS from a shell.
 
 1. A **minimal Arch base install** already booted:
    - `pacstrap /mnt base linux-lts linux-firmware` (LTS kernel — spec §1)

@@ -1,0 +1,66 @@
+# Builds the flashable installer ISO (image/build-iso.sh) so nobody ever
+# needs an Arch machine: CI runs archiso inside an Arch container and
+# publishes the result.
+#
+#   - every manual run ("Run workflow" button) uploads the ISO as a build
+#     artifact you can download from the run page
+#   - pushing a tag like v2026.07 additionally creates a GitHub Release with
+#     the ISO, its SHA256SUMS, and the USB-creator programs attached — that
+#     release page is the end-user download, see tools/usb-creator/README.md
+name: build-iso
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # release creation
+
+jobs:
+  iso:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged # mkarchiso/pacstrap need real mounts
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm archiso git
+
+      - uses: actions/checkout@v4
+
+      - name: Build the ISO
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./image/build-iso.sh
+
+      - name: Checksums
+        run: cd image/out && sha256sum foundation-terminalos-*.iso > SHA256SUMS
+
+      - name: Upload ISO as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-terminalos-iso
+          path: |
+            image/out/foundation-terminalos-*.iso
+            image/out/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            Foundation TerminalOS installer.
+
+            **To install:** download the ISO plus the USB creator for your
+            computer (`FoundationUSBCreator.cmd` + `Create-FoundationUSB.ps1`
+            on Windows, `create-foundation-usb.sh` on macOS/Linux), run the
+            creator to write a USB stick, then boot the target machine from
+            it. Details: `tools/usb-creator/README.md` in the repo.
+          files: |
+            image/out/foundation-terminalos-*.iso
+            image/out/SHA256SUMS
+            tools/usb-creator/FoundationUSBCreator.cmd
+            tools/usb-creator/Create-FoundationUSB.ps1
+            tools/usb-creator/create-foundation-usb.sh
