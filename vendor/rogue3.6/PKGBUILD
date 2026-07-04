@@ -23,7 +23,30 @@ build() {
   # SCOREFILE macro to the shared, absolute path; permissions applied in
   # package(). -lncurses (not the bare -lcurses the Makefile defaults to):
   # Arch's ncurses package does not ship the old libcurses.so compat symlink.
-  make CC=gcc CFLAGS='-O2 -DSCOREFILE="/var/lib/rogue/rogue36.scr"' LIBS='-lncurses' rogue
+  # SCOREFILE's value must reach the C preprocessor as a quoted string
+  # literal, but this macro definition crosses two shells (PKGBUILD's bash,
+  # then the /bin/sh make spawns per recipe line) before gcc sees it -- an
+  # un-escaped `"..."` gets treated as shell quoting and stripped along the
+  # way, leaving cpp with a bare, unquoted path (syntax error in rip.c's
+  # `char *scorefile = SCOREFILE;`). The backslash-escaped `\"..\"` survives
+  # both shells so gcc receives a real string literal.
+  # This 1981 K&R-era source also needs two compatibility flags on a modern GCC,
+  # neither of which touches the vendored source (kept verbatim per
+  # docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2):
+  #   -std=gnu17            rogue.h declares function-pointer members with the
+  #                          old "unspecified arguments" empty-parameter syntax
+  #                          (`void (*d_func)();`, called with an argument in
+  #                          daemon.c) -- under GCC's current default standard
+  #                          (gnu23) `()` means "no arguments" and calling it
+  #                          with one is a hard error. gnu17 restores the
+  #                          older semantics.
+  #   -Wno-error=implicit-int, -Wno-error=implicit-function-declaration
+  #                          main.c uses old-style K&R function definitions
+  #                          (`main(argc, argv, envp)`, no types). GCC 14+
+  #                          made these two diagnostics hard errors by default
+  #                          in every -std mode as a hardening change; downgrade
+  #                          them back to warnings so 1981 C still builds.
+  make CC=gcc CFLAGS='-O2 -std=gnu17 -Wno-error=implicit-int -Wno-error=implicit-function-declaration -DSCOREFILE=\"/var/lib/rogue/rogue36.scr\"' LIBS='-lncurses' rogue
 }
 
 package() {

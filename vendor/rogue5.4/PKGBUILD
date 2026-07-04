@@ -24,6 +24,14 @@ build() {
   # a shared top-ten board (Arch's filesystem package ships a "games" group
   # by default). This is the project's real configure/make -- no game logic
   # patched.
+  # CFLAGS additions (appended to makepkg.conf's own CFLAGS, not replacing
+  # them): this 1985 K&R-era source shares rogue3.6's function-pointer members
+  # declared with the old "unspecified arguments" empty-parameter syntax
+  # (rogue.h's `void (*d_func)();`, called with an argument in daemon.c) --
+  # under GCC's current default standard (gnu23) that's a hard error, not a
+  # warning. -std=gnu17 restores the older semantics without touching the
+  # vendored source (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2).
+  CFLAGS="$CFLAGS -std=gnu17" \
   ./configure --prefix=/usr \
     --with-program-name=rogue54 \
     --enable-setgid=games \
