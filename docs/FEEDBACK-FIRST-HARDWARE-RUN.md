@@ -29,13 +29,20 @@ UX-focused; none block installs.
     per-account sessions are still `[TODO(hardware)]`, and `setfont` is a
     VT-global op, so a true per-user font waits on that.
 
-## 2. Rogue is missing from Recreation  — expected, but wants prioritizing
-- Operator looked for **Rogue (the original)** and the **1985-style visual
-  remake** and couldn't find them. They were never built — the two-vintage
-  Rogue re-implementation is designed but awaiting approval
-  (`docs/ROGUELIKE-DESIGN.md`, `OPEN-QUESTIONS.md` §11).
-- Treat this as a signal of operator interest: surface the open design
-  questions and get the build approved/started.
+## 2. Rogue is missing from Recreation  — DOWNLOAD, don't build
+- Operator looked for **Rogue (the original)** and the **1985 version**
+  (the visually improved release) and couldn't find them.
+- **Operator decision (2026-07-03): do NOT build these in-house.** Both
+  versions are available on the web — download them, integrate into the
+  Recreation area, and make sure they're **stable on this OS** (kernel VT,
+  curses, no display stack). That's the whole scope.
+- This supersedes the in-house build plan for Rogue specifically
+  (`docs/ROGUELIKE-DESIGN.md` stays parked; the "Foundation Depths"
+  modernized variant remains a possible future in-house project).
+- Integration constraint: the OS installs **offline** from the ISO's
+  embedded package repo — upstream Rogue must end up installable that way
+  (official-repo/AUR package baked into the offline repo, or source
+  vendored and built at ISO build time — not fetched on the target).
 
 ## 3. Arcade games: center + border  — polish — ✅ FIXED (2026-07-03)
 - Games play great. They should render **centered on screen** with a
