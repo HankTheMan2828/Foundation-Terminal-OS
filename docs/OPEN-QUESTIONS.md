@@ -275,6 +275,68 @@ until the doc is approved. Decisions (details in the doc §5):
   terminals-as-lore, section themes) and the modernization list (doc §3.3 —
   closed list; anything not on it is out).
 
+## 12. Update system — trust decisions (feedback item 11) — ⬜ awaiting sign-off
+
+Full design: [`docs/UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md) (🟨 drafted
+2026-07-04 — **no code until this section is signed off**). The mechanics
+(USB = UPDATE mode on the release ISO; network = Settings → SYSTEM UPDATE;
+per-machine transport policy defaulting to `usb+wired`, wireless opt-in from
+Settings; no persistent daemon) are in the doc. What needs your decision is
+the trust model:
+
+- ⬜ **What verifies an update?** The release already carries `SHA256SUMS`
+  for the ISO, and the network payload would get one too — but a checksum
+  fetched from the same place as the payload proves integrity, not origin
+  (the trust anchor is GitHub + TLS). Options:
+  - (a) HTTPS + checksum only — simplest, trusts GitHub.
+  - (b) **[RECOMMENDED]** add a detached **minisign/signify signature**: one
+    project keypair, public key baked into the installed OS at install time,
+    every release artifact signed in CI. Tiny single-binary verifier, no GPG
+    daemon — fits DOS-grade minimalism. Key rotation ships as a signed
+    update; a lost key means machines update by USB until reinstalled.
+  - (c) full pacman-key/GPG signing of the package repo too — heaviest,
+    probably overkill while the offline repo is already `SigLevel Never` by
+    design.
+  - USB path either way: possession of the stick is the credential
+    (consistent with spec §6 placing physical access out of scope) — but the
+    same signature can be verified on the embedded payload as a corruption/
+    tamper check before applying. Include it?
+- ⬜ **Who may trigger an update?**
+  - USB path: whoever can boot the machine from USB (physical access).
+    Gate it further (setup code before UPDATE proceeds)? Recommendation:
+    no extra gate — physical is already the boundary, and the flow is
+    non-destructive.
+  - Network path: recommendation — **TECHNICIAN tier + setup-code
+    re-entry**, mechanically a polkit rule scoped to exactly
+    `start foundation-update.service` (fixed root logic, verified payload,
+    no operator-influenced inputs). Stricter alternative on the table:
+    network path only **notifies** that an update exists, applying always
+    requires the USB stick (zero new operator→root paths at all).
+  - Explicitly NOT Frank-gated: Frank observes and can flag, but update
+    authority stays a human/tier decision — keeping with "Frank decides
+    violations, not system administration." Confirm?
+- ⬜ **Who may change the transport policy** (including the wireless
+  opt-in)? Recommendation: TECHNICIAN tier, setup-code gated, written
+  through a root helper in the existing `foundationhub-account` pattern —
+  `/etc/foundation-update.conf` itself stays root-owned. In a company
+  deployment that means employees/guests can *see* the policy but only a
+  technician can loosen it.
+- ⬜ **Network payload scope (v1):** recommendation — network updates carry
+  the **OS payload only** (repo tree, ~MB); Arch base-package upgrades stay
+  USB-only, because the ISO's offline repo is the *tested* package set and
+  rolling mirrors would drift machines onto untested versions. A release
+  needing new packages flags `requires-usb` and the screen says so honestly.
+  Sign off or widen.
+- 🟥 **HARD RULE for sign-off — no update path may weaken Frank isolation.**
+  Stated as testable invariants in UPDATE-SYSTEM.md §6: no new
+  operator→root path (except, if approved, the one scoped oneshot start);
+  Frank state never reset — found while designing:
+  **`install/05-frank.sh` currently truncates `lockout.state` on re-run**,
+  so a naive re-run update would clear an active machine lockout; the fix
+  (no-clobber guard; lockouts survive updates and re-arm on the post-update
+  boot) is part of the design, §4.1. Isolation checks re-run at the end of
+  every update, failure = failed update. Approve the invariant list.
+
 ---
 
 ## Parking lot (raised by the spec, not yet needed)

@@ -259,7 +259,16 @@ UX-focused; none block installs.
   on `TERM=linux`: a bold `bkgd` survives `erase()` and bolds later text; after
   the fix `draw_chrome` clears it.
 
-## 11. Update system (USB and/or network)  — NEW SUBSYSTEM, design first
+## 11. Update system (USB and/or network)  — NEW SUBSYSTEM — 🟨 DESIGN DRAFTED (2026-07-04)
+Design written per the sketch below: [`docs/UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md)
+(USB = UPDATE mode in `foundation-install` on the release ISO, preserving
+`/home`/accounts/Frank state; network = Settings → SYSTEM UPDATE from GitHub
+releases; per-machine transport policy `usb` / `usb+wired` /
+`usb+wired+wireless`, default wired-only, wireless opt-in from Settings; no
+persistent daemon). Trust questions (verification/signing, who triggers, who
+sets policy, the Frank-isolation hard rule) routed to
+[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) §12 — **no code until sign-off**.
+
 Operator direction (2026-07-03, right after the first successful install):
 
 - The installed OS needs **a way to update**: over the internet **or via
