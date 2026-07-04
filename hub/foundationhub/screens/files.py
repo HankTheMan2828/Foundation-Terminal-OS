@@ -57,7 +57,7 @@ class FileManagerScreen(Screen):
             self._key = key
             index = self.menu.index
             self.menu = Menu(self._items(entries))
-            self.menu.index = min(index, max(0, len(self.menu.items) - 1))
+            self.menu.set_index(index)
 
     def _items(self, entries: list[fileops.Entry]) -> list[MenuItem]:
         items = []

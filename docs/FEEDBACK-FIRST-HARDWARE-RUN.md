@@ -224,12 +224,40 @@ UX-focused; none block installs.
   `hub/foundationhub/editor.py` to scale like every other Hub menu
   (`ui.Menu.draw`'s `w - 2*left`).
 
-## 10. BUG: colors shift to "super amber" after a few interactions
+## 10. BUG: colors shift to "super amber" after a few interactions  — ✅ FIXED (2026-07-03)
 - Reproduced by the operator: after a few clicks inside a **user's area**,
   the palette shifts to a much more saturated amber.
 - Smells like a color-pair/attribute leak (re-initializing pairs, or bold
   attribute stacking) in `hub/foundationhub/theme.py` / screen redraw
   paths. Needs investigation — find the repro, then the leak.
+- Root cause: a **sticky window background rendition**, not palette re-init.
+  A curses window's background attribute (set by `win.bkgd()`) survives
+  `erase()` and is OR'd into every cell drawn afterwards. The whole Hub draws
+  onto one shared `stdscr`, and `ui.full_screen_banner` (Frank's serious-alert
+  helper) set a **bold** background via `win.bkgd(" ", … | A_BOLD)`. Once that
+  ran, every later screen kept rendering bold — on the kernel VT bold amber is
+  the bright/intense "super amber", and it never recovered. (`theme.init` is
+  *not* the culprit: on the 8/16-colour VT `can_change_color()` is true but
+  `COLORS < 256`, so its `init_color` branch is correctly skipped — no palette
+  redefinition happens there. The VT's unsupported `A_DIM` also collapses the
+  intended dim-vs-bold contrast, which is why the bold bleed reads as a flat,
+  over-saturated field rather than an obvious weight change.)
+- Fixed in `hub/foundationhub/ui.py`, two halves:
+  - `full_screen_banner` now paints its alert background by filling rows
+    explicitly instead of via `win.bkgd()`, so it never leaves a sticky
+    rendition on the shared window.
+  - `draw_chrome` — the single path every Hub screen redraws through — now
+    re-asserts the **normal** phosphor background (`win.bkgd(" ",
+    PAIR_NORMAL)`) each frame, so any stray bold/alert background heals on the
+    next redraw. This makes the Hub self-healing against *any* background-
+    rendition leak (a future banner wiring, or a launched console program that
+    exits mid-bold), not just the one call site.
+- Regression test `hub/tests/test_ui_theme_leak.py` models curses' sticky-
+  background semantics (verified against real curses under `TERM=linux`) and
+  asserts the banner sets no bold background and that body text drawn after a
+  banner renders at normal weight. Mechanism confirmed with a pty+pyte repro
+  on `TERM=linux`: a bold `bkgd` survives `erase()` and bolds later text; after
+  the fix `draw_chrome` clears it.
 
 ## 11. Update system (USB and/or network)  — NEW SUBSYSTEM, design first
 Operator direction (2026-07-03, right after the first successful install):

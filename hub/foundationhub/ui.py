@@ -20,6 +20,15 @@ KEYS_BACK = {27, curses.KEY_BACKSPACE, 127, 8, ord("h")}  # Esc / Backspace / h
 
 def draw_chrome(win, title: str, subtitle: str = "", *, scanlines: bool = True) -> tuple[int, int]:
     """Draw the CRT bezel + title bar. Returns the (top, left) of the content box."""
+    # Re-assert the normal phosphor rendition as the window background BEFORE
+    # erasing. A window's background attribute is sticky: it survives erase()
+    # and is OR'd into every cell drawn afterwards. If anything ever leaves a
+    # bold/alert background on this shared stdscr (e.g. full_screen_banner's
+    # bkgd), every later screen would keep rendering bold — the palette gets
+    # stuck on a saturated "super amber" and never recovers (feedback #10).
+    # Resetting here, on the one path every screen redraws through, makes the
+    # Hub self-healing against background-rendition leaks.
+    win.bkgd(" ", theme.attr(theme.PAIR_NORMAL))
     win.erase()
     h, w = win.getmaxyx()
 
@@ -206,8 +215,19 @@ def full_screen_banner(win, lines: list[str], *, alert: bool = True) -> None:
     win.erase()
     h, w = win.getmaxyx()
     pair = theme.PAIR_ALERT if alert else theme.PAIR_ACCENT
-    win.bkgd(" ", theme.attr(pair, bold=True))
+    a = theme.attr(pair, bold=True)
+    # Paint the alert background by filling rows explicitly rather than via
+    # win.bkgd(): a window background attribute is sticky and survives erase(),
+    # so setting a bold background here would bleed the bold rendition into
+    # every subsequent screen drawn on this shared window and lock the palette
+    # to a saturated "super amber" (feedback #10). draw_chrome resets the
+    # background each frame, but keeping the leak out of the source is cleaner.
+    for y in range(h):
+        try:
+            win.addstr(y, 0, " " * (w - 1), a)
+        except curses.error:
+            pass
     start = max(0, (h - len(lines)) // 2)
     for i, line in enumerate(lines):
-        _center(win, start + i, line, theme.attr(pair, bold=True))
+        _center(win, start + i, line, a)
     win.noutrefresh()
