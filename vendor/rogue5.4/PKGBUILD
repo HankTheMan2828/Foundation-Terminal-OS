@@ -47,7 +47,12 @@ build() {
   # under GCC's current default standard (gnu23) that's a hard error, not a
   # warning. -std=gnu17 restores the older semantics without touching the
   # vendored source (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2).
-  CFLAGS="$CFLAGS -std=gnu17" \
+  # -Wno-error=implicit-int, -Wno-error=implicit-function-declaration: same
+  # two downgrades rogue3.6 needs -- most of this source was ANSI-fied
+  # upstream, but pack.c's update_mdest() is still a K&R definition with no
+  # return type, and GCC 14+ makes that a hard error in every -std mode
+  # (broke the TerminalOS-v0.0.2 release build at ISO build time).
+  CFLAGS="$CFLAGS -std=gnu17 -Wno-error=implicit-int -Wno-error=implicit-function-declaration" \
   ./configure --prefix=/usr \
     --with-program-name=rogue54 \
     --enable-setgid=games \
