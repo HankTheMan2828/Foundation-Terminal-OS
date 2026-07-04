@@ -111,22 +111,32 @@ else
   # in vendor/rogue3.6 + vendor/rogue5.4 (see NOTICE.md in each); built here,
   # at ISO build time, from the vendored source -- never fetched on the
   # target. makepkg refuses to run as root, so a throwaway build user does it.
-  c_info "building vendored packages: rogue3.6, rogue5.4"
+  VENDORED=(rogue3.6 rogue5.4)
+  c_info "building vendored packages: ${VENDORED[*]}"
   pacman -S --needed --noconfirm base-devel ncurses
   BUILDROOT="$WORK/vendor-build"
   mkdir -p "$BUILDROOT"
   id -u foundation-builder >/dev/null 2>&1 || useradd -m -s /bin/bash foundation-builder
   chown foundation-builder:foundation-builder "$BUILDROOT"
-  for vpkg in rogue3.6 rogue5.4; do
+  for vpkg in "${VENDORED[@]}"; do
     rm -rf "$BUILDROOT/$vpkg"
     cp -r "$REPO_ROOT/vendor/$vpkg" "$BUILDROOT/$vpkg"
     chown -R foundation-builder:foundation-builder "$BUILDROOT/$vpkg"
     su foundation-builder -c "cd '$BUILDROOT/$vpkg' && makepkg --noconfirm --skipinteg"
     cp "$BUILDROOT/$vpkg"/*.pkg.tar.* "$PKGDIR/"
   done
-  c_ok "vendored packages built: rogue3.6, rogue5.4"
+  c_ok "vendored packages built: ${VENDORED[*]}"
 
-  c_info "downloading ${#PKGS[@]} packages (plus dependencies)…"
+  # The vendored names stay in install/packages.txt so foundation-install
+  # pacstraps them on the target, but they exist on no mirror -- pacman -Syw
+  # would die with "target not found". They're already in $PKGDIR from the
+  # makepkg step above, so drop them from the download list.
+  DOWNLOAD=()
+  for p in "${PKGS[@]}"; do
+    [[ " ${VENDORED[*]} " == *" $p "* ]] || DOWNLOAD+=("$p")
+  done
+
+  c_info "downloading ${#DOWNLOAD[@]} packages (plus dependencies)…"
   # pacman ≥7 drops downloads to an unprivileged `alpm` user, which cannot
   # write into our root-owned work/temp dirs ("could not open ... .part:
   # Permission denied"). We're root building an image, not touching this
@@ -134,10 +144,10 @@ else
   SANDBOX=()
   pacman -S --help 2>&1 | grep -q -- --disable-sandbox && SANDBOX=(--disable-sandbox)
   # one retry: rolling mirrors reset connections often enough to matter in CI
-  pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}" || {
+  pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${DOWNLOAD[@]}" || {
     c_warn "package download failed once — retrying in 15s"
     sleep 15
-    pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${PKGS[@]}"
+    pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${DOWNLOAD[@]}"
   }
 
   if [[ -n "${FOUNDATION_PKG_CACHE:-}" ]]; then
