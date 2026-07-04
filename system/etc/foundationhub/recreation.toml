@@ -4,19 +4,31 @@
 #
 # Each bucket maps to a genre; each game has a display name and an argv `exec`.
 
-# NetHack is the interim stand-in until the in-house roguelikes land
-# (docs/ROGUELIKE-DESIGN.md). Dungeon Crawl was dropped: `crawl` was never in
-# install/packages.txt, so the entry was a dead menu item on a real install.
+# Rogue (both classic vintages) -- feedback #2: real upstream binaries, not
+# an in-house build (see vendor/rogue5.4, vendor/rogue3.6, install/packages.txt).
+# 1985 (5.4.5) listed first/default per the operator's own ordering
+# (docs/ROGUELIKE-DESIGN.md §2.2: "the nicer one to play"); 1981 (3.6, the OG)
+# below it. NetHack is the interim stand-in until the in-house roguelike
+# (docs/ROGUELIKE-DESIGN.md) lands. Dungeon Crawl was dropped: `crawl` was
+# never in install/packages.txt, so the entry was a dead menu item on a real install.
 [bucket.roguelikes]
 games = [
-  { name = "NetHack",        exec = ["nethack"] },
+  { name = "Rogue (1985)",      exec = ["rogue54"] },
+  { name = "Rogue (1981, OG)",  exec = ["rogue"] },
+  { name = "NetHack",           exec = ["nethack"] },
 ]
 
 [bucket.arcade]
 # One in-house program, five games (BUILD-QUEUE §5 item 1). Retires
-# nsnake, vitetris, ninvaders, 2048, and nudoku in one shot.
+# nsnake, vitetris, ninvaders, 2048, and nudoku in one shot. Listed
+# individually (not nested under a "Foundation Arcade" sub-menu) per
+# operator request 2026-07-03 -- each `exec` picks the game directly.
 games = [
-  { name = "Foundation Arcade", exec = ["foundation-arcade"] },
+  { name = "Snake",         exec = ["foundation-arcade", "snake"] },
+  { name = "Falling Blocks", exec = ["foundation-arcade", "blocks"] },
+  { name = "2048",           exec = ["foundation-arcade", "2048"] },
+  { name = "Sudoku",         exec = ["foundation-arcade", "sudoku"] },
+  { name = "Invaders",       exec = ["foundation-arcade", "invaders"] },
 ]
 
 [bucket."puzzle / strategy"]

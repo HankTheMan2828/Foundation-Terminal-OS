@@ -71,3 +71,12 @@ python-requests
 # minimax AI. gnuchess was never listed here; recreation.toml now execs
 # foundation-chess.
 nethack
+# Rogue -- feedback #2 (docs/FEEDBACK-FIRST-HARDWARE-RUN.md): operator wanted
+# the real thing, download don't build. Both classic vintages, vendored
+# source (vendor/rogue3.6, vendor/rogue5.4) built into Arch packages at ISO
+# build time (image/build-iso.sh) and baked into the offline repo -- never
+# fetched on the target. rogue3.6 -> binary "rogue" (1981, OG); rogue5.4 ->
+# binary "rogue54" (1985, the authors' finished version). BSD-3, see NOTICE.md
+# in each vendor dir.
+rogue3.6
+rogue5.4

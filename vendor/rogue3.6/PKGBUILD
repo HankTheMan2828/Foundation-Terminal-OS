@@ -1,0 +1,42 @@
+# Maintainer: Foundation TerminalOS
+# Packages the vendored Rogue 3.6 (1981, Berkeley original) source in src/ —
+# see NOTICE.md for provenance/license. Built by image/build-iso.sh at ISO
+# build time and baked into the offline package repo; never fetched on the
+# target machine (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2).
+pkgname=rogue3.6
+pkgver=3.6.4
+pkgrel=1
+pkgdesc="Rogue: Exploring the Dungeons of Doom -- 1981 Berkeley original (classic vintage, kernel-console/curses)"
+arch=('x86_64')
+url="https://github.com/RoguelikeRestorationProject/rogue3.6"
+license=('BSD')
+depends=('ncurses')
+makedepends=('gcc' 'make')
+# Vendored locally (see src/, NOTICE.md) -- nothing to download or verify.
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/src"
+  # Upstream's plain Makefile hardcodes a cwd-relative scorefile and has no
+  # setgid/install machinery (unlike 5.4's autotools build) -- recompile the
+  # SCOREFILE macro to the shared, absolute path; permissions applied in
+  # package(). -lncurses (not the bare -lcurses the Makefile defaults to):
+  # Arch's ncurses package does not ship the old libcurses.so compat symlink.
+  make CC=gcc CFLAGS='-O2 -DSCOREFILE="/var/lib/rogue/rogue36.scr"' LIBS='-lncurses' rogue
+}
+
+package() {
+  cd "$startdir/src"
+  # setgid games: every account shares one top-ten board, the authentic 1981
+  # behavior (Arch's filesystem package ships a "games" group by default).
+  install -Dm2755 -g games rogue "$pkgdir/usr/bin/rogue"
+  install -Dm644 rogue.6 "$pkgdir/usr/share/man/man6/rogue.6"
+  install -Dm644 rogue36.doc "$pkgdir/usr/share/doc/rogue3.6/rogue36.doc"
+  install -Dm644 rogue36.cat "$pkgdir/usr/share/doc/rogue3.6/rogue36.cat"
+  install -Dm644 LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE.TXT"
+  # Shared score dir: setgid so a lockfile created at runtime also lands in
+  # group "games" (matches the board file's own group-write permission).
+  install -dm2775 -g games "$pkgdir/var/lib/rogue"
+  install -Dm664 -g games /dev/null "$pkgdir/var/lib/rogue/rogue36.scr"
+}

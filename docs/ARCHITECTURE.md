@@ -316,11 +316,15 @@ monitor — are native Hub screens (`screens/notes.py`, `screens/files.py`,
 `fileops.py`, `sysinfo.py`); the Hub draws them directly. Heavier apps — the
 media player and the games — are separate in-house programs the Hub still
 reaches with `launch()`, now pointed at our own binaries
-(`foundation-arcade`, `foundation-chess`, `foundationmedia`, and eventually
-`foundation-rogue`/`foundation-depths`, see `docs/ROGUELIKE-DESIGN.md`)
+(`foundation-arcade`, `foundation-chess`, `foundationmedia`) plus, per the
+operator's download-don't-build call on Rogue specifically (feedback #2,
+`docs/FEEDBACK-FIRST-HARDWARE-RUN.md`), two real upstream binaries built from
+vendored source at ISO build time (`rogue`, `rogue54` — see `vendor/`)
 instead of borrowed ones. `ranger`, `btop`, and `nvim` are retired; `nethack`
-and `crawl` remain in `recreation.toml` until the roguelike design is
-approved and built (BUILD-QUEUE §5 item 3). The Hub is glue + chrome + the
+remains in `recreation.toml` as the interim third roguelike; `crawl` was
+never actually listed there. The in-house "Foundation Depths" modernized
+roguelike (`docs/ROGUELIKE-DESIGN.md`) remains a possible future project,
+separate from the classic Rogue vintages above. The Hub is glue + chrome + the
 Frank-facing surfaces; it does not reimplement the in-house programs — those
 live in their own top-level `games/`/`media/` packages and import
 `foundationhub.theme`/`ui` for chrome rather than the other way around.

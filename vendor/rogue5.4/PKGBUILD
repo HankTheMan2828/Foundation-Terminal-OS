@@ -1,0 +1,43 @@
+# Maintainer: Foundation TerminalOS
+# Packages the vendored Rogue 5.4.5 (1985, the authors' finished version)
+# source in src/ -- see NOTICE.md for provenance/license. Built by
+# image/build-iso.sh at ISO build time and baked into the offline package
+# repo; never fetched on the target machine
+# (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2).
+pkgname=rogue5.4
+pkgver=5.4.5
+pkgrel=1
+pkgdesc="Rogue: Exploring the Dungeons of Doom -- 1985 classic vintage (kernel-console/curses)"
+arch=('x86_64')
+url="https://github.com/RoguelikeRestorationProject/rogue5.4"
+license=('BSD')
+depends=('ncurses')
+makedepends=('gcc' 'make')
+# Vendored locally (see src/, NOTICE.md) -- nothing to download or verify.
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/src"
+  # Binary name "rogue54" avoids colliding with rogue3.6's "rogue". setgid
+  # games + an absolute scorefile/lockfile path: upstream's own mechanism for
+  # a shared top-ten board (Arch's filesystem package ships a "games" group
+  # by default). This is the project's real configure/make -- no game logic
+  # patched.
+  ./configure --prefix=/usr \
+    --with-program-name=rogue54 \
+    --enable-setgid=games \
+    --enable-scorefile=/var/lib/rogue/rogue54.scr \
+    --enable-lockfile=/var/lib/rogue/rogue54.lck
+  make
+}
+
+package() {
+  cd "$startdir/src"
+  make DESTDIR="$pkgdir" install
+  install -Dm644 LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE.TXT"
+  # `make install` chgrp/chmods the scorefile itself but leaves the enclosing
+  # directory at a plain default mode -- fix it up so a lockfile created at
+  # runtime also lands in group "games".
+  install -dm2775 -g games "$pkgdir/var/lib/rogue"
+}

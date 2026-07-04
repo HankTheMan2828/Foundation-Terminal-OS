@@ -29,7 +29,7 @@ UX-focused; none block installs.
     per-account sessions are still `[TODO(hardware)]`, and `setfont` is a
     VT-global op, so a true per-user font waits on that.
 
-## 2. Rogue is missing from Recreation  — DOWNLOAD, don't build
+## 2. Rogue is missing from Recreation  — DOWNLOAD, don't build — ✅ FIXED (2026-07-03)
 - Operator looked for **Rogue (the original)** and the **1985 version**
   (the visually improved release) and couldn't find them.
 - **Operator decision (2026-07-03): do NOT build these in-house.** Both
@@ -43,6 +43,45 @@ UX-focused; none block installs.
   embedded package repo — upstream Rogue must end up installable that way
   (official-repo/AUR package baked into the offline repo, or source
   vendored and built at ISO build time — not fetched on the target).
+- Fixed: both real upstream games, no in-house code. Source vendored
+  verbatim from the Roguelike Restoration Project's restorations —
+  `vendor/rogue3.6/` (1981, Berkeley original, BSD-3) and `vendor/rogue5.4/`
+  (1985, the authors' finished version, BSD-3) — each with a `NOTICE.md`
+  (upstream URL, exact commit vendored, license text location) and a
+  `PKGBUILD` that builds the vendored source into a real Arch package.
+  `image/build-iso.sh` now runs `makepkg` for both (as a throwaway
+  unprivileged build user — makepkg refuses root) **at ISO build time** and
+  copies the resulting `.pkg.tar.*` into the same offline repo directory the
+  rest of the OS's packages land in, before `repo-add` runs — so pacstrap
+  installs them from the ISO's embedded repo exactly like every other
+  package, no network on the target. Package names `rogue3.6`/`rogue5.4`
+  added to `install/packages.txt` (same mechanism as `nethack`, just above
+  it). Recreation's roguelikes bucket
+  (`system/etc/foundationhub/recreation.toml` + the `_DEFAULT` fallback in
+  `hub/foundationhub/screens/recreation.py`) now lists **Rogue (1985)**
+  (`rogue54`, default/first) and **Rogue (1981, OG)** (`rogue`) above
+  NetHack, which stays as the interim third entry (not asked to retire it).
+  - **Stability on this OS:** both are plain terminfo/ncurses console
+    programs with no GUI/display-stack dependency — `main()` calls
+    `initscr()`/raw terminal I/O only, same category as NetHack, which
+    already runs fine on the kernel VT here. Not yet smoke-tested on real
+    hardware in this session (no Arch/makepkg toolchain in this dev sandbox);
+    next real-hardware pass should confirm both launch and render correctly
+    from Recreation and that the ISO's `makepkg` step succeeds cleanly.
+  - **Shared score board:** both binaries are installed setgid `games` with
+    an absolute scorefile/lockfile under `/var/lib/rogue/`, group-writable —
+    the games' own upstream mechanism for one shared top-ten, matching this
+    repo's machine-wide-scores decision (item 6) in spirit. This is each
+    game's *native* score file (its own `S`core command), separate from the
+    Hub's Python `HighScoresScreen`/`highscores.py` — not wired into that
+    display, since parsing the C scoreboard format is out of scope here.
+  - **Licenses — redistribution confirmed.** Both are BSD 3-clause
+    (Toy/Arnold/Wichman, plus folded-in BSD grants for `state.c`/`mdport.*`
+    and `xcrypt.c`) — permits source and binary redistribution with
+    attribution, which is exactly what's happening (unmodified vendored
+    source, license text shipped in the package at
+    `/usr/share/licenses/rogue3.6/` and `/usr/share/licenses/rogue5.4/`).
+    Full text in each vendor dir's `src/LICENSE.TXT`.
 
 ## 3. Arcade games: center + border  — polish — ✅ FIXED (2026-07-03)
 - Games play great. They should render **centered on screen** with a

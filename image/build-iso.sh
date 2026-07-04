@@ -4,8 +4,9 @@
 # What it does:
 #   1. stages image/profile/ into a work dir
 #   2. embeds THIS repo at /opt/terminal-os inside the live image
-#   3. downloads every package the installed system needs into an offline
-#      repo inside the image (so flashing + installing needs no network)
+#   3. builds vendor/rogue3.6 + vendor/rogue5.4 into Arch packages and
+#      downloads every other package the installed system needs, into an
+#      offline repo inside the image (so flashing + installing needs no network)
 #   4. runs mkarchiso -> image/out/foundation-terminalos-<date>-x86_64.iso
 #
 # Where to run it: an Arch Linux machine (or container) with `archiso`
@@ -104,6 +105,26 @@ else
     cp -an "$FOUNDATION_PKG_CACHE/." "$PKGDIR/" 2>/dev/null || true
     c_info "pre-seeded from cache: $(ls "$PKGDIR" 2>/dev/null | wc -l) files"
   fi
+
+  # ── 3a. vendored packages (Rogue, feedback #2 -- download upstream, don't
+  # build in-house; docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2). Source lives
+  # in vendor/rogue3.6 + vendor/rogue5.4 (see NOTICE.md in each); built here,
+  # at ISO build time, from the vendored source -- never fetched on the
+  # target. makepkg refuses to run as root, so a throwaway build user does it.
+  c_info "building vendored packages: rogue3.6, rogue5.4"
+  pacman -S --needed --noconfirm base-devel ncurses
+  BUILDROOT="$WORK/vendor-build"
+  mkdir -p "$BUILDROOT"
+  id -u foundation-builder >/dev/null 2>&1 || useradd -m -s /bin/bash foundation-builder
+  chown foundation-builder:foundation-builder "$BUILDROOT"
+  for vpkg in rogue3.6 rogue5.4; do
+    rm -rf "$BUILDROOT/$vpkg"
+    cp -r "$REPO_ROOT/vendor/$vpkg" "$BUILDROOT/$vpkg"
+    chown -R foundation-builder:foundation-builder "$BUILDROOT/$vpkg"
+    su foundation-builder -c "cd '$BUILDROOT/$vpkg' && makepkg --noconfirm --skipinteg"
+    cp "$BUILDROOT/$vpkg"/*.pkg.tar.* "$PKGDIR/"
+  done
+  c_ok "vendored packages built: rogue3.6, rogue5.4"
 
   c_info "downloading ${#PKGS[@]} packages (plus dependencies)…"
   # pacman ≥7 drops downloads to an unprivileged `alpm` user, which cannot

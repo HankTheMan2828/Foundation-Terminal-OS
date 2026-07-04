@@ -49,8 +49,11 @@ flashable installer:
   ledger, optional Mistral commentary.
 - **Games** (`games/`) — standalone in-house TUI programs launched from the
   Hub's Recreation area: Foundation Arcade (Snake, Falling Blocks, 2048,
-  Sudoku, Invaders) and Foundation Chess today; a two-vintage Rogue
-  re-implementation plus a modernized "Foundation Depths" are designed
+  Sudoku, Invaders) and Foundation Chess today. Rogue is the one exception
+  to the in-house rule (operator decision, `docs/FEEDBACK-FIRST-HARDWARE-RUN.md`
+  item 2): both classic vintages (1981, 1985) are real upstream binaries
+  built from vendored source at ISO build time — see `vendor/`. A separate,
+  modernized "Foundation Depths" in-house roguelike remains designed
   (see [`docs/ROGUELIKE-DESIGN.md`](docs/ROGUELIKE-DESIGN.md)) and awaiting
   approval before build.
 - **Media** (`media/`) — Foundation Media, the in-house audio player,
@@ -175,7 +178,9 @@ install/     Ordered, idempotent installer scripts + package lists (generic core
 system/      Files copied onto the target root (/etc, /usr/local, ...)
 hub/         foundationhub — the curses login-shell TUI (Home Hub)
 frank/       frankd — the overseer daemon (rules, enforcement, ledger, AI)
-games/       Foundation Arcade, Foundation Chess, and (designed) the roguelike(s)
+games/       Foundation Arcade, Foundation Chess, and (designed) Foundation Depths
+vendor/      Vendored upstream source for Rogue (1981/1985) + PKGBUILDs — built
+             into offline-repo packages by image/build-iso.sh, never in-house
 media/       foundationmedia — the in-house audio player
 profiles/    Optional per-device hardware profiles (e.g. zenbook-duo-2024)
 theme/       CRT palettes (kernel-VT font + colors), Plymouth text theme
