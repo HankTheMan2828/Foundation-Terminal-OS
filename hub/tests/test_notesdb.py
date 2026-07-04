@@ -4,7 +4,7 @@ from pathlib import Path
 
 from foundationhub import notesdb
 from foundationhub.notesdb import (extract_tags, list_journal, list_notes,
-                            parse_query, search, slugify)
+                            note_path, parse_query, search, slugify)
 
 
 # ── tag parsing ───────────────────────────────────────────────────────────────
@@ -56,6 +56,19 @@ def test_slugify_never_empty():
 
 def test_slugify_collapses_dashes():
     assert slugify("a  --  b") == "a-b"
+
+
+# ── note_path (shared by the Notes Area + Tagged Notes — feedback #5) ─────────
+
+def test_note_path_slugs_under_notes_dir(tmp_path):
+    assert note_path(tmp_path, "My Grand Plan") \
+        == tmp_path / notesdb.NOTES_DIR / "my-grand-plan.md"
+
+
+def test_note_path_is_path_safe(tmp_path):
+    p = note_path(tmp_path, "../../etc/passwd")
+    assert p.parent == tmp_path / notesdb.NOTES_DIR
+    assert p.name == "etc-passwd.md"
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────

@@ -207,7 +207,7 @@ class TaggedNotesScreen(_ListScreen):
         if not name:
             return None
         slug = notesdb.slugify(name)
-        target = self._dir() / f"{slug}.md"
+        target = notesdb.note_path(user_dir(), name)
         if target.exists():
             self.message = labels.NOTE_EXISTS
             return None
@@ -234,6 +234,94 @@ class TaggedNotesScreen(_ListScreen):
                 except OSError as exc:
                     self.message = str(exc)
         return None
+
+
+class NotesAreaScreen(_ListScreen):
+    """NOTES AREA (feedback #5): the plain folder-of-notes chooser that used to
+    be the bare "text editor" scratch pad in Programs. The top row — set off by
+    a blank line — is 'create new note': Enter asks for a name, then drops
+    straight into the editor. Folders and search are deferred (operator).
+
+    Shares the tagged-notes store (notesdb.NOTES_DIR) so there is ONE notes
+    folder on disk, not a second parallel one."""
+
+    title = labels.PROG_NOTES
+    subtitle = labels.NOTES_AREA_SUBTITLE
+
+    _LIST, _NEW = range(2)
+
+    def __init__(self):
+        super().__init__()
+        self.mode = self._LIST
+        self.edit = LineEdit(limit=48)
+        self.message = ""
+
+    def _dir(self) -> Path:
+        return user_dir() / notesdb.NOTES_DIR
+
+    def _paths(self) -> list[Path]:
+        return notesdb.list_notes(user_dir())
+
+    def _items(self, paths: list[Path]) -> list[MenuItem]:
+        # Create-new on top, a blank spacer to set it apart, then the notes.
+        items = [MenuItem(labels.NOTES_AREA_NEW, lambda a: self._begin_new()),
+                 MenuItem("", enabled=False)]
+        if not paths:
+            items.append(MenuItem(labels.NOTES_AREA_EMPTY, enabled=False))
+        for p in paths:
+            items.append(MenuItem(
+                p.stem,
+                lambda a, p=p: _open_note(p, title=p.stem),
+                hint=" ".join(f"#{t}" for t in notesdb.note_tags(p)[:4])))
+        return items
+
+    def _begin_new(self):
+        self.mode = self._NEW
+        self.edit = LineEdit(limit=48)
+        return None
+
+    def draw(self, win, top, left):
+        self._refresh()
+        self.menu.draw(win, top, left)
+        h, w = win.getmaxyx()
+        row = h - 4
+        if self.mode == self._NEW:
+            win.addstr(row, left,
+                       f"{labels.NOTES_AREA_NAME_PROMPT} {self.edit.display()}"
+                       [: w - left - 2],
+                       theme.attr(theme.PAIR_ACCENT, bold=True))
+        elif self.message:
+            win.addstr(row, left, self.message[: w - left - 2],
+                       theme.attr(theme.PAIR_WARN, bold=True))
+
+    def status_text(self):
+        if self.mode == self._NEW:
+            return labels.REG_HINT
+        return labels.NOTES_AREA_HINT
+
+    def handle_key(self, key, app):
+        self.message = ""
+        if self.mode == self._NEW:
+            return self._handle_name(key)
+        return super().handle_key(key, app)
+
+    def _handle_name(self, key):
+        result = self.edit.handle(key)
+        if result == "cancel":
+            self.mode = self._LIST
+            return None
+        if result != "submit":
+            return None
+        name = self.edit.value.strip()
+        self.mode = self._LIST
+        if not name:
+            return None
+        target = notesdb.note_path(user_dir(), name)
+        if target.exists():
+            # Name collides with an existing note: open it rather than dead-end.
+            return _open_note(target, title=target.stem)
+        # New note: the seeded header lives in the buffer; SAVE creates the file.
+        return _open_note(target, title=name, create_text=f"# {name}\n\n")
 
 
 class SearchScreen(Screen):

@@ -2,9 +2,9 @@
 
 Direction is IN-HOUSE (docs/OPEN-QUESTIONS.md §10, hybrid model): the file
 manager and system monitor become native Hub screens; media gets ONE separate
-in-house player (`foundationmedia` — replaces the old cmus+mpv pair). The TEXT
-EDITOR is the notes suite's in-house editor (queue §1) — nvim is retired;
-one editor everywhere.
+in-house player (`foundationmedia` — replaces the old cmus+mpv pair). The NOTES
+AREA is a folder-of-notes chooser over the notes suite's in-house editor
+(queue §1) — nvim is retired; one editor everywhere.
 
 FILE MANAGER and SYSTEM MONITOR are now native too (queue §2/§3) — ranger and
 btop are both retired. MEDIA now launches the in-house foundationmedia (§4) —
@@ -14,11 +14,10 @@ from __future__ import annotations
 
 from .. import labels
 from ..app import MenuScreen, Launch
-from ..editor import EditorScreen
 from ..ui import MenuItem
 from .files import FileManagerScreen
 from .monitor import MonitorScreen
-from .notes import user_dir
+from .notes import NotesAreaScreen
 
 
 def screen():
@@ -34,9 +33,10 @@ def screen():
         # Native Hub screen (in-house monitor) — btop retired, queue §3.
         MenuItem(labels.PROG_MONITOR, lambda a: MonitorScreen(),
                  hint="in-house"),
-        # One-editor policy: THE editor, on the account's own scratch pad.
-        MenuItem(labels.PROG_EDITOR,
-                 lambda a: EditorScreen(user_dir() / "scratch.md"),
+        # feedback #5: the old bare 'text editor' scratch pad is now a proper
+        # Notes Area — a folder of notes with a create-new flow on top. Still
+        # the one in-house editor underneath (one-editor policy).
+        MenuItem(labels.PROG_NOTES, lambda a: NotesAreaScreen(),
                  hint="in-house"),
     ]
     return MenuScreen(labels.PROGRAMS, items)

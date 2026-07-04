@@ -70,6 +70,13 @@ def list_notes(user_dir: Path) -> list[Path]:
     return sorted(d.glob("*.md"), key=lambda p: p.name)
 
 
+def note_path(user_dir: Path, name: str) -> Path:
+    """The `.md` path a note with display `name` maps to: a slugged stem under
+    the notes dir. Path-safe by construction (slugify strips escapes), so the
+    same call resolves note targets for both the Notes Area and Tagged Notes."""
+    return user_dir / NOTES_DIR / f"{slugify(name)}.md"
+
+
 def note_tags(path: Path) -> list[str]:
     try:
         return extract_tags(path.read_text(encoding="utf-8"))

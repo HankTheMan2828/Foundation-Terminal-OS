@@ -54,7 +54,10 @@ POWER = "POWER"
 PROG_FILES = "FILE MANAGER"
 PROG_MEDIA = "MEDIA"
 PROG_MONITOR = "SYSTEM MONITOR"
-PROG_EDITOR = "TEXT EDITOR"
+# feedback #5: the old bare "TEXT EDITOR" scratch pad is now a Notes Area — a
+# folder of notes with a create-new flow. The one in-house editor is unchanged;
+# only the entry point and its wording moved.
+PROG_NOTES = "NOTES AREA"
 
 # ── Functions Control (real toggles only — spec §5) ──────────────────────────
 FN_BRIGHTNESS = "DISPLAY BRIGHTNESS"
@@ -99,6 +102,14 @@ SEARCH_PROMPT = "QUERY (words and #tags)"
 SEARCH_NONE = "NO MATCHING RECORDS"
 SEARCH_HINT = "type   ↵ search   Esc back"
 SEARCH_RESULTS_HINT = "↑↓/jk move   ↵ open   Esc new search"
+
+# ── Notes Area (Programs — feedback #5: folder chooser + create-new flow) ─────
+# Shares the tagged-notes store; folders and search are deferred (operator).
+NOTES_AREA_SUBTITLE = "pick a note, or start a new one"
+NOTES_AREA_NEW = "--- create new note ---"
+NOTES_AREA_NAME_PROMPT = "NAME?"
+NOTES_AREA_EMPTY = "(no notes yet — create one above)"
+NOTES_AREA_HINT = "↑↓/jk move   ↵ open   Esc/⌫ back"
 
 # ── File Manager (native Hub screen — queue §2) ──────────────────────────────
 FILES_UP = ".. (up)"

@@ -54,7 +54,7 @@ UX-focused; none block installs.
 - Fixed: `curses.set_escdelay(25)` set at all four curses entry points
   (Hub, foundation-arcade, foundation-chess, foundationmedia).
 
-## 5. Notes area: rename + new-note flow  — HIGH
+## 5. Notes area: rename + new-note flow  — HIGH — ✅ FIXED (2026-07-04)
 - The area is currently labeled **"text editor" — confusing**. Rename to
   **"Notes Area"**.
 - Flow: opening it goes to the **folder of notes to choose from**. The top
@@ -65,6 +65,20 @@ UX-focused; none block installs.
   feature.
 - `hub/foundationhub/screens/notes.py` + `editor.py`, menu labels in
   `labels.py`.
+- Fixed: the Programs entry is now **NOTES AREA** (`labels.PROG_NOTES`,
+  was the bare "TEXT EDITOR" scratch pad). It opens the new
+  `NotesAreaScreen` (`screens/notes.py`): **`--- create new note ---`** on
+  top, a blank spacer, then the notes. Enter on the top row prompts
+  **`NAME?`** and drops straight into the editor (the seeded note is written
+  on SAVE, as with every other note). A name that collides with an existing
+  note just opens it instead of dead-ending.
+  - The area **shares the tagged-notes store** (`notesdb.NOTES_DIR`) so
+    there is one notes folder on disk, not a second parallel one. Note→path
+    resolution is now the shared `notesdb.note_path()`
+    (`hub/tests/test_notesdb.py`), reused by both the Notes Area and
+    Tagged Notes.
+  - **Folders and search are deferred**, per the operator (search still
+    lives in Personal File → SEARCH RECORDS).
 
 ## 6. Game scores: belong to the user, live in Recreation  — HIGH
 - Scores should be **attributed to the user** who set them.
