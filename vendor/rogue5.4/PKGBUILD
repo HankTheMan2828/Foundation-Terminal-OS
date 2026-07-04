@@ -17,6 +17,22 @@ makedepends=('gcc' 'make')
 source=()
 sha256sums=()
 
+prepare() {
+  cd "$startdir/src"
+  # main.c's tstp() (SIGTSTP handler) pokes ncurses' PRIVATE WINDOW fields
+  # to restore the cursor after a suspend/resume:
+  #     curscr->_cury = oy;  curscr->_curx = ox;
+  # Modern ncurses builds with opaque structs, so those members are not
+  # addressable and the file no longer compiles. wmove(curscr, oy, ox) is
+  # the public API for exactly that operation (set a window's cursor
+  # position without redrawing) -- behavior-identical. Applied here at
+  # build time so the vendored source itself stays verbatim
+  # (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2); build-iso.sh copies
+  # vendor/ to a throwaway build dir, so nothing in the repo is touched.
+  sed -i -e 's/curscr->_cury = oy;/wmove(curscr, oy, ox);/' \
+         -e '/curscr->_curx = ox;/d' main.c
+}
+
 build() {
   cd "$startdir/src"
   # Binary name "rogue54" avoids colliding with rogue3.6's "rogue". setgid
