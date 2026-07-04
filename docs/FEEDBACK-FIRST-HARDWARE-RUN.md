@@ -87,9 +87,12 @@ UX-focused; none block installs.
   - **Folders and search are deferred**, per the operator (search still
     lives in Personal File → SEARCH RECORDS).
 
-## 6. Game scores: belong to the user, live in Recreation  — HIGH
-- Scores should be **attributed to the user** who set them.
-- Scores must **not** appear in the file/folder area; they should show as a
+## 6. Game scores: ONE system-wide board, shown in Recreation  — HIGH
+- **Scoring is SYSTEM-WIDE ONLY — NEVER per user** (operator correction
+  2026-07-04: no per-user score lists, no per-user filtering, ever).
+- There is **one global high-score table per game** for the whole machine;
+  each entry **marks which user set it** (name attached to the score).
+- Scores must **not** appear in the file/folder area; they show as a
   **list in the games (Recreation) area**.
 
 ## 7. Dated-entry feature for general notes  — feature
