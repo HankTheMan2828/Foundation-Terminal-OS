@@ -16,4 +16,12 @@ pac python
 install_py_dist "$REPO_ROOT/games" \
   foundation-arcade=foundation_arcade foundation-chess=foundation_chess
 
+# Game records: ONE system-wide store per game (operator correction
+# 2026-07-04, applies to the arcade's high scores AND chess's win/loss/draw
+# tally alike) — lives under /var/lib, outside any account's quota'd
+# ~/.local/share/foundationhub space, so it never shows up in a user's
+# files. Owned by the operator (the single Linux user hosting sessions,
+# see hub/foundationhub/session.py) so games can write to it directly.
+install -d -o "$OPERATOR" -g "$OPERATOR" -m 0755 /var/lib/foundationhub
+
 c_ok "in-house games installed — gnuchess retired -> foundation-chess"

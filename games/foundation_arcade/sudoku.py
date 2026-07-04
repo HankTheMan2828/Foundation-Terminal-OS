@@ -162,8 +162,8 @@ def _draw_board(win, top: int, left: int, game: SudokuGame) -> None:
                 a = chrome.attr(chrome.PAIR_ACCENT, bold=True)
             else:
                 a = chrome.attr(chrome.PAIR_NORMAL)
-            gap_r = 1 if r % BOX == 0 and r else 0
-            gap_c = 2 if c % BOX == 0 and c else 0
+            gap_r = r // BOX
+            gap_c = (c // BOX) * 2
             try:
                 win.addstr(top + r + gap_r, left + c * 2 + gap_c, text, a)
             except curses.error:

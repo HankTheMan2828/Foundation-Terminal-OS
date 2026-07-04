@@ -1,4 +1,4 @@
-"""Foundation Chess — rules engine, AI, and per-user record.
+"""Foundation Chess — rules engine, AI, and system-wide record.
 
 The engine is validated the way chess move generators always are: perft node
 counts against the standard reference positions. If castling, en passant,
@@ -145,7 +145,7 @@ def test_evaluate_is_symmetric_at_start():
     assert ai.evaluate(b.Board.initial()) == 0
 
 
-# -- per-user record ---------------------------------------------------------
+# -- system-wide record -------------------------------------------------------
 
 def test_record_missing_file_is_zeroed(tmp_path):
     rec = stats.load_record(tmp_path / "none.json")
@@ -153,7 +153,7 @@ def test_record_missing_file_is_zeroed(tmp_path):
 
 
 def test_record_result_accumulates_and_persists(tmp_path):
-    path = tmp_path / "users" / "alice" / "games" / "chess.json"
+    path = tmp_path / "chess.json"
     stats.record_result(path, stats.WIN)
     stats.record_result(path, stats.WIN)
     stats.record_result(path, stats.LOSS)
@@ -166,3 +166,13 @@ def test_record_result_ignores_unknown_outcome(tmp_path):
     path = tmp_path / "chess.json"
     stats.record_result(path, "bogus")
     assert stats.load_record(path) == {stats.WIN: 0, stats.LOSS: 0, stats.DRAW: 0}
+
+
+def test_record_is_one_machine_wide_tally_not_per_user(tmp_path):
+    # Whoever is playing, wins/losses/draws land in the same file — there is
+    # no per-user split, matching the arcade high-score board.
+    path = stats.stats_path(root=tmp_path)
+    assert path == tmp_path / "chess.json"
+    stats.record_result(path, stats.WIN)
+    stats.record_result(path, stats.LOSS)
+    assert stats.load_record(path) == {stats.WIN: 1, stats.LOSS: 1, stats.DRAW: 0}

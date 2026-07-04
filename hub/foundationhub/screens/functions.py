@@ -1,6 +1,7 @@
-"""Functions Control — REAL system toggles only, no cosmetic elements (spec §5).
-
-Every action here shells out to an actual hardware helper (see hardware/,
+"""Settings (was Functions Control) — REAL system toggles, plus the two
+config-shaped things that used to live under Status: NETWORK (a real action)
+and the read-only SYSTEM STATUS readout (feedback #8). No cosmetic elements
+(spec §5); every toggle shells out to an actual hardware helper (see hardware/,
 install/04, install/05). Off-device, calls return a clear status string.
 """
 from __future__ import annotations
@@ -8,6 +9,7 @@ from __future__ import annotations
 from .. import consolefont, labels, session, theme
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
+from . import status
 
 
 def _set_status(msg: str):
@@ -79,5 +81,9 @@ def screen():
                  status=lambda: theme.get_palette().upper()),
         MenuItem(labels.FN_TEXT_SIZE, lambda a: _text_size_screen(),
                  status=consolefont.current_label),
+        # Moved in from the old top-level Status entry (feedback #8): NETWORK is
+        # a real config action; SYSTEM STATUS is the read-only readout.
+        MenuItem(labels.STATUS_NETWORK, lambda a: Launch(["nmtui"]), hint="nmtui"),
+        MenuItem(labels.STATUS, lambda a: status.screen(), hint="read-only"),
     ]
-    return MenuScreen(labels.FUNCTIONS, items)
+    return MenuScreen(labels.SETTINGS, items)

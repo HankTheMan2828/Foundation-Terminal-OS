@@ -1,12 +1,13 @@
-"""Per-user win/loss/draw record. Plain JSON under the account's own data dir —
-same `FOUNDATIONHUB_DATA` root and `users/<name>/games/` layout the arcade's scores
-use, so chess counts toward the same quota'd space rather than inventing a
-second one (GLOBAL CONSTRAINTS: all user data is per-account, storage is quota'd).
+"""Machine-wide win/loss/draw record — ONE system-wide tally, not per user
+(operator correction 2026-07-04: no per-user score/record lists, no
+per-user filtering, ever — applies to chess same as the arcade's high
+scores). Stored under `/var/lib/foundationhub`, the same machine-wide state
+dir `games/foundation_arcade/scores.py` uses — outside any account's
+quota'd `~/.local/share/foundationhub` data space, so it never shows up in
+a user's file/folder area.
 
 Kept as plain functions over an explicit path so it's testable without any
-notion of "the active user" — `active_username()`/`data_root()` figure that out
-for the real program; tests pass in a tmp_path instead. Mirrors
-games/foundation_arcade/scores.py.
+notion of "the active user" — tests pass in a tmp_path instead.
 """
 from __future__ import annotations
 
@@ -18,31 +19,13 @@ from pathlib import Path
 WIN, LOSS, DRAW = "wins", "losses", "draws"
 
 
-def data_root() -> Path:
-    return Path(os.environ.get("FOUNDATIONHUB_DATA",
-                os.path.expanduser("~/.local/share/foundationhub")))
+def state_dir() -> Path:
+    return Path(os.environ.get("FOUNDATIONHUB_STATE", "/var/lib/foundationhub"))
 
 
-def active_username() -> str:
-    """Whoever is logged into the Hub right now. Foundation Chess is spawned as
-    a child of the Hub (`Launch`), which sets FOUNDATIONHUB_USER in its environment
-    before exec'ing — inherited here. Falls back to the file the Hub publishes
-    for the same purpose, then "guest" off-device."""
-    name = os.environ.get("FOUNDATIONHUB_USER")
-    if name:
-        return name
-    active_file = Path(os.environ.get("FOUNDATIONHUB_ACTIVE_USER", "/run/foundationhub/active-user"))
-    try:
-        name = active_file.read_text().strip()
-    except OSError:
-        name = ""
-    return name or "guest"
-
-
-def stats_path(root: Path | None = None, username: str | None = None) -> Path:
-    root = root if root is not None else data_root()
-    username = username if username is not None else active_username()
-    return root / "users" / username / "games" / "chess.json"
+def stats_path(root: Path | None = None) -> Path:
+    root = root if root is not None else state_dir()
+    return root / "chess.json"
 
 
 def load_record(path: Path) -> dict[str, int]:
@@ -62,8 +45,9 @@ def load_record(path: Path) -> dict[str, int]:
 
 
 def record_result(path: Path, outcome: str) -> dict[str, int]:
-    """Increment the tally for `outcome` (WIN/LOSS/DRAW) and persist. Returns
-    the updated record. An unknown outcome is a no-op (still returns current)."""
+    """Increment the machine-wide tally for `outcome` (WIN/LOSS/DRAW) and
+    persist. Returns the updated record. An unknown outcome is a no-op
+    (still returns current)."""
     rec = load_record(path)
     if outcome in rec:
         rec[outcome] += 1

@@ -36,28 +36,33 @@ REG_MISMATCH = "PASSWORDS DO NOT MATCH"
 REG_DONE = "ACCOUNT REGISTERED — WELCOME ABOARD"
 REG_HINT = "type   ↵ confirm   Esc cancel"
 
-# ── Top-level Home Hub ────────────────────────────────────────────────────────
+# ── Top-level Home Hub (feedback #8 — reworked IA) ───────────────────────────
 HUB_TITLE = "TERMINAL // MAIN"
 HUB_SUBTITLE = f"{BRAND} — AUTHORIZED USE ONLY"
 
-# Order here is the order shown on the Home Hub.
+# Order shown on the Home Hub:  PROGRAMS · RECREATION · SETTINGS · LOGS · POWER
 PROGRAMS = "PROGRAMS"
 RECREATION = "RECREATION"
-FUNCTIONS = "FUNCTIONS"
-STATUS = "SYSTEM STATUS"
+HIGH_SCORES = "HIGH SCORES"     # one system-wide board per game (never per user)
+HIGH_SCORES_EMPTY = "(no scores recorded yet)"
+HIGH_SCORES_CHESS = "CHESS"                       # machine-wide W/L/D, not a beatable score
+HIGH_SCORES_CHESS_FMT = "W {w} · L {l} · D {d}"
+SETTINGS = "SETTINGS"           # was FUNCTIONS — toggles + network + the status readout
+STATUS = "SYSTEM STATUS"        # now a read-only readout reached from inside SETTINGS
 LOGS = "LOGS"
-NOTES = "PERSONAL FILE"
-ASSISTANT = "ASSISTANT"
 POWER = "POWER"
 
-# ── Programs ─────────────────────────────────────────────────────────────────
+# Assistant (AI Chat) is built but hidden from the Hub for now (feedback #8):
+# the screen code stays, it's just off the menu. Re-add ASSISTANT to
+# screens/__init__.build_home to bring it back.
+ASSISTANT = "ASSISTANT"
+
+# ── Programs (order: Notes · Notes Search · Files · Media · Monitor) ──────────
+NOTES = "NOTES"                 # the single notes home (feedback #8)
+NOTES_SEARCH = "NOTES SEARCH"   # separate search program — Work-only by default
 PROG_FILES = "FILE MANAGER"
 PROG_MEDIA = "MEDIA"
 PROG_MONITOR = "SYSTEM MONITOR"
-# feedback #5: the old bare "TEXT EDITOR" scratch pad is now a Notes Area — a
-# folder of notes with a create-new flow. The one in-house editor is unchanged;
-# only the entry point and its wording moved.
-PROG_NOTES = "NOTES AREA"
 
 # ── Functions Control (real toggles only — spec §5) ──────────────────────────
 FN_BRIGHTNESS = "DISPLAY BRIGHTNESS"
@@ -84,32 +89,38 @@ STATUS_NOT_FUNCTIONING = "NOT FUNCTIONING"
 LOG_SYSTEM = "SYSTEM RECORDS"           # journald/kernel/auth, raw
 LOG_OVERSEER = "OVERSEER LEDGER"        # Frank's ledger — timestamps only (§6)
 
-# ── Personal File (journal + tagged notes + search — spec §5, queue §1) ──────
-NOTE_JOURNAL = "DATED JOURNAL"
-NOTE_TAGGED = "TAGGED NOTES"
-NOTE_SEARCH = "SEARCH RECORDS"
-NOTE_TODAY = "TODAY'S ENTRY"
-NOTE_NEW = "NEW NOTE"
-NOTE_EMPTY = "(no records on file)"
-NOTE_NAME_PROMPT = "DESIGNATE NOTE"
-NOTE_RENAME_PROMPT = "NEW DESIGNATION"
-NOTE_EXISTS = "A RECORD BY THAT NAME EXISTS"
-NOTE_DELETE_CONFIRM = "DELETE {name}?  y/n"
-NOTE_DELETED = "RECORD DESTROYED"
-NOTES_HINT = "↵ open   n new   r rename   d delete   Esc/⌫ back"
+# ── Notes (feedback #8) — one home in Programs, two purpose sections ──────────
+# Work first, Personal last; each has plain named notes plus one dated feature
+# (Work: timestamped Dated Entries; Personal: one-page-per-day Journal). Notes
+# are named on creation; rename lives in the editor, delete in the File Manager.
+NOTES_SUBTITLE = "work + personal — pick a note or start a new one"
+NOTES_WORK = "WORK"
+NOTES_PERSONAL = "PERSONAL"
+NOTES_NEW = "--- create new note ---"
+NOTES_NAME_PROMPT = "NAME?"
+NOTES_EMPTY = "(none yet — create one above)"
+NOTES_HINT = "↑↓/jk move   ↵ open   Esc/⌫ back"
 
+# Personal journal — one page per day (reworked from the old Personal File).
+NOTE_JOURNAL = "DATED JOURNAL"
+NOTE_TODAY = "TODAY'S ENTRY"
+NOTE_TODAY_EXISTS = "TODAY'S NOTE ALREADY EXISTS — OPENING IT"
+NOTE_JOURNAL_SUBTITLE = "one page per day — the record keeps itself"
+
+# Work dated entries — timestamped, several per day (feedback #7 feature, reused).
+NOTES_DATED = "DATED ENTRIES"
+NOTES_DATED_NEW = "NEW ENTRY"
+NOTES_DATED_SUBTITLE = "timestamped — as many as you like, per day"
+NOTES_DATED_EMPTY = "(no entries yet — create one above)"
+NOTES_DATED_HINT = "↑↓/jk move   ↵ open   Esc/⌫ back"
+
+# Notes Search (separate program) — Work-only by default, opt into Personal.
+NOTES_SEARCH_SUBTITLE = "words match text, #tags match tags"
+NOTES_SEARCH_ASK = "INCLUDE PERSONAL NOTES?   y / N   (default: no)"
 SEARCH_PROMPT = "QUERY (words and #tags)"
 SEARCH_NONE = "NO MATCHING RECORDS"
 SEARCH_HINT = "type   ↵ search   Esc back"
 SEARCH_RESULTS_HINT = "↑↓/jk move   ↵ open   Esc new search"
-
-# ── Notes Area (Programs — feedback #5: folder chooser + create-new flow) ─────
-# Shares the tagged-notes store; folders and search are deferred (operator).
-NOTES_AREA_SUBTITLE = "pick a note, or start a new one"
-NOTES_AREA_NEW = "--- create new note ---"
-NOTES_AREA_NAME_PROMPT = "NAME?"
-NOTES_AREA_EMPTY = "(no notes yet — create one above)"
-NOTES_AREA_HINT = "↑↓/jk move   ↵ open   Esc/⌫ back"
 
 # ── File Manager (native Hub screen — queue §2) ──────────────────────────────
 FILES_UP = ".. (up)"
@@ -146,11 +157,14 @@ MONITOR_HINT = "auto-refresh   Esc/⌫ back"
 EDITOR_TITLE = "TEXT EDITOR"
 EDITOR_SUBTITLE = "ALL ENTRIES ARE PART OF THE PERMANENT RECORD"
 EDITOR_MENU_SAVE = "SAVE"
+EDITOR_MENU_RENAME = "RENAME"
 EDITOR_MENU_DISCARD = "DISCARD"
 EDITOR_MENU_RETURN = "RETURN"
 EDITOR_HINT = "type   Esc menu"
 EDITOR_MODIFIED = "modified"
 EDITOR_SAVE_FAILED = "SAVE FAILED: {err}"
+EDITOR_RENAME_PROMPT = "RENAME TO"
+EDITOR_RENAME_EXISTS = "A RECORD BY THAT NAME EXISTS"
 
 # ── Power ────────────────────────────────────────────────────────────────────
 POWER_LOGOUT = "LOG OUT"

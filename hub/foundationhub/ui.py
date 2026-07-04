@@ -134,6 +134,18 @@ class Menu:
             if self.items[self.index].enabled:
                 return
 
+    def set_index(self, index: int) -> None:
+        """Restore a selection after a rebuild: clamp to range, then settle on
+        an enabled row — headers/gaps are disabled rows the selection must
+        never rest on (Enter would silently do nothing there)."""
+        n = len(self.items)
+        if not n:
+            self.index = 0
+            return
+        self.index = max(0, min(index, n - 1))
+        if not self.items[self.index].enabled:
+            self.move(+1)
+
     def handle_key(self, key: int, app):
         if key in KEYS_UP:
             self.move(-1)

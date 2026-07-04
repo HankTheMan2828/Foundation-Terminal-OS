@@ -5,7 +5,7 @@ from .. import labels
 from ..app import MenuScreen
 from ..ui import MenuItem, KEYS_BACK
 
-from . import programs, recreation, functions, status, logs, notes, aichat, power
+from . import programs, recreation, functions, logs, power
 
 
 class HomeScreen(MenuScreen):
@@ -21,15 +21,18 @@ class HomeScreen(MenuScreen):
 
 
 def build_home(app):
-    """Top-level Home Hub. Order matches labels.py / the spec §5 listing."""
+    """Top-level Home Hub (feedback #8 — reworked IA).
+
+    Five entries: Programs (which now holds Notes + Notes Search), Recreation,
+    Settings (was Functions; also holds Network + the Status readout), Logs,
+    Power. The old top-level Personal File and Assistant entries were folded in
+    / hidden — Notes lives under Programs, Assistant is off the menu for now.
+    """
     items = [
         MenuItem(labels.PROGRAMS, lambda a: programs.screen()),
         MenuItem(labels.RECREATION, lambda a: recreation.screen()),
-        MenuItem(labels.FUNCTIONS, lambda a: functions.screen()),
-        MenuItem(labels.STATUS, lambda a: status.screen()),
+        MenuItem(labels.SETTINGS, lambda a: functions.screen()),
         MenuItem(labels.LOGS, lambda a: logs.screen()),
-        MenuItem(labels.NOTES, lambda a: notes.screen()),
-        MenuItem(labels.ASSISTANT, lambda a: aichat.screen()),
         MenuItem(labels.POWER, lambda a: power.screen()),
     ]
     return HomeScreen(labels.HUB_TITLE, items,

@@ -126,24 +126,94 @@ UX-focused; none block installs.
   - **Folders and search are deferred**, per the operator (search still
     lives in Personal File → SEARCH RECORDS).
 
-## 6. Game scores: ONE system-wide board, shown in Recreation  — HIGH
+## 6. Game scores: ONE system-wide board, shown in Recreation  — HIGH — ✅ FIXED (2026-07-04)
 - **Scoring is SYSTEM-WIDE ONLY — NEVER per user** (operator correction
   2026-07-04: no per-user score lists, no per-user filtering, ever).
 - There is **one global high-score table per game** for the whole machine;
   each entry **marks which user set it** (name attached to the score).
 - Scores must **not** appear in the file/folder area; they show as a
   **list in the games (Recreation) area**.
+- Fixed: `games/foundation_arcade/scores.py` now writes ONE machine-wide
+  file, `/var/lib/foundationhub/highscores.json` (`{game: {"score", "name"}}`)
+  — outside any account's quota'd `~/.local/share/foundationhub` space, so it
+  never shows up in a user's files (`install/08-games.sh` creates the dir,
+  owned by the operator). `record_score`/`best_score` call sites in Snake,
+  Falling Blocks, 2048, Sudoku, and Invaders are unchanged; only the store
+  moved from per-user to system-wide, attributing each best score to
+  `scores.active_username()` unless told otherwise.
+  - Recreation gained a new **HIGH SCORES** entry
+    (`hub/foundationhub/screens/recreation.py`'s `HighScoresScreen`), reading
+    the same file via a small independent reader
+    (`hub/foundationhub/highscores.py` — the Hub and games are separate
+    distributions, so this mirrors how `session.py` reads Frank's ledger
+    file directly rather than importing frankd).
+  - **Chess folded in too** (operator direction 2026-07-04, after the arcade
+    pass landed): `games/foundation_chess/stats.py` now keeps ONE
+    machine-wide win/loss/draw tally in `/var/lib/foundationhub/chess.json`
+    instead of a per-user record — same state dir the arcade's high scores
+    use, same "never per user" rule. Chess has no single beatable score (a
+    tally isn't a peak record), so it isn't folded into the same
+    score-board rows; it gets its own **W/L/D** line at the bottom of the
+    **HIGH SCORES** screen instead (`highscores.load_chess_record()`).
 
-## 7. Dated-entry feature for general notes  — feature
+## 7. Dated-entry feature for general notes  — feature — ✅ FIXED (2026-07-03)
 - The **personal file area's dated-entry thing** (journal-style entries)
   should also exist in the **general notes area**, under a different name.
+- Operator picked the label **"Dated Entries"** and added two requirements
+  while deciding: entries carry an **HH:MM timestamp** so several can exist
+  per day (unlike the personal journal's one-file-per-day), and notes need
+  **a rename option from inside the editor**, not just from the list.
+- Fixed: `hub/foundationhub/notesdb.py` gained a separate `DATED_DIR` tree
+  (`list_dated`, folded into `search()`) so the general area's entries never
+  share files with the personal journal's `JOURNAL_DIR`. NOTES AREA
+  (`hub/foundationhub/screens/notes.py`'s `NotesAreaScreen`) gained a pinned
+  **DATED ENTRIES** row leading to `DatedAreaScreen`; "new entry" always
+  creates a fresh `YYYY-MM-DD-HHMM.md` file rather than reusing one per day.
+  Labels: `labels.NOTES_AREA_DATED*`.
+- Also fixed, in the same pass: the in-house editor's Esc menu gained a
+  **RENAME** option (`SAVE / RENAME / DISCARD / RETURN`) that prompts for a
+  new name, slugifies it (`notesdb.slugify`), and renames the file on disk —
+  works for any note opened in the editor, not just dated entries.
 
-## 8. Home Hub information architecture  — think piece
+## 8. Home Hub information architecture  — think piece — ✅ FIXED (2026-07-03)
 - The ordering of the Home Hub and its sub-areas **"feels a little
   hectic."** Operator explicitly invites proposals for re-working the
   ordering/grouping of the Hub and sub-areas. Draft options, don't just
   pick one — menu wording is operator-approval territory
   (`OPEN-QUESTIONS.md`).
+- Process: three orderings were drafted (reorder-only / rename-and-merge /
+  "rooms"). Operator chose the rename-and-merge direction with changes.
+- Fixed — the reworked IA (canonical listing now in `BUILD-SPEC.md` §5):
+  - **Top level is five entries:** `PROGRAMS · RECREATION · SETTINGS · LOGS ·
+    POWER` (was eight). Diagnosis of "hectic": notes lived in two places at two
+    depths sharing one on-disk folder; "settings" was split across FUNCTIONS +
+    STATUS; the root mixed registers in an arrhythmic order.
+  - **Notes consolidated under Programs.** The old top-level `PERSONAL FILE`
+    and the duplicate Programs `NOTES AREA` merged into one **NOTES** page with
+    two purpose sections — **Work** first, **Personal** last, set apart by a
+    blank gap. Work has plain notes + timestamped **Dated Entries**; Personal
+    has plain notes + the one-per-day **Dated Journal** (kept, per operator;
+    now says "TODAY'S NOTE ALREADY EXISTS" and opens it when today's is made).
+    Programs order: **Notes · Notes Search · Files · Media · Monitor**.
+  - **On-disk split → File Manager.** Each section is its own folder under the
+    account dir (`work/`, `personal/`, each with a `dated/` or `journal/`
+    subfolder). The File Manager is rooted there, so it shows `work/` and
+    `personal/` as two clean folders — the "separate folders in the file
+    viewer" ask. A one-time `notesdb.migrate_legacy()` moves any pre-rework
+    `notes/`/`dated/`/`journal/` into the new layout (idempotent, non-destructive).
+  - **Notes Search is its own program** (Programs → NOTES SEARCH): asks
+    "include Personal notes?", **defaults to Work-only**.
+  - **FUNCTIONS → SETTINGS.** `NETWORK` (an action) moved out of Status into
+    Settings; the read-only **System Status** readout became a leaf inside
+    Settings (no longer a top-level entry).
+  - **Assistant hidden** from the menu for now (screen code retained; one-line
+    revert in `screens/__init__.build_home`).
+  - Code: `screens/__init__.py`, `screens/programs.py`, `screens/functions.py`,
+    `screens/status.py`, `screens/notes.py`, `notesdb.py`, `labels.py`; tests
+    in `hub/tests/test_notesdb.py` (section layout + migration). Note the
+    trade-off: list-based note delete/rename dropped from the notes screens —
+    rename lives in the editor, delete in the File Manager (one-editor / one
+    file-op surface).
 
 ## 9. Highlight bars don't always reach the screen edge  — polish — ✅ FIXED (2026-07-03)
 - Some selection/highlight bars stop short of the right edge; make bar

@@ -87,37 +87,48 @@ corporate-menacing personality.
 
 ## 5. Home Hub Structure
 
-The Home Hub is the top-level menu shown after login. All labels below are
-placeholders — final wording will mix Vault-Tec/Aperture-style flavor with
-plain practicality, and every label must be reviewed and approved by the user
-before finalizing.
+The Home Hub is the top-level menu shown after login. Wording mixes
+Vault-Tec/Aperture-style flavor with plain practicality; every label is
+reviewed and approved by the user (see `OPEN-QUESTIONS.md`).
 
-- **Programs** — general tools (file manager via ranger, media player via
-  cmus/mpv, system monitor via btop, etc.)
-- **Recreation** — dedicated games area. Genre direction: roguelikes (nethack,
-  DCSS), arcade/simple (snake, tetris-likes, invaders), puzzle/strategy (chess,
-  2048-likes). Specific title list TBD.
-- **Functions Control** — real, functional system toggles only. No
-  cosmetic/fake elements. Covers: brightness (including synced dual-panel
-  brightness), second-screen on/off, power profile switching, theme/sound
-  customization.
-- **System Status** (formerly "Settings" — the user decided a settings surface
-  shouldn't exist here at all) — network configuration (`nmtui`) plus a
-  read-only readout: logged-in user (name + uid), and a functioning/not
-  status list for the basics (network, audio, the Frank overseer). No resource
+> **IA rework (feedback #8, 2026-07-03).** The first-hardware-run feedback that
+> the top level "felt a little hectic" drove a regrouping. The top level is now
+> five entries — **Programs · Recreation · Settings · Logs · Power** — with two
+> former top-level entries folded in: Notes moved *under* Programs (and the old
+> duplicate note surfaces merged), and the read-only System Status readout moved
+> *under* Settings. AI Chat is built but hidden from the menu for now.
+
+- **Programs** — general tools, in order:
+  - **Notes** — the operator's writing space, one page split by *purpose* into
+    two sections: **Work** first, **Personal** last. Each is its own folder
+    (`work/`, `personal/`) so the File Manager shows them as two clean folders.
+    Each section has plain notes (named on creation) plus one dated feature —
+    Work gets timestamped **Dated Entries** (several per day), Personal gets the
+    one-page-per-day **Dated Journal**. Not exempt from Frank's monitoring
+    (an exempt zone was considered and explicitly dropped).
+  - **Notes Search** — a separate search program (text + `#tags`). Asks whether
+    to include Personal notes; **defaults to Work-only**.
+  - **File Manager** (in-house), **Media** (in-house `foundationmedia`),
+    **System Monitor** (in-house, view-only).
+- **Recreation** — dedicated games area (+ a system-wide **High Scores** board).
+  Genre direction: roguelikes, arcade/simple, puzzle/strategy.
+- **Settings** (was "Functions Control") — real, functional system toggles only,
+  no cosmetic/fake elements: brightness (synced dual-panel), second-screen
+  on/off, power profile, theme/sound, text size. Also holds the two
+  config-shaped things that used to sit under Status: **Network** (`nmtui`) and
+  the read-only **System Status** readout (logged-in user + uid, and a
+  functioning/not list for network, audio, and the Frank overseer). No resource
   limits, no user/auth actions, no overseer sensitivity tuning — Frank's core
-  config, logs, and functions remain explicitly excluded and unreachable by
-  any user from within the running OS.
-- **Log** — two distinct, separate sections:
+  config, logs, and functions remain excluded and unreachable from within the OS.
+- **Logs** — two distinct, separate sections:
   - Real system logs (journalctl, kernel, auth) — raw and unmodified
   - Frank's own incident log — see Section 6, this is heavily restricted
-- **Personal Notes** — user's own space. Structure: a quick dated/chronological
-  journal plus a separate tagged/organized notes section. Not
-  monitored/exempted status was considered and explicitly dropped — this space
-  is not exempt from Frank's monitoring.
-- **AI Chat** — a separate, general-purpose assistant (Mistral API), distinct
-  from Frank, for everyday questions. Its own dedicated menu item, called
-  on-demand only (not automatically) to control cost.
+- **Power** — log out (ends the session), reboot, shut down.
+- **AI Chat** *(built, currently hidden)* — a separate, general-purpose
+  assistant (Mistral API), distinct from Frank, for everyday questions. Called
+  on-demand only (not automatically) to control cost. The screen exists; it is
+  off the top-level menu pending the key decision, re-added by editing
+  `screens/__init__.build_home`.
 
 ## 6. Frank (The Overseer)
 

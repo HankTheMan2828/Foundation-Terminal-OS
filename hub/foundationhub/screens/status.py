@@ -1,25 +1,24 @@
 """System Status (spec §5) — was CONFIGURATION.
 
-Resource limits and user/auth actions are gone at the user's explicit
-direction: there is no operator-facing settings surface here. What's left is
-what the terminal itself needs — NETWORK stays reachable (nmtui) — plus a
-read-only readout: who's logged in, and whether the basics are up.
+Read-only now (feedback #8): NETWORK config moved to Settings, and Status is
+reached from inside Settings rather than the top level. What's left is a pure
+readout — who's logged in, and whether the basics are up. Resource limits and
+user/auth actions remain gone at the user's explicit direction.
 """
 from __future__ import annotations
 
 import curses
 
 from .. import labels, session, theme
-from ..app import MenuScreen, Launch
-from ..ui import MenuItem
+from ..app import POP, Screen
+from ..ui import KEYS_BACK
 
 
-class StatusScreen(MenuScreen):
+class StatusScreen(Screen):
+    title = labels.STATUS
+    subtitle = "read-only readout"
+
     def __init__(self):
-        items = [
-            MenuItem(labels.STATUS_NETWORK, lambda a: Launch(["nmtui"]), hint="nmtui"),
-        ]
-        super().__init__(labels.STATUS, items)
         self._user, self._uid = session.get_user_identity()
         self._checks = [
             (labels.STATUS_CHECK_NETWORK, session.check_network),
@@ -27,9 +26,13 @@ class StatusScreen(MenuScreen):
             (labels.STATUS_CHECK_FRANK, session.check_frank),
         ]
 
+    def handle_key(self, key, app):
+        if key in KEYS_BACK:
+            return POP
+        return None
+
     def draw(self, win, top: int, left: int) -> None:
-        super().draw(win, top, left)
-        row = top + len(self.menu.items) + 2
+        row = top
         try:
             win.addstr(row, left, labels.STATUS_USER_HEADING,
                        theme.attr(theme.PAIR_DIM, dim=True))

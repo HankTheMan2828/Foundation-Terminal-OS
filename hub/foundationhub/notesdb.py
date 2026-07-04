@@ -2,10 +2,19 @@
 
 Pure stdlib, no curses — the notes screens compose these functions and the
 tests exercise them headlessly. Notes are plain `.md` files on disk
-(portable, greppable, quota-friendly): `journal/YYYY-MM-DD.md` for the dated
-journal, `notes/<slug>.md` for tagged notes. Tags are inline `#tag` tokens
-in the body; there is no sidecar index to corrupt — every lookup re-reads
-the files, which stay small by nature.
+(portable, greppable, quota-friendly).
+
+Layout (feedback #8 — Home Hub IA rework): notes are split by *purpose* into
+two sections, each its own folder under the account's data dir so they show up
+as two clean folders in the File Manager:
+
+    work/<slug>.md            plain Work notes (named on creation)
+    work/dated/<stamp>.md     Work dated entries (timestamped, many per day)
+    personal/<slug>.md        plain Personal notes
+    personal/journal/DATE.md  Personal journal (one page per day)
+
+Tags are inline `#tag` tokens in the body; there is no sidecar index to
+corrupt — every lookup re-reads the files, which stay small by nature.
 """
 from __future__ import annotations
 
@@ -13,8 +22,21 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-JOURNAL_DIR = "journal"
-NOTES_DIR = "notes"
+# ── Purpose-based sections (feedback #8) ─────────────────────────────────────
+SECTION_WORK = "work"
+SECTION_PERSONAL = "personal"
+SECTIONS = (SECTION_WORK, SECTION_PERSONAL)
+
+# Per-section subfolders for the two dated features, kept apart from the plain
+# notes that sit directly in the section dir: Work gets timestamped entries
+# (several per day), Personal gets the one-page-per-day journal.
+DATED_SUBDIR = "dated"
+JOURNAL_SUBDIR = "journal"
+
+# Legacy (pre-#8) flat folders, migrated once into the sections above.
+_LEGACY_NOTES = "notes"
+_LEGACY_DATED = "dated"
+_LEGACY_JOURNAL = "journal"
 
 # A tag is `#word` where the `#` starts a token: not mid-word (`foo#bar`) and
 # not a markdown heading run (`##`). Heading lines like `# Title` don't match
@@ -54,27 +76,50 @@ def parse_query(query: str) -> tuple[list[str], list[str]]:
     return tags, terms
 
 
-def list_journal(user_dir: Path) -> list[Path]:
-    """Journal entries, newest first (date-stamped names sort that way)."""
-    d = user_dir / JOURNAL_DIR
+# ── section paths ─────────────────────────────────────────────────────────────
+def section_dir(user_dir: Path, section: str) -> Path:
+    """The folder holding one section's plain notes (also the File Manager's
+    visible `work/` or `personal/` folder)."""
+    return user_dir / section
+
+
+def dated_dir(user_dir: Path, section: str) -> Path:
+    """Where a section's timestamped dated entries live (Work uses this)."""
+    return section_dir(user_dir, section) / DATED_SUBDIR
+
+
+def journal_dir(user_dir: Path, section: str) -> Path:
+    """Where a section's one-per-day journal lives (Personal uses this)."""
+    return section_dir(user_dir, section) / JOURNAL_SUBDIR
+
+
+def note_path(user_dir: Path, section: str, name: str) -> Path:
+    """The `.md` path a note with display `name` maps to inside `section`: a
+    slugged stem under the section dir. Path-safe by construction (slugify
+    strips escapes), and `section` is a fixed constant, never user input."""
+    return section_dir(user_dir, section) / f"{slugify(name)}.md"
+
+
+# ── listing ───────────────────────────────────────────────────────────────────
+def _list_md(d: Path, *, newest_first: bool) -> list[Path]:
     if not d.is_dir():
         return []
-    return sorted(d.glob("*.md"), key=lambda p: p.name, reverse=True)
+    return sorted(d.glob("*.md"), key=lambda p: p.name, reverse=newest_first)
 
 
-def list_notes(user_dir: Path) -> list[Path]:
-    """Tagged notes, alphabetical."""
-    d = user_dir / NOTES_DIR
-    if not d.is_dir():
-        return []
-    return sorted(d.glob("*.md"), key=lambda p: p.name)
+def list_notes(user_dir: Path, section: str) -> list[Path]:
+    """A section's plain notes, alphabetical."""
+    return _list_md(section_dir(user_dir, section), newest_first=False)
 
 
-def note_path(user_dir: Path, name: str) -> Path:
-    """The `.md` path a note with display `name` maps to: a slugged stem under
-    the notes dir. Path-safe by construction (slugify strips escapes), so the
-    same call resolves note targets for both the Notes Area and Tagged Notes."""
-    return user_dir / NOTES_DIR / f"{slugify(name)}.md"
+def list_dated(user_dir: Path, section: str) -> list[Path]:
+    """A section's dated entries, newest first (stamped names sort that way)."""
+    return _list_md(dated_dir(user_dir, section), newest_first=True)
+
+
+def list_journal(user_dir: Path, section: str) -> list[Path]:
+    """A section's journal pages, newest first (date-stamped names sort so)."""
+    return _list_md(journal_dir(user_dir, section), newest_first=True)
 
 
 def note_tags(path: Path) -> list[str]:
@@ -84,11 +129,12 @@ def note_tags(path: Path) -> list[str]:
         return []
 
 
+# ── search ────────────────────────────────────────────────────────────────────
 @dataclass
 class Hit:
     """One matching file with a one-line snippet for the results list."""
     path: Path
-    kind: str          # "journal" | "note"
+    section: str       # "work" | "personal" — which section the file lives in
     snippet: str
 
 
@@ -106,16 +152,19 @@ def _snippet(text: str, tags: list[str], terms: list[str]) -> str:
     return ""
 
 
-def search(user_dir: Path, query: str) -> list[Hit]:
-    """AND-match `query` across journal + notes. Every `#tag` must be in the
-    file's tag set and every term a substring of its text (case-insensitive)."""
+def search(user_dir: Path, query: str, sections=SECTIONS) -> list[Hit]:
+    """AND-match `query` across the given sections (all of a section's `.md`
+    files — plain notes plus its dated/journal subfolder). Every `#tag` must be
+    in the file's tag set and every term a substring of its text
+    (case-insensitive). `sections` lets Notes Search scope Work-only by default
+    and opt into Personal (feedback #8)."""
     tags, terms = parse_query(query)
     if not tags and not terms:
         return []
     hits: list[Hit] = []
-    for kind, paths in (("journal", list_journal(user_dir)),
-                        ("note", list_notes(user_dir))):
-        for path in paths:
+    for section in sections:
+        base = section_dir(user_dir, section)
+        for path in sorted(base.rglob("*.md"), key=lambda p: str(p)):
             try:
                 text = path.read_text(encoding="utf-8")
             except OSError:
@@ -124,5 +173,28 @@ def search(user_dir: Path, query: str) -> list[Hit]:
             file_tags = extract_tags(text)
             if all(t in file_tags for t in tags) and \
                all(t in lower for t in terms):
-                hits.append(Hit(path, kind, _snippet(text, tags, terms)))
+                hits.append(Hit(path, section, _snippet(text, tags, terms)))
     return hits
+
+
+# ── one-time migration from the pre-#8 flat layout ───────────────────────────
+def migrate_legacy(user_dir: Path) -> None:
+    """Move a pre-rework flat tree into the Work/Personal sections, once.
+
+    Old scratch/tagged `notes/` and timestamped `dated/` were the general
+    (non-personal) area → Work. The one-per-day `journal/` was the Personal
+    File → Personal. Each move only runs when the source exists and the target
+    does not, so it is idempotent and never clobbers real data.
+    """
+    moves = [
+        (user_dir / _LEGACY_NOTES, section_dir(user_dir, SECTION_WORK)),
+        (user_dir / _LEGACY_DATED, dated_dir(user_dir, SECTION_WORK)),
+        (user_dir / _LEGACY_JOURNAL, journal_dir(user_dir, SECTION_PERSONAL)),
+    ]
+    for src, dst in moves:
+        if src.is_dir() and not dst.exists():
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                src.rename(dst)
+            except OSError:
+                pass

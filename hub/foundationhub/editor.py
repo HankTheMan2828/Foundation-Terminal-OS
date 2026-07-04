@@ -18,9 +18,9 @@ from __future__ import annotations
 import curses
 from pathlib import Path
 
-from . import labels, theme
+from . import labels, notesdb, theme
 from .app import POP, Screen
-from .ui import KEYS_DOWN, KEYS_SELECT, KEYS_UP
+from .ui import KEYS_DOWN, KEYS_SELECT, KEYS_UP, LineEdit
 
 TAB_SPACES = "    "
 
@@ -135,14 +135,16 @@ class Editor:
     way out; the composing screen decides what "close" means (usually POP).
     """
 
-    _MENU = (labels.EDITOR_MENU_SAVE, labels.EDITOR_MENU_DISCARD,
-             labels.EDITOR_MENU_RETURN)
+    _MENU = (labels.EDITOR_MENU_SAVE, labels.EDITOR_MENU_RENAME,
+             labels.EDITOR_MENU_DISCARD, labels.EDITOR_MENU_RETURN)
 
     def __init__(self, path: Path, *, create_text: str = "", wrap: bool = True):
         self.path = Path(path)
         self.wrap = wrap
         self.menu_open = False
         self.menu_index = 0
+        self.rename_mode = False
+        self.rename_edit = LineEdit(limit=48)
         self.message = ""
         self._top = 0        # first buffer line on screen
         self._left = 0       # horizontal scroll (no-wrap mode only)
@@ -240,6 +242,18 @@ class Editor:
 
         if self.menu_open:
             self._draw_menu(win, top, left)
+        elif self.rename_mode:
+            self._draw_rename(win, left)
+
+    def _draw_rename(self, win, left: int) -> None:
+        h, w = win.getmaxyx()
+        row = h - 4        # above the statusbar (drawn at h - 2 by draw_statusbar)
+        prompt = f"{labels.EDITOR_RENAME_PROMPT}: {self.rename_edit.display()}"
+        try:
+            win.addstr(row, left, prompt[: w - left - 2],
+                       theme.attr(theme.PAIR_ACCENT, bold=True))
+        except curses.error:
+            pass
 
     def _draw_menu(self, win, top: int, left: int) -> None:
         _, w = win.getmaxyx()
@@ -265,6 +279,8 @@ class Editor:
     # ── input ─────────────────────────────────────────────────────────────────
     def handle_key(self, key: int):
         self.message = ""
+        if self.rename_mode:
+            return self._handle_rename_key(key)
         if self.menu_open:
             return self._handle_menu_key(key)
         if key == 27:                              # Esc → menu
@@ -314,20 +330,56 @@ class Editor:
             if choice == labels.EDITOR_MENU_SAVE:
                 if self.save():
                     return "close"
+            elif choice == labels.EDITOR_MENU_RENAME:
+                self.rename_mode = True
+                self.rename_edit = LineEdit(limit=48, value=self.path.stem)
             elif choice == labels.EDITOR_MENU_DISCARD:
                 return "close"
             # RETURN: back to editing
         return None
 
+    def _handle_rename_key(self, key: int):
+        result = self.rename_edit.handle(key)
+        if result == "cancel":
+            self.rename_mode = False
+            return None
+        if result != "submit":
+            return None
+        self.rename_mode = False
+        name = self.rename_edit.value.strip()
+        if not name:
+            return None
+        new_path = self.path.with_name(f"{notesdb.slugify(name)}{self.path.suffix}")
+        if new_path == self.path:
+            return None
+        if new_path.exists():
+            self.message = labels.EDITOR_RENAME_EXISTS
+            return None
+        try:
+            if self.path.exists():
+                self.path.rename(new_path)
+            self.path = new_path
+        except OSError as exc:
+            self.message = labels.EDITOR_SAVE_FAILED.format(err=exc)
+            return None
+        return "renamed"
+
 
 class EditorScreen(Screen):
-    """Pushable wrapper: `return EditorScreen(path)` from any menu action."""
+    """Pushable wrapper: `return EditorScreen(path)` from any menu action.
+
+    `title_for`, if given, recomputes the header after a rename (the Esc
+    menu's RENAME option) so the title reflects the file's new name — e.g.
+    dated-entry screens pass a callback that keeps their fixed prefix and
+    only swaps in the new stem. Defaults to the bare stem.
+    """
 
     def __init__(self, path: Path, *, title: str = "", create_text: str = "",
-                 wrap: bool = True):
+                 wrap: bool = True, title_for=None):
         self.editor = Editor(path, create_text=create_text, wrap=wrap)
         self.title = title or labels.EDITOR_TITLE
         self.subtitle = labels.EDITOR_SUBTITLE
+        self._title_for = title_for or (lambda p: p.stem)
 
     def draw(self, win, top: int, left: int) -> None:
         self.editor.draw(win, top, left)
@@ -336,6 +388,9 @@ class EditorScreen(Screen):
         return self.editor.status_text()
 
     def handle_key(self, key: int, app):
-        if self.editor.handle_key(key) == "close":
+        result = self.editor.handle_key(key)
+        if result == "close":
             return POP
+        if result == "renamed":
+            self.title = self._title_for(self.editor.path)
         return None

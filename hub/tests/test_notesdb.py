@@ -1,10 +1,12 @@
 """Headless tests for the notes database: tag parsing, slugs, query parsing,
-and search across a temp per-user tree (queue §1)."""
+listing, search, and the Work/Personal section layout (queue §1, feedback #8)."""
 from pathlib import Path
 
 from foundationhub import notesdb
-from foundationhub.notesdb import (extract_tags, list_journal, list_notes,
-                            note_path, parse_query, search, slugify)
+from foundationhub.notesdb import (SECTION_PERSONAL, SECTION_WORK, SECTIONS,
+                                   extract_tags, list_dated, list_journal,
+                                   list_notes, migrate_legacy, note_path,
+                                   parse_query, search, slugify)
 
 
 # ── tag parsing ───────────────────────────────────────────────────────────────
@@ -58,16 +60,21 @@ def test_slugify_collapses_dashes():
     assert slugify("a  --  b") == "a-b"
 
 
-# ── note_path (shared by the Notes Area + Tagged Notes — feedback #5) ─────────
+# ── note_path (per section — feedback #8) ─────────────────────────────────────
 
-def test_note_path_slugs_under_notes_dir(tmp_path):
-    assert note_path(tmp_path, "My Grand Plan") \
-        == tmp_path / notesdb.NOTES_DIR / "my-grand-plan.md"
+def test_note_path_slugs_under_section_dir(tmp_path):
+    assert note_path(tmp_path, SECTION_WORK, "My Grand Plan") \
+        == tmp_path / SECTION_WORK / "my-grand-plan.md"
+
+
+def test_note_path_honors_section(tmp_path):
+    p = note_path(tmp_path, SECTION_PERSONAL, "Diary")
+    assert p == tmp_path / SECTION_PERSONAL / "diary.md"
 
 
 def test_note_path_is_path_safe(tmp_path):
-    p = note_path(tmp_path, "../../etc/passwd")
-    assert p.parent == tmp_path / notesdb.NOTES_DIR
+    p = note_path(tmp_path, SECTION_WORK, "../../etc/passwd")
+    assert p.parent == tmp_path / SECTION_WORK
     assert p.name == "etc-passwd.md"
 
 
@@ -89,68 +96,116 @@ def test_parse_query_bare_hash_is_a_term():
 # ── listing + search ──────────────────────────────────────────────────────────
 
 def _make_tree(root: Path) -> Path:
-    journal = root / notesdb.JOURNAL_DIR
-    notes = root / notesdb.NOTES_DIR
-    journal.mkdir(parents=True)
-    notes.mkdir(parents=True)
-    (journal / "2026-06-30.md").write_text(
-        "# 2026-06-30\n\nfixed the water chip #maintenance\n", encoding="utf-8")
-    (journal / "2026-07-01.md").write_text(
-        "# 2026-07-01\n\nquiet day #journal\n", encoding="utf-8")
-    (notes / "reactor.md").write_text(
+    """A populated two-section tree: Work notes + a Work dated entry, and a
+    Personal note + a Personal journal page."""
+    work = notesdb.section_dir(root, SECTION_WORK)
+    work_dated = notesdb.dated_dir(root, SECTION_WORK)
+    personal = notesdb.section_dir(root, SECTION_PERSONAL)
+    personal_journal = notesdb.journal_dir(root, SECTION_PERSONAL)
+    for d in (work, work_dated, personal, personal_journal):
+        d.mkdir(parents=True, exist_ok=True)
+    (work / "reactor.md").write_text(
         "# Reactor\n\ncheck coolant #maintenance #reactor\n", encoding="utf-8")
-    (notes / "recipes.md").write_text(
+    (work / "recipes.md").write_text(
         "# Recipes\n\niguana-on-a-stick\n", encoding="utf-8")
+    (work_dated / "2026-06-30-0900.md").write_text(
+        "# standup\n\nfixed the water chip #maintenance\n", encoding="utf-8")
+    (personal / "diary.md").write_text(
+        "# Diary\n\nprivate coolant thoughts #me\n", encoding="utf-8")
+    (personal_journal / "2026-06-29.md").write_text(
+        "# 2026-06-29\n\nold page #journal\n", encoding="utf-8")
+    (personal_journal / "2026-07-01.md").write_text(
+        "# 2026-07-01\n\nquiet day #journal\n", encoding="utf-8")
     return root
+
+
+def test_list_notes_alphabetical_per_section(tmp_path):
+    root = _make_tree(tmp_path)
+    assert [p.stem for p in list_notes(root, SECTION_WORK)] == ["reactor", "recipes"]
+    assert [p.stem for p in list_notes(root, SECTION_PERSONAL)] == ["diary"]
+
+
+def test_list_dated_newest_first(tmp_path):
+    root = _make_tree(tmp_path)
+    assert [p.stem for p in list_dated(root, SECTION_WORK)] == ["2026-06-30-0900"]
 
 
 def test_list_journal_newest_first(tmp_path):
     root = _make_tree(tmp_path)
-    assert [p.stem for p in list_journal(root)] == ["2026-07-01", "2026-06-30"]
-
-
-def test_list_notes_alphabetical(tmp_path):
-    root = _make_tree(tmp_path)
-    assert [p.stem for p in list_notes(root)] == ["reactor", "recipes"]
+    assert [p.stem for p in list_journal(root, SECTION_PERSONAL)] \
+        == ["2026-07-01", "2026-06-29"]
 
 
 def test_listing_missing_dirs_is_empty(tmp_path):
-    assert list_journal(tmp_path) == []
-    assert list_notes(tmp_path) == []
+    assert list_notes(tmp_path, SECTION_WORK) == []
+    assert list_journal(tmp_path, SECTION_PERSONAL) == []
+    assert list_dated(tmp_path, SECTION_WORK) == []
 
 
-def test_search_by_tag_spans_journal_and_notes(tmp_path):
+def test_search_work_only_by_default_excludes_personal(tmp_path):
     root = _make_tree(tmp_path)
-    hits = search(root, "#maintenance")
-    assert {h.path.stem for h in hits} == {"2026-06-30", "reactor"}
-    assert {h.kind for h in hits} == {"journal", "note"}
+    # "#me" only exists in a Personal note; a Work-only search must miss it.
+    assert search(root, "#me", (SECTION_WORK,)) == []
+    hits = search(root, "#me", SECTIONS)
+    assert {h.path.stem for h in hits} == {"diary"}
+    assert hits[0].section == SECTION_PERSONAL
+
+
+def test_search_spans_notes_and_dated_within_a_section(tmp_path):
+    root = _make_tree(tmp_path)
+    hits = search(root, "#maintenance", (SECTION_WORK,))
+    # matches the Work note AND the Work dated entry (rglob over the section)
+    assert {h.path.stem for h in hits} == {"reactor", "2026-06-30-0900"}
+    assert {h.section for h in hits} == {SECTION_WORK}
 
 
 def test_search_free_text_case_insensitive(tmp_path):
     root = _make_tree(tmp_path)
-    hits = search(root, "IGUANA")
+    hits = search(root, "IGUANA", (SECTION_WORK,))
     assert [h.path.stem for h in hits] == ["recipes"]
 
 
 def test_search_terms_and_tags_are_anded(tmp_path):
     root = _make_tree(tmp_path)
-    assert [h.path.stem for h in search(root, "#maintenance coolant")] \
+    assert [h.path.stem for h in search(root, "#maintenance coolant", (SECTION_WORK,))] \
         == ["reactor"]
-    assert search(root, "#maintenance iguana") == []
+    assert search(root, "#maintenance iguana", (SECTION_WORK,)) == []
 
 
 def test_search_empty_query_returns_nothing(tmp_path):
     root = _make_tree(tmp_path)
-    assert search(root, "   ") == []
+    assert search(root, "   ", SECTIONS) == []
 
 
 def test_search_snippet_shows_matching_line(tmp_path):
     root = _make_tree(tmp_path)
-    (hit,) = search(root, "coolant")
+    (hit,) = search(root, "coolant", (SECTION_WORK,))
     assert "coolant" in hit.snippet
 
 
-def test_search_tag_only_snippet_shows_tag_line(tmp_path):
-    root = _make_tree(tmp_path)
-    hits = search(root, "#reactor")
-    assert "#reactor" in hits[0].snippet
+# ── one-time migration from the pre-#8 flat layout ───────────────────────────
+
+def test_migrate_legacy_moves_flat_tree_into_sections(tmp_path):
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "reactor.md").write_text("x", encoding="utf-8")
+    (tmp_path / "dated").mkdir()
+    (tmp_path / "dated" / "2026-06-30-0900.md").write_text("x", encoding="utf-8")
+    (tmp_path / "journal").mkdir()
+    (tmp_path / "journal" / "2026-07-01.md").write_text("x", encoding="utf-8")
+
+    migrate_legacy(tmp_path)
+
+    assert [p.stem for p in list_notes(tmp_path, SECTION_WORK)] == ["reactor"]
+    assert [p.stem for p in list_dated(tmp_path, SECTION_WORK)] == ["2026-06-30-0900"]
+    assert [p.stem for p in list_journal(tmp_path, SECTION_PERSONAL)] == ["2026-07-01"]
+    # old dirs are gone
+    assert not (tmp_path / "notes").exists()
+    assert not (tmp_path / "journal").exists()
+
+
+def test_migrate_legacy_is_idempotent_and_nondestructive(tmp_path):
+    _make_tree(tmp_path)   # already in the new layout
+    before = {p.stem for p in list_notes(tmp_path, SECTION_WORK)}
+    migrate_legacy(tmp_path)
+    migrate_legacy(tmp_path)
+    assert {p.stem for p in list_notes(tmp_path, SECTION_WORK)} == before

@@ -17,11 +17,16 @@ from ..app import MenuScreen, Launch
 from ..ui import MenuItem
 from .files import FileManagerScreen
 from .monitor import MonitorScreen
-from .notes import NotesAreaScreen
+from .notes import NotesScreen, NotesSearchScreen
 
 
 def screen():
     items = [
+        # Notes leads (feedback #8): the single notes home (Work + Personal),
+        # with its own search program right beside it.
+        MenuItem(labels.NOTES, lambda a: NotesScreen(), hint="in-house"),
+        MenuItem(labels.NOTES_SEARCH, lambda a: NotesSearchScreen(),
+                 hint="work-only by default"),
         MenuItem(labels.PROG_FILES, lambda a: FileManagerScreen(),
                  hint="in-house"),
         # The ONE in-house player, as its own program (hybrid model). Audio
@@ -32,11 +37,6 @@ def screen():
                  hint="foundationmedia"),
         # Native Hub screen (in-house monitor) — btop retired, queue §3.
         MenuItem(labels.PROG_MONITOR, lambda a: MonitorScreen(),
-                 hint="in-house"),
-        # feedback #5: the old bare 'text editor' scratch pad is now a proper
-        # Notes Area — a folder of notes with a create-new flow on top. Still
-        # the one in-house editor underneath (one-editor policy).
-        MenuItem(labels.PROG_NOTES, lambda a: NotesAreaScreen(),
                  hint="in-house"),
     ]
     return MenuScreen(labels.PROGRAMS, items)
