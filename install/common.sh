@@ -30,6 +30,11 @@ require_root() {
 
 is_arch() { command -v pacman >/dev/null 2>&1; }
 
+# FOUNDATION_UPDATE=1: this run is refreshing an existing install (UPDATE mode,
+# docs/UPDATE-SYSTEM.md §4) — steps must refresh code/units but NO-CLOBBER any
+# machine or user state (Frank state, tuned configs, Settings choices).
+is_update() { [[ "${FOUNDATION_UPDATE:-0}" == "1" ]]; }
+
 # Install packages idempotently. No-op (with a note) off Arch so scripts can be
 # dry-read / partially exercised elsewhere. FOUNDATION_OFFLINE=1 (set by the
 # flashable-ISO installer, image/) means every package was already laid down by

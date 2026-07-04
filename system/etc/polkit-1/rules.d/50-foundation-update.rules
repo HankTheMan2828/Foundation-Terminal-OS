@@ -1,0 +1,20 @@
+// Scoped update authorization (docs/UPDATE-SYSTEM.md §5/§6).
+//
+// The Settings > SYSTEM UPDATE screen runs as the session user but applying
+// an update / changing the transport policy is root work. Same pattern as
+// the account rule: allow pkexec of EXACTLY ONE helper, nothing else. The
+// helper (foundation-update) revalidates everything — technician setup code
+// against the root-owned registry, transport policy against the live route,
+// payload checksum before anything is touched — so this grant confers "may
+// ask for an update", not "may administer the system". It is the ONE
+// operator→root path the update system adds (OPEN-QUESTIONS.md §12), and it
+// runs fixed root-owned logic with no operator-influenced inputs.
+
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/local/bin/foundation-update" &&
+        subject.local && subject.active &&
+        subject.isInGroup("operator")) {
+        return polkit.Result.YES;
+    }
+});

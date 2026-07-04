@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""foundation-update — ROOT helper for the network update path and the
+transport-policy setting (docs/UPDATE-SYSTEM.md §3, §5).
+
+Invoked from the Hub's Settings > SYSTEM UPDATE screen via pkexec (see
+/etc/polkit-1/rules.d/50-foundation-update.rules — same scoped pattern as
+foundationhub-account). NOT a daemon: it runs, does one thing, exits.
+
+    foundation-update apply
+        stdin line 1: technician setup code
+        Fetches the latest GitHub release's OS payload, verifies its
+        checksum, refreshes /opt/terminal-os and re-runs the install steps
+        in FOUNDATION_UPDATE=1 (no-clobber) mode.
+
+    foundation-update set-policy <usb|usb+wired|usb+wired+wireless>
+        stdin line 1: technician setup code
+        Rewrites /etc/foundation-update.conf and enforces the WiFi radio
+        state to match.
+
+This helper is the authoritative gate — the Hub pre-checks tier/policy for
+UX, but a hostile client talking straight to pkexec hits the same checks
+here: the setup code is verified against the root-owned registry, the
+transport policy is re-read and enforced, and the payload is verified before
+anything is touched.
+
+Trust status (docs/OPEN-QUESTIONS.md §12): payload verification is currently
+SHA256 over HTTPS (integrity; trust anchor GitHub+TLS). Detached-signature
+verification is the recommended §12 upgrade and slots in at _verify().
+
+Frank isolation (docs/UPDATE-SYSTEM.md §6): this helper never reads or
+writes /etc/frank or /var/lib/frank — those are preserved (or refreshed
+root-owned) by the install steps it re-runs, whose isolation checks run at
+the end and fail the whole update if the operator gained any power.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+GITHUB_REPO = "HankTheMan2828/Foundation-Terminal-OS"
+API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+RELEASE_FILE = "/etc/foundation-release"
+POLICY_FILE = "/etc/foundation-update.conf"
+STAGING = "/var/lib/foundation-update"
+TARGET = "/opt/terminal-os"
+POLICY_MODES = ("usb", "usb+wired", "usb+wired+wireless")
+TIMEOUT = 30
+
+
+def _fail(msg: str) -> int:
+    print(msg, file=sys.stderr)
+    return 1
+
+
+def _info(msg: str) -> None:
+    print(msg, flush=True)
+
+
+# ── shared plumbing (mirrors foundationhub-account) ─────────────────────────
+def _locate_hub_lib() -> None:
+    try:
+        import foundationhub  # noqa: F401
+        return
+    except ImportError:
+        pass
+    candidates = []
+    if os.environ.get("FOUNDATIONHUB_LIB"):
+        candidates.append(os.environ["FOUNDATIONHUB_LIB"])
+    try:
+        root = open("/etc/foundationhub/install-root").read().strip()
+        if root:
+            candidates.append(os.path.join(root, "hub"))
+    except OSError:
+        pass
+    candidates.append("/opt/terminal-os/hub")
+    for cand in candidates:
+        if os.path.isdir(os.path.join(cand, "foundationhub")):
+            sys.path.insert(0, cand)
+            return
+    sys.exit("foundation-update: cannot locate the foundationhub package")
+
+
+def _require_root() -> None:
+    if os.name == "posix" and os.geteuid() != 0:
+        sys.exit("foundation-update must run as root (via pkexec)")
+
+
+def _check_setup_code() -> str | None:
+    """Read the technician setup code from stdin and verify it against the
+    root-owned registry — the authoritative check (Hub pre-checks for UX)."""
+    code = sys.stdin.readline().rstrip("\n")
+    _locate_hub_lib()
+    from foundationhub.accounts import Registry
+    if not Registry().verify_setup_code(code):
+        return "setup code rejected"
+    return None
+
+
+def _policy() -> str:
+    try:
+        with open(POLICY_FILE) as fh:
+            for line in fh:
+                line = line.split("#", 1)[0].strip()
+                if line.startswith("transports"):
+                    value = line.split("=", 1)[1].strip()
+                    if value in POLICY_MODES:
+                        return value
+    except OSError:
+        pass
+    return "usb+wired"    # the shipped default; garbage never widens policy
+
+
+def _default_route_iface() -> str | None:
+    try:
+        with open("/proc/net/route") as fh:
+            for line in fh.readlines()[1:]:
+                fields = line.split()
+                if len(fields) >= 2 and fields[1] == "00000000":
+                    return fields[0]
+    except OSError:
+        pass
+    return None
+
+
+def _iface_is_wireless(iface: str) -> bool:
+    return os.path.isdir(f"/sys/class/net/{iface}/wireless")
+
+
+def _transport_gate(mode: str) -> str | None:
+    """Enforce the policy against the live route. Returns an error or None."""
+    if mode == "usb":
+        return "policy is usb-only: updates arrive by USB on this machine"
+    iface = _default_route_iface()
+    if iface is None:
+        return "no network route — connect ethernet first"
+    if _iface_is_wireless(iface) and mode != "usb+wired+wireless":
+        return (f"default route is wireless ({iface}) and policy is {mode} — "
+                "connect ethernet, or opt in to wireless in Settings")
+    return None
+
+
+# ── apply ────────────────────────────────────────────────────────────────────
+def _current_version() -> str:
+    try:
+        with open(RELEASE_FILE) as fh:
+            for line in fh:
+                if line.startswith("version="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return "unversioned"
+
+
+def _fetch(url: str, dest: str | None = None) -> bytes:
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "foundation-update",
+        "Accept": "application/octet-stream"
+        if dest else "application/vnd.github+json",
+    })
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        if dest is None:
+            return resp.read()
+        with open(dest, "wb") as fh:
+            shutil.copyfileobj(resp, fh)
+        return b""
+
+
+def _verify(payload_path: str, sums_text: str, asset_name: str) -> str | None:
+    """SHA256 today; the §12 signature check slots in here."""
+    expected = ""
+    for line in sums_text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and os.path.basename(parts[1]) == asset_name:
+            expected = parts[0]
+    if not expected:
+        return f"SHA256SUMS has no entry for {asset_name}"
+    digest = hashlib.sha256()
+    with open(payload_path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != expected:
+        return "checksum mismatch — payload discarded, nothing applied"
+    return None
+
+
+def cmd_apply() -> int:
+    _require_root()
+    err = _check_setup_code()
+    if err:
+        return _fail(err)
+    mode = _policy()
+    err = _transport_gate(mode)
+    if err:
+        return _fail(err)
+
+    current = _current_version()
+    _info(f"current version: {current}")
+    try:
+        release = json.loads(_fetch(API_LATEST).decode())
+    except Exception as exc:
+        return _fail(f"release check failed: {exc}")
+    tag = release.get("tag_name", "")
+    if not tag:
+        return _fail("release check failed: no tag in response")
+    if tag == current:
+        _info(f"already up to date ({tag})")
+        return 0
+
+    asset_name = f"terminalos-payload-{tag}.tar.gz"
+    urls = {a["name"]: a["browser_download_url"]
+            for a in release.get("assets", [])}
+    if asset_name not in urls:
+        return _fail(f"release {tag} carries no network payload ({asset_name})"
+                     " — this release updates by USB")
+    if "SHA256SUMS" not in urls:
+        return _fail(f"release {tag} has no SHA256SUMS — refusing")
+
+    os.makedirs(STAGING, mode=0o700, exist_ok=True)
+    payload = os.path.join(STAGING, asset_name)
+    _info(f"downloading {asset_name} …")
+    try:
+        _fetch(urls[asset_name], dest=payload)
+        sums = _fetch(urls["SHA256SUMS"]).decode()
+    except Exception as exc:
+        return _fail(f"download failed: {exc}")
+    err = _verify(payload, sums, asset_name)
+    if err:
+        os.unlink(payload)
+        return _fail(err)
+    _info("checksum verified")
+
+    with tarfile.open(payload) as tar:
+        names = tar.getnames()
+        if any(n.startswith(("/", "..")) or "/../" in n for n in names):
+            return _fail("payload contains unsafe paths — refusing")
+        if not any(n.rstrip("/").endswith("terminal-os") for n in names[:1]):
+            return _fail("payload does not look like an OS payload — refusing")
+        if any(os.path.basename(n) == "UPDATE-REQUIRES-USB" for n in names):
+            return _fail(f"{tag} requires new base packages — "
+                         "this update must be applied from the release USB")
+        extract_dir = tempfile.mkdtemp(dir=STAGING)
+        # "data" filter: rejects absolute/upward paths and strips setuid bits
+        # (belt on top of the name pre-check above); exec bits re-applied.
+        tar.extractall(extract_dir, filter="data")
+    new_tree = os.path.join(extract_dir, "terminal-os")
+
+    # Swap the payload; keep the old tree until the new one passes checks.
+    prev = TARGET + ".prev"
+    _info(f"refreshing {TARGET} …")
+    shutil.rmtree(prev, ignore_errors=True)
+    if os.path.isdir(TARGET):
+        os.rename(TARGET, prev)
+    shutil.move(new_tree, TARGET)
+    subprocess.run(["find", TARGET, "-type", "f",
+                    "(", "-name", "*.sh", "-o", "-path", "*/hardware/*",
+                    "-o", "-path", "*/usr/local/bin/*", ")",
+                    "-exec", "chmod", "+x", "{}", "+"], check=False)
+    shutil.rmtree(extract_dir, ignore_errors=True)
+    os.unlink(payload)
+
+    profile = ""
+    try:
+        with open(RELEASE_FILE) as fh:
+            for line in fh:
+                if line.startswith("profile="):
+                    profile = line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+
+    env = dict(os.environ,
+               FOUNDATION_ASSUME_YES="1",
+               FOUNDATION_UPDATE="1",
+               # Network updates never touch pacman mirrors — base-package
+               # upgrades are the USB path's job (docs/UPDATE-SYSTEM.md §5).
+               FOUNDATION_OFFLINE="1",
+               HARDWARE_PROFILE=profile)
+    _info("re-running install steps (update mode) …")
+    res = subprocess.run([os.path.join(TARGET, "install", "run-all.sh")],
+                         env=env)
+    if res.returncode != 0:
+        # Roll the payload back; state was never touched (no-clobber mode).
+        shutil.rmtree(TARGET, ignore_errors=True)
+        if os.path.isdir(prev):
+            os.rename(prev, TARGET)
+        return _fail("install steps FAILED — payload rolled back, "
+                     "nothing else was changed")
+    _info(f"updated to {tag} — takes effect at the next login "
+          "(POWER > RESTART)")
+    return 0
+
+
+# ── set-policy ───────────────────────────────────────────────────────────────
+def cmd_set_policy(mode: str) -> int:
+    _require_root()
+    if mode not in POLICY_MODES:
+        return _fail(f"unknown policy {mode!r} (one of: {', '.join(POLICY_MODES)})")
+    err = _check_setup_code()
+    if err:
+        return _fail(err)
+    try:
+        lines = open(POLICY_FILE).read().splitlines()
+    except OSError:
+        lines = []
+    kept = [l for l in lines if not l.split("#", 1)[0].strip().startswith("transports")]
+    kept.append(f"transports = {mode}")
+    tmp = POLICY_FILE + ".tmp"
+    with open(tmp, "w") as fh:
+        fh.write("\n".join(kept) + "\n")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, POLICY_FILE)
+    # Enforce the radio state so "wired only" is a machine state, not a wish.
+    if shutil.which("nmcli"):
+        radio = "on" if mode == "usb+wired+wireless" else "off"
+        subprocess.run(["nmcli", "radio", "wifi", radio],
+                       capture_output=True)
+    _info(f"transport policy -> {mode}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) == 2 and argv[1] == "apply":
+        return cmd_apply()
+    if len(argv) == 3 and argv[1] == "set-policy":
+        return cmd_set_policy(argv[2])
+    return _fail("usage: foundation-update apply | set-policy <mode>\n"
+                 "(setup code on stdin; see docs/UPDATE-SYSTEM.md)")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

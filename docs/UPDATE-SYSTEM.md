@@ -1,10 +1,12 @@
-# Update System — Design (DRAFT, awaiting operator approval)
+# Update System — Design + implementation notes
 
-> Status: 🟨 **design only — no code until sign-off.** Source ask:
-> `docs/FEEDBACK-FIRST-HARDWARE-RUN.md` item 11 (operator direction
-> 2026-07-03). Trust decisions are routed to
-> [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) §12 — this doc states
-> recommendations, §12 is where they get approved or changed.
+> Status: 🟨 **BUILT 2026-07-04** (operator approved implementing same-day,
+> with the §12 recommended defaults). Source ask:
+> `docs/FEEDBACK-FIRST-HARDWARE-RUN.md` item 11. The remaining
+> [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) §12 items (signing, and any
+> default the operator wants changed) stay open — the code implements the
+> recommendations and marks where each pending decision slots in. Not yet
+> exercised on hardware (§8 step 7).
 
 An installed Foundation TerminalOS machine needs a way to update: **via USB
 or over the network**, with the allowed transports being a **per-machine
@@ -200,28 +202,28 @@ half an update. (Routed to §12 as a scoping decision.)
 
 **How it applies without a daemon and without giving the operator root.**
 The operator account has no root and must not gain any general privilege.
-Mechanism:
+Mechanism (as built — the repo already had exactly this shape in
+`foundationhub-account`, so the update helper reuses the proven pattern
+instead of a systemd oneshot + unit-scoped polkit):
 
-- A root-owned script **`/usr/local/bin/foundation-update`** (fixed logic,
-  no arguments that change what it does) + **`foundation-update.service`**,
-  `Type=oneshot`, disabled, no timer — inert until started, exits when done.
-- It downloads to a staging dir (`/var/lib/foundation-update/`) **as an
-  unprivileged dedicated user**, then verifies checksum/signature **as
-  root** before anything is applied — the fetcher never has write access to
-  the system, the applier never touches the network.
-- It re-checks transport policy itself (defense in depth — the Hub's check
-  is UX, this one is the enforcement).
+- A root-owned helper **`/usr/local/bin/foundation-update`** (fixed logic:
+  `apply` and `set-policy <mode>` only), reached from the Hub via **pkexec**
+  under a polkit rule scoped to exactly that program
+  (`50-foundation-update.rules`) — nothing persistent, it runs and exits.
+- The helper is the authoritative gate, not the Hub: it re-reads the
+  transport policy against the live route, **verifies the technician setup
+  code against the root-owned registry on stdin**, and verifies the payload
+  checksum (staging dir `/var/lib/foundation-update/`, root-owned 0700)
+  before anything is touched. Signature verification (§12) slots into its
+  `_verify()`.
 - Applies the same sequence as the USB path steps 3–7 (payload refresh →
-  `run-all.sh` with `FOUNDATION_UPDATE=1` → isolation checks → stamp
-  release file), then ends the session cleanly so the next login runs the
-  new Hub.
-- **Who may start it** is the §12 trust question. Recommendation:
-  TECHNICIAN tier in the Hub *plus* setup-code re-entry, mechanically a
-  polkit rule scoped to exactly `start foundation-update.service` — the
-  narrowest possible root path, and one that runs only fixed, signed logic.
-  (Alternative if that is still too much standing privilege: no in-OS apply
-  at all — network path only *notifies* "update available", applying always
-  means the USB stick. Operator's call.)
+  `run-all.sh` with `FOUNDATION_UPDATE=1` + `FOUNDATION_OFFLINE=1` so
+  nothing shops mirrors → isolation checks → stamp release file); the Hub
+  then tells the operator to restart from the POWER menu.
+- **Who may start it**: implemented as the §12 recommendation — TECHNICIAN
+  tier in the Hub *plus* setup-code re-entry (the helper re-verifies the
+  code, so the pkexec grant alone is not enough). The stricter §12
+  alternative (notify-only, USB-applies) remains available by decision.
 
 **Failure honesty.** Wrong checksum/signature → staged files deleted, clear
 message, nothing applied. Download interrupted → nothing applied (staging is
@@ -266,20 +268,33 @@ For §12 sign-off, stated as testable invariants:
   policy toggle governs whether it's reachable.
 - Base-package upgrades over the network (USB path owns those in v1 — §5).
 
-## 8. Implementation plan (after approval)
+## 8. Implementation plan — status (built 2026-07-04)
 
-1. Version identity: `VERSION` stamping in `build-iso.sh`,
-   `/etc/foundation-release` step in `run-all.sh`, SYSTEM STATUS line.
-2. No-clobber fixes (§4.1) + `FOUNDATION_UPDATE=1` honored across
-   `install/*.sh` — with tests where the logic is testable off-target.
-3. UPDATE mode in `foundation-install` (detection, menu, flow) — the bulk.
-4. Transport policy file + enforcement helper + Settings UPDATE POLICY line.
-5. CI: payload tarball + checksum (+ signature per §12) attached to
-   releases.
-6. `foundation-update` script + oneshot unit + Settings SYSTEM UPDATE
-   screen, wired to whatever trigger authority §12 approves.
-7. Hardware pass: run a real v0.0.x → v0.0.y USB update on the mini PC
-   testbed; verify the preservation contract table row by row, verify an
-   active lockout survives.
+1. ✅ Version identity: `VERSION` stamped by `image/build-iso.sh` (and by CI
+   into the payload); `/etc/foundation-release` written by the new
+   `install/10-update-system.sh`; VERSION shown in SYSTEM STATUS and on the
+   Settings SYSTEM UPDATE row.
+2. ✅ No-clobber fixes (§4.1): `lockout.state` guarded (never truncated),
+   `/etc/frank/config.toml` preserved with `.new` beside it under update,
+   console-font preserved; `is_update()` helper in `install/common.sh`.
+3. ✅ UPDATE mode in `foundation-install`: detection (probe-mount of
+   `foundation-root`-labeled partitions), UPDATE/INSTALL menu, typed
+   `UPDATE` confirm, offline `pacman -Syu` via bind-mounted embedded repo,
+   payload swap with `.prev`, `run-all.sh` in update mode, best-effort
+   GRUB, update log.
+4. ✅ Transport policy: `system/etc/foundation-update.conf` (default
+   `usb+wired`, no-clobber on update), enforced in both the Hub pre-check
+   (`hub/foundationhub/updates.py`) and the root helper; policy changes
+   flip the WiFi radio via nmcli.
+5. ✅ CI payload: `terminalos-payload-<tag>.tar.gz` + SHA256SUMS line,
+   attached to releases by `build-iso.yml`. Signature: pending §12.
+6. ✅ `foundation-update` root helper (pkexec, scoped polkit rule — see §5)
+   + Settings → SYSTEM UPDATE screen (`screens/updates.py`): on-demand
+   CHECK, technician-gated APPLY and UPDATE POLICY. Backend unit-tested
+   (`hub/tests/test_updates.py`).
+7. ⬜ **Hardware pass — the remaining step:** run a real v0.0.x → v0.0.y
+   USB update on the mini PC testbed; verify the preservation contract
+   table row by row; verify an active lockout survives; exercise the
+   network path end-to-end against a real release.
 
-Each lands on `Terminal-OS-Main` directly, per the single-mainline policy.
+Each landed on `Terminal-OS-Main` directly, per the single-mainline policy.

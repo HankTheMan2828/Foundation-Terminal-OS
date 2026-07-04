@@ -71,6 +71,22 @@ FN_POWER_PROFILE = "POWER PROFILE"
 FN_THEME = "THEME & SOUND"
 FN_TEXT_SIZE = "TEXT SIZE"
 
+# ── System Update (docs/UPDATE-SYSTEM.md — on-demand only, no daemon) ─────────
+UPDATE = "SYSTEM UPDATE"
+UPDATE_SUBTITLE = "updates run only when asked — nothing checks by itself"
+UPDATE_CHECK = "CHECK FOR UPDATES"
+UPDATE_APPLY = "APPLY UPDATE"
+UPDATE_POLICY = "UPDATE POLICY"
+UPDATE_VERSION_HEADING = "VERSION"
+UPDATE_POLICY_HEADING = "TRANSPORT POLICY"
+UPDATE_USB_HINT = "USB updates: boot the release stick — it offers UPDATE"
+UPDATE_UP_TO_DATE = "UP TO DATE"
+UPDATE_AVAILABLE = "UPDATE AVAILABLE"
+UPDATE_APPLYING = "APPLYING — DO NOT POWER OFF"
+UPDATE_TECH_ONLY = "TECHNICIAN CLEARANCE REQUIRED"
+UPDATE_CODE_PROMPT = "TECHNICIAN SETUP CODE?"
+UPDATE_DONE = "UPDATED — RESTART TO FINISH (POWER MENU)"
+
 # ── System Status (network config + read-only identity/health, no admin
 # knobs — resource limits and user/auth actions were dropped at the user's
 # explicit direction; see docs/OPEN-QUESTIONS.md §1) ─────────────────────────

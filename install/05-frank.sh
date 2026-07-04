@@ -21,7 +21,15 @@ install_py_dist "$REPO_ROOT/frank" frankd=frankd.daemon
 # --- config: root:frank, operator CANNOT read (spec §6) ---
 install -d -o root -g frank -m 0750 /etc/frank
 install -d -o root -g frank -m 0750 /etc/frank/rules.d
-install -o root -g frank -m 0640 "$REPO_ROOT/system/etc/frank/config.toml" /etc/frank/config.toml
+if is_update && [[ -e /etc/frank/config.toml ]]; then
+  # UPDATE mode (docs/UPDATE-SYSTEM.md §4.1): root-tuned values (sensitivity,
+  # thresholds) are state — preserve them; new defaults land beside for root
+  # to merge by hand.
+  install -o root -g frank -m 0640 "$REPO_ROOT/system/etc/frank/config.toml" /etc/frank/config.toml.new
+  c_ok "kept tuned /etc/frank/config.toml (new defaults: config.toml.new)"
+else
+  install -o root -g frank -m 0640 "$REPO_ROOT/system/etc/frank/config.toml" /etc/frank/config.toml
+fi
 for r in "$REPO_ROOT"/system/etc/frank/rules.d/*.toml; do
   install -o root -g frank -m 0640 "$r" "/etc/frank/rules.d/$(basename "$r")"
 done
@@ -34,7 +42,10 @@ install -d -o frank -g frank -m 0700 /var/lib/frank
 install -d -o frank -g frank -m 0755 /run/frank 2>/dev/null || true
 
 # --- lock state file: frank writes, root reads, operator DENIED (spec §6) ---
-install -o frank -g frank -m 0640 /dev/null /var/lib/frank/lockout.state
+# No-clobber (docs/UPDATE-SYSTEM.md §4.1 / §6): truncating this on a re-run
+# would CLEAR AN ACTIVE LOCKOUT — an update must never be a lockout escape.
+[[ -e /var/lib/frank/lockout.state ]] || \
+  install -o frank -g frank -m 0640 /dev/null /var/lib/frank/lockout.state
 
 # --- root enforcer: applies lockouts the operator cannot bypass (spec §6) ---
 install -Dm0755 -o root -g root "$REPO_ROOT/system/usr/local/bin/frank-enforcer" /usr/local/bin/frank-enforcer

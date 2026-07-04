@@ -275,14 +275,17 @@ until the doc is approved. Decisions (details in the doc §5):
   terminals-as-lore, section themes) and the modernization list (doc §3.3 —
   closed list; anything not on it is out).
 
-## 12. Update system — trust decisions (feedback item 11) — ⬜ awaiting sign-off
+## 12. Update system — trust decisions (feedback item 11) — 🟨 built with the recommended defaults; sign-off still wanted
 
-Full design: [`docs/UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md) (🟨 drafted
-2026-07-04 — **no code until this section is signed off**). The mechanics
-(USB = UPDATE mode on the release ISO; network = Settings → SYSTEM UPDATE;
-per-machine transport policy defaulting to `usb+wired`, wireless opt-in from
-Settings; no persistent daemon) are in the doc. What needs your decision is
-the trust model:
+Full design + implementation status: [`docs/UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md).
+Same-day operator direction (2026-07-04) was to implement rather than wait,
+so the code carries every **[RECOMMENDED]** default below; each ⬜ stays open
+in the sense that changing your mind is a config/small-code change, and
+**signing (the first item) is genuinely not built yet** — checksum-over-HTTPS
+only until you pick. The mechanics (USB = UPDATE mode on the release ISO;
+network = Settings → SYSTEM UPDATE; per-machine transport policy defaulting
+to `usb+wired`, wireless opt-in from Settings; no persistent daemon) are in
+the doc:
 
 - ⬜ **What verifies an update?** The release already carries `SHA256SUMS`
   for the ISO, and the network payload would get one too — but a checksum

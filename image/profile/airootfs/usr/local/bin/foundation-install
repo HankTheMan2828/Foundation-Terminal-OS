@@ -3,6 +3,10 @@
 # front of you into Foundation TerminalOS.
 #
 # Flow (one screenful at a time, same register as the OS itself):
+#   0. if a Foundation TerminalOS install already exists on a disk, offer
+#      UPDATE (docs/UPDATE-SYSTEM.md §4): refresh the OS from this medium,
+#      preserving /home, accounts, Settings choices, and ALL Frank state —
+#      no partitioning, nothing formatted
 #   1. optional hardware profile (default: generic core — any x86_64 box)
 #   2. pick the target disk from a menu — the ONE destructive step,
 #      gated behind typing ERASE in full
@@ -71,6 +75,157 @@ on_error() {
 }
 trap on_error ERR
 
+# The disk we booted from — never a target for anything.
+detect_live_disk() {
+  local live_src live_disk=""
+  live_src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
+  if [[ -n "$live_src" && -b "$live_src" ]]; then
+    live_disk="$(lsblk -no pkname "$live_src" 2>/dev/null | head -1 || true)"
+    # A dd'd ISO may be mounted from the whole device, not a partition —
+    # pkname is empty then, and the device itself is the disk to exclude.
+    [[ -z "$live_disk" ]] && live_disk="$(basename "$live_src")"
+  fi
+  echo "$live_disk"
+}
+
+# An existing install's root partition (mkfs labels it foundation-root), or
+# nothing. Probe-mounted read-only to confirm it is really ours.
+find_existing_install() {
+  local live_disk="$1" part probe
+  probe="$(mktemp -d /run/foundation-probe.XXXXXX)"
+  while read -r part; do
+    [[ -n "$part" ]] || continue
+    [[ -n "$live_disk" && \
+       "$(lsblk -no pkname "$part" 2>/dev/null | head -1)" == "$live_disk" ]] && continue
+    if mount -o ro "$part" "$probe" 2>/dev/null; then
+      if [[ -x "$probe$REPO/install/run-all.sh" ]]; then
+        umount "$probe"; rmdir "$probe"
+        echo "$part"; return 0
+      fi
+      umount "$probe"
+    fi
+  done < <(lsblk -plno NAME,FSTYPE,LABEL |
+           awk '$2 == "ext4" && $3 == "foundation-root" {print $1}')
+  rmdir "$probe"
+  return 1
+}
+
+# ── UPDATE mode (docs/UPDATE-SYSTEM.md §4) ───────────────────────────────────
+# Refresh an existing install from this medium. No partitioning, nothing
+# formatted; /home, accounts, Settings choices, and ALL Frank state survive
+# (the install steps run in FOUNDATION_UPDATE=1 no-clobber mode — an active
+# Frank lockout survives and re-arms after the reboot, by design §6).
+do_update() {
+  local part="$1"
+  c_step "Update from this medium"
+  mount "$part" "$MNT"
+
+  local cur_ver="unknown (pre-v0.0.3)" new_ver="unversioned"
+  [[ -f "$MNT/etc/foundation-release" ]] && \
+    cur_ver="$(sed -n 's/^version=//p' "$MNT/etc/foundation-release" | head -1)"
+  [[ -f "$REPO/VERSION" ]] && \
+    new_ver="$(sed -n 's/^version=//p' "$REPO/VERSION" | head -1)"
+
+  echo "  installed on $part : $cur_ver"
+  echo "  this medium        : $new_ver"
+  [[ "$cur_ver" == "$new_ver" ]] && \
+    c_warn "same version — continuing reapplies it (repairs a damaged install)"
+  echo
+  echo "This refreshes the OS and its packages. Your files, accounts, and"
+  echo "settings are preserved. Nothing is formatted."
+  local confirm
+  read -rp "> type UPDATE (all caps) to continue, anything else aborts: " confirm
+  [[ "$confirm" == "UPDATE" ]] || {
+    c_info "aborted — nothing was touched"; umount -R "$MNT"; exit 0; }
+
+  # Mount the target's /boot (ESP on UEFI) exactly as its fstab says.
+  local bootspec
+  bootspec="$(awk '$2 == "/boot" && $1 !~ /^#/ {print $1}' "$MNT/etc/fstab" | head -1)"
+  [[ -n "$bootspec" ]] && mount "$bootspec" "$MNT/boot"
+
+  # ── packages: move to this release's tested set, offline ──────────────────
+  c_step "Upgrading packages from the embedded repo"
+  local pkgs=(base archlinux-keyring mkinitcpio grub efibootmgr)
+  mapfile -t -O "${#pkgs[@]}" pkgs < <(
+    sed -E 's/#.*$//; s/[[:space:]]+$//; /^[[:space:]]*$/d' \
+      "$REPO/install/packages.txt")
+  local profile=""
+  [[ -f "$MNT/etc/foundation-release" ]] && \
+    profile="$(sed -n 's/^profile=//p' "$MNT/etc/foundation-release" | head -1)"
+  if [[ -n "$profile" && -f "$REPO/profiles/$profile/packages.txt" ]]; then
+    mapfile -t -O "${#pkgs[@]}" pkgs < <(
+      sed -E 's/#.*$//; s/[[:space:]]+$//; /^[[:space:]]*$/d' \
+        "$REPO/profiles/$profile/packages.txt")
+  fi
+  if [[ -f "$PKGREPO/foundation.db" ]]; then
+    mkdir -p "$MNT/run/foundation-pkgs"
+    mount --bind "$PKGREPO" "$MNT/run/foundation-pkgs"
+    cat > "$MNT/tmp/foundation-update-pacman.conf" <<'EOF'
+[options]
+Architecture = x86_64
+# The ISO's embedded mirror, bind-mounted into the target for the upgrade;
+# populated at ISO build time from signed Arch mirrors (same trust story as
+# install — see docs/OPEN-QUESTIONS.md §12).
+SigLevel = Never
+DisableSandbox
+
+[foundation]
+Server = file:///run/foundation-pkgs
+EOF
+    # One transaction: upgrade everything installed AND pull in packages this
+    # release newly added to packages.txt.
+    arch-chroot "$MNT" pacman -Syu --needed --noconfirm \
+      --config /tmp/foundation-update-pacman.conf "${pkgs[@]}"
+    umount "$MNT/run/foundation-pkgs"
+    rmdir "$MNT/run/foundation-pkgs" 2>/dev/null || true
+    rm -f "$MNT/tmp/foundation-update-pacman.conf"
+  else
+    c_warn "no embedded package repo on this ISO — skipping package upgrade"
+    c_warn "(OS payload still refreshes; packages stay as they are)"
+  fi
+
+  # ── OS payload: replace /opt/terminal-os (user data lives elsewhere) ───────
+  c_step "Refreshing the OS payload"
+  rm -rf "$MNT$REPO.prev"
+  [[ -d "$MNT$REPO" ]] && mv "$MNT$REPO" "$MNT$REPO.prev"
+  mkdir -p "$MNT$REPO"
+  cp -a "$REPO/." "$MNT$REPO/"
+  find "$MNT$REPO" -type f \
+    \( -name '*.sh' -o -path '*/hardware/*' -o -path '*/usr/local/bin/*' \) \
+    -exec chmod +x {} +
+
+  # ── re-run the install steps in no-clobber update mode ────────────────────
+  c_step "Applying (install/run-all.sh, update mode)"
+  arch-chroot "$MNT" /usr/bin/env \
+    FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1 FOUNDATION_UPDATE=1 \
+    HARDWARE_PROFILE="$profile" \
+    "$REPO/install/run-all.sh"
+
+  # ── bootloader: config always, install best-effort (kernel/GRUB bumps) ─────
+  c_step "Bootloader"
+  local disk="/dev/$(lsblk -no pkname "$part" | head -1)"
+  if [[ -d /sys/firmware/efi/efivars ]]; then
+    arch-chroot "$MNT" grub-install --target=x86_64-efi \
+      --efi-directory=/boot --bootloader-id=FOUNDATION --removable \
+      2>/dev/null || true
+  else
+    arch-chroot "$MNT" grub-install --target=i386-pc "$disk" 2>/dev/null || true
+  fi
+  arch-chroot "$MNT" grub-mkconfig -o /boot/grub/grub.cfg
+
+  # ── done ───────────────────────────────────────────────────────────────────
+  cp "$LOG" "$MNT/var/log/foundation-update.log" 2>/dev/null || true
+  sync
+  umount -R "$MNT"
+  c_step "Update complete"
+  echo "  installed: $new_ver (was: $cur_ver)"
+  echo "  Remove the medium. Files, accounts, and Frank state were preserved."
+  echo
+  local ans
+  read -rp "> press ENTER to reboot (or type s for a live shell): " ans
+  [[ "${ans,,}" == "s" ]] || reboot
+}
+
 main() {
   exec > >(tee -a "$LOG") 2>&1
   banner
@@ -78,6 +233,26 @@ main() {
     c_warn "embedded repo missing at $REPO — was this ISO built by image/build-iso.sh?"
     exit 1
   }
+
+  # ── 0. existing install? offer UPDATE (docs/UPDATE-SYSTEM.md §4) ──────────
+  local live_disk existing=""
+  live_disk="$(detect_live_disk)"
+  existing="$(find_existing_install "$live_disk" || true)"
+  if [[ -n "$existing" ]]; then
+    c_step "Existing installation found"
+    echo "  Foundation TerminalOS is already installed on $existing."
+    echo
+    echo "  1) UPDATE it from this medium — files, accounts, and settings"
+    echo "     are preserved; nothing is formatted"
+    echo "  2) INSTALL fresh — ERASES a disk completely"
+    local mode
+    read -rp "> [1]: " mode
+    if [[ "${mode:-1}" != "2" ]]; then
+      do_update "$existing"
+      return
+    fi
+    c_info "fresh install chosen — continuing to the standard flow"
+  fi
 
   # ── 1. hardware profile ────────────────────────────────────────────────────
   c_step "Hardware profile"
@@ -102,17 +277,7 @@ main() {
 
   # ── 2. target disk (the destructive step) ──────────────────────────────────
   c_step "Target disk"
-  # Never offer the medium we booted from.
-  local live_disk=""
-  local live_src
-  live_src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
-  if [[ -n "$live_src" && -b "$live_src" ]]; then
-    live_disk="$(lsblk -no pkname "$live_src" 2>/dev/null | head -1 || true)"
-    # A dd'd ISO may be mounted from the whole device, not a partition —
-    # pkname is empty then, and the device itself is the disk to exclude.
-    [[ -z "$live_disk" ]] && live_disk="$(basename "$live_src")"
-  fi
-
+  # Never offer the medium we booted from (live_disk found in step 0).
   local disks=() lines=() name size model
   while read -r name size model; do
     [[ -n "$name" ]] || continue

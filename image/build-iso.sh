@@ -71,6 +71,17 @@ fi
 # The image/ pipeline itself is dead weight inside the image.
 rm -rf "$EMBED/image"
 
+# Version identity (docs/UPDATE-SYSTEM.md §2): stamp the embedded repo so the
+# installed system knows what it runs and UPDATE modes can compare versions.
+# In CI a tag build's `git describe` is exactly the release tag.
+if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  _ver="$(git -C "$REPO_ROOT" describe --tags --always 2>/dev/null || echo unversioned)"
+else
+  _ver="unversioned"
+fi
+printf 'version=%s\nbuilt=%s\n' "$_ver" "$(date -u +%Y-%m-%d)" > "$EMBED/VERSION"
+c_ok "stamped VERSION: $_ver"
+
 # ── 3. offline package repo ──────────────────────────────────────────────────
 if ((SKIP_OFFLINE)); then
   c_step "Skipping offline package repo (--skip-offline-repo)"

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import curses
 
-from .. import labels, session, theme
+from .. import labels, session, theme, updates
 from ..app import POP, Screen
 from ..ui import KEYS_BACK
 
@@ -20,6 +20,7 @@ class StatusScreen(Screen):
 
     def __init__(self):
         self._user, self._uid = session.get_user_identity()
+        self._release = updates.current_release()
         self._checks = [
             (labels.STATUS_CHECK_NETWORK, session.check_network),
             (labels.STATUS_CHECK_AUDIO, session.check_audio),
@@ -50,6 +51,17 @@ class StatusScreen(Screen):
                            theme.attr(theme.PAIR_NORMAL))
                 row += 1
             row += 1
+
+            # Version identity (docs/UPDATE-SYSTEM.md §2) — what this machine
+            # runs, from /etc/foundation-release.
+            win.addstr(row, left, labels.UPDATE_VERSION_HEADING,
+                       theme.attr(theme.PAIR_DIM, dim=True))
+            row += 1
+            built = self._release["built"]
+            win.addstr(row, left,
+                       self._release["version"] + (f"   built {built}" if built else ""),
+                       theme.attr(theme.PAIR_NORMAL))
+            row += 2
 
             win.addstr(row, left, labels.STATUS_FUNCTIONS_HEADING,
                        theme.attr(theme.PAIR_DIM, dim=True))

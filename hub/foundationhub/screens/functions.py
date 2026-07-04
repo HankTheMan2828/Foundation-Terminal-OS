@@ -6,10 +6,10 @@ install/04, install/05). Off-device, calls return a clear status string.
 """
 from __future__ import annotations
 
-from .. import consolefont, labels, session, theme
+from .. import consolefont, labels, session, theme, updates as updates_backend
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
-from . import status
+from . import status, updates
 
 
 def _set_status(msg: str):
@@ -84,6 +84,10 @@ def screen():
         # Moved in from the old top-level Status entry (feedback #8): NETWORK is
         # a real config action; SYSTEM STATUS is the read-only readout.
         MenuItem(labels.STATUS_NETWORK, lambda a: Launch(["nmtui"]), hint="nmtui"),
+        # SYSTEM UPDATE (docs/UPDATE-SYSTEM.md §5): on-demand check/apply +
+        # the transport policy — including the wireless opt-in.
+        MenuItem(labels.UPDATE, lambda a: updates.screen(),
+                 status=updates_backend.current_version),
         MenuItem(labels.STATUS, lambda a: status.screen(), hint="read-only"),
     ]
     return MenuScreen(labels.SETTINGS, items)

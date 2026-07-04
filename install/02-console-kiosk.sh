@@ -27,11 +27,17 @@ fi
 # across reboots without a root helper. Default is the 2× face; the flashable
 # ISO installer overrides FOUNDATION_CONSOLE_FONT from its setup question.
 install -d -m0755 /etc/foundationhub
-_font="${FOUNDATION_CONSOLE_FONT:-ter-v32b}"
-printf '%s\n' "$_font" > /etc/foundationhub/console-font
-chmod 0644 /etc/foundationhub/console-font
-chown "$OPERATOR" /etc/foundationhub/console-font 2>/dev/null || true
-c_ok "console text size -> $_font (Settings > TEXT SIZE can change it)"
+if is_update && [[ -e /etc/foundationhub/console-font ]]; then
+  # UPDATE mode (docs/UPDATE-SYSTEM.md §4): the machine's TEXT SIZE choice is
+  # state, not payload — it survives.
+  c_ok "console text size preserved: $(cat /etc/foundationhub/console-font)"
+else
+  _font="${FOUNDATION_CONSOLE_FONT:-ter-v32b}"
+  printf '%s\n' "$_font" > /etc/foundationhub/console-font
+  chmod 0644 /etc/foundationhub/console-font
+  chown "$OPERATOR" /etc/foundationhub/console-font 2>/dev/null || true
+  c_ok "console text size -> $_font (Settings > TEXT SIZE can change it)"
+fi
 
 # getty autologin (spec §4 — decided: autologin straight to Hub).
 install_file "etc/systemd/system/getty@tty1.service.d/autologin.conf" \

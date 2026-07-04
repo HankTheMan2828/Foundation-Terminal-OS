@@ -259,15 +259,20 @@ UX-focused; none block installs.
   on `TERM=linux`: a bold `bkgd` survives `erase()` and bolds later text; after
   the fix `draw_chrome` clears it.
 
-## 11. Update system (USB and/or network)  — NEW SUBSYSTEM — 🟨 DESIGN DRAFTED (2026-07-04)
-Design written per the sketch below: [`docs/UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md)
-(USB = UPDATE mode in `foundation-install` on the release ISO, preserving
-`/home`/accounts/Frank state; network = Settings → SYSTEM UPDATE from GitHub
-releases; per-machine transport policy `usb` / `usb+wired` /
-`usb+wired+wireless`, default wired-only, wireless opt-in from Settings; no
-persistent daemon). Trust questions (verification/signing, who triggers, who
-sets policy, the Frank-isolation hard rule) routed to
-[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) §12 — **no code until sign-off**.
+## 11. Update system (USB and/or network)  — NEW SUBSYSTEM — 🟨 BUILT (2026-07-04, hardware pass pending)
+Designed then built same-day per operator direction:
+[`docs/UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md) (design + implementation status).
+USB = UPDATE mode in `foundation-install` on the release ISO (detects an
+existing install, typed `UPDATE` confirm, offline package upgrade + OS
+refresh, preserving `/home`/accounts/Settings/ALL Frank state — incl. the
+§4.1 fix so an update can never clear an active lockout); network =
+Settings → SYSTEM UPDATE (on-demand GitHub release check, technician +
+setup-code gated apply via the scoped `foundation-update` root helper);
+per-machine transport policy `usb` / `usb+wired` / `usb+wired+wireless`,
+default wired-only, wireless opt-in from Settings, radio-enforced; no
+persistent daemon anywhere. Remaining: signing decision + final sign-off in
+[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) §12, and the real-hardware update
+pass (UPDATE-SYSTEM.md §8.7).
 
 Operator direction (2026-07-03, right after the first successful install):
 

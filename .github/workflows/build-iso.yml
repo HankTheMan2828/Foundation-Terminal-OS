@@ -60,12 +60,30 @@ jobs:
       - name: Checksums
         run: cd image/out && sha256sum foundation-terminalos-*.iso > SHA256SUMS
 
+      # The network update path (docs/UPDATE-SYSTEM.md §5) downloads a small
+      # OS-payload tarball instead of the whole ISO: the same repo tree the
+      # ISO embeds, VERSION-stamped. foundation-update on the installed OS
+      # looks for exactly `terminalos-payload-<tag>.tar.gz` plus its line in
+      # SHA256SUMS. (Signature verification is the pending OPEN-QUESTIONS §12
+      # decision; checksum-over-HTTPS until then.)
+      - name: Update payload (network-update artifact)
+        run: |
+          ver="${{ github.ref_name }}"
+          mkdir -p /tmp/payload
+          git archive --prefix=terminal-os/ HEAD | tar -x -C /tmp/payload
+          rm -rf /tmp/payload/terminal-os/image
+          printf 'version=%s\nbuilt=%s\n' "$ver" "$(date -u +%Y-%m-%d)" \
+            > /tmp/payload/terminal-os/VERSION
+          tar -C /tmp/payload -czf "image/out/terminalos-payload-${ver}.tar.gz" terminal-os
+          cd image/out && sha256sum "terminalos-payload-${ver}.tar.gz" >> SHA256SUMS
+
       - name: Upload ISO as build artifact
         uses: actions/upload-artifact@v4
         with:
           name: foundation-terminalos-iso
           path: |
             image/out/foundation-terminalos-*.iso
+            image/out/terminalos-payload-*.tar.gz
             image/out/SHA256SUMS
           if-no-files-found: error
 
@@ -83,6 +101,7 @@ jobs:
             it. Details: `tools/usb-creator/README.md` in the repo.
           files: |
             image/out/foundation-terminalos-*.iso
+            image/out/terminalos-payload-*.tar.gz
             image/out/SHA256SUMS
             tools/usb-creator/FoundationUSBCreator.cmd
             tools/usb-creator/Create-FoundationUSB.ps1
