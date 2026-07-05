@@ -32,7 +32,8 @@ jobs:
     steps:
       - name: Install build tools
         # grub: mkarchiso's uefi.grub boot mode runs grub-install on the host
-        run: pacman -Syu --noconfirm archiso grub git
+        # jq: the stale-asset prune step below
+        run: pacman -Syu --noconfirm archiso grub git jq
 
       - uses: actions/checkout@v4
 
@@ -86,6 +87,26 @@ jobs:
             image/out/terminalos-payload-*.tar.gz
             image/out/SHA256SUMS
           if-no-files-found: error
+
+      # A re-cut tag rebuilds with a new date-stamped ISO name, so same-name
+      # overwrite never applies — without this prune, every rebuild leaves
+      # the previous ISO/payload on the release beside the new one.
+      - name: Prune stale release assets (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/TerminalOS-v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          api="https://api.github.com/repos/${{ github.repository }}"
+          curl -s -H "Authorization: Bearer $GH_TOKEN" "$api/releases?per_page=100" |
+            jq -r --arg tag "${{ github.ref_name }}" \
+              '.[] | select(.tag_name == $tag) | .assets[] |
+               select(.name | test("^(foundation-terminalos-.*\\.iso|terminalos-payload-.*|SHA256SUMS)$")) |
+               "\(.id) \(.name)"' |
+            while read -r aid aname; do
+              echo "pruning stale asset: $aname ($aid)"
+              curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "$api/releases/assets/$aid"
+            done
 
       - name: Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/TerminalOS-v')

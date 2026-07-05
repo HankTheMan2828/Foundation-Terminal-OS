@@ -124,7 +124,8 @@ else
   # target. makepkg refuses to run as root, so a throwaway build user does it.
   VENDORED=(rogue3.6 rogue5.4)
   c_info "building vendored packages: ${VENDORED[*]}"
-  pacman -S --needed --noconfirm base-devel ncurses
+  # pacman-contrib: paccache, used below to prune superseded package versions
+  pacman -S --needed --noconfirm base-devel ncurses pacman-contrib
   BUILDROOT="$WORK/vendor-build"
   mkdir -p "$BUILDROOT"
   id -u foundation-builder >/dev/null 2>&1 || useradd -m -s /bin/bash foundation-builder
@@ -161,14 +162,26 @@ else
     pacman -Syw --noconfirm "${SANDBOX[@]}" --cachedir "$PKGDIR" --dbpath "$DBTMP" "${DOWNLOAD[@]}"
   }
 
-  if [[ -n "${FOUNDATION_PKG_CACHE:-}" ]]; then
-    mkdir -p "$FOUNDATION_PKG_CACHE"
-    cp -an "$PKGDIR/." "$FOUNDATION_PKG_CACHE/" 2>/dev/null || true
-  fi
   rm -rf "$DBTMP"
   rm -f "$PKGDIR"/*.sig
+  # Prune superseded versions. Rolling mirrors + the CI cache meant PKGDIR
+  # accumulated every generation of every package (yesterday's linux-firmware
+  # AND today's), silently growing the ISO until it crossed GitHub's 2 GiB
+  # release-asset limit (2026-07-05 build failure). Keep newest-of-each only.
+  if command -v paccache >/dev/null 2>&1; then
+    paccache -rk1 --cachedir "$PKGDIR" || c_warn "paccache prune failed — ISO may carry stale versions"
+  else
+    c_warn "paccache not found (pacman-contrib) — ISO may carry stale versions"
+  fi
+  if [[ -n "${FOUNDATION_PKG_CACHE:-}" ]]; then
+    mkdir -p "$FOUNDATION_PKG_CACHE"
+    # Replace the cache with the pruned set — cp -an on top of the old cache
+    # is what accumulated stale versions in the first place.
+    find "$FOUNDATION_PKG_CACHE" -maxdepth 1 -type f -delete 2>/dev/null || true
+    cp -an "$PKGDIR/." "$FOUNDATION_PKG_CACHE/" 2>/dev/null || true
+  fi
   repo-add --quiet "$PKGDIR/foundation.db.tar.gz" "$PKGDIR"/*.pkg.tar.*
-  c_ok "offline repo: $(ls "$PKGDIR"/*.pkg.tar.* | wc -l) packages"
+  c_ok "offline repo: $(ls "$PKGDIR"/*.pkg.tar.* | wc -l) packages ($(du -sh "$PKGDIR" | cut -f1))"
 fi
 
 # ── 4. mkarchiso ─────────────────────────────────────────────────────────────
@@ -177,6 +190,10 @@ mkarchiso -v -w "$WORK/archiso" -o "$OUT" "$WORK/profile"
 
 c_step "Done"
 ISO="$(ls -t "$OUT"/foundation-terminalos-*.iso | head -1)"
+# GitHub release assets cap at 2 GiB — warn at build time, not at upload time.
+if (( $(stat -c%s "$ISO") >= 2147483648 )); then
+  c_warn "ISO is $(du -h "$ISO" | cut -f1) — OVER GitHub's 2 GiB release-asset limit; the release upload will fail"
+fi
 c_ok "ISO: $ISO"
 echo
 echo "  Flash it (USB stick at /dev/sdX — check with lsblk first!):"
