@@ -90,23 +90,40 @@ detect_live_disk() {
 
 # An existing install's root partition (mkfs labels it foundation-root), or
 # nothing. Probe-mounted read-only to confirm it is really ours.
+# HARDWARE BUG (first mini-PC update, 2026-07-04): stdout here IS the return
+# value — the caller command-substitutes it — and util-linux printed a mount
+# warning ("Can't mount, would change RO state": the partition was still
+# attached from an earlier errored run) that got captured as the "partition
+# path", which do_update's mount then parsed as an NFS remote (it contained
+# a colon). So: every command is silenced, an already-mounted partition is
+# inspected in place instead of re-mounted, and the caller validates it got
+# a block device.
 find_existing_install() {
-  local live_disk="$1" part probe
+  local live_disk="$1" part probe mnted
   probe="$(mktemp -d /run/foundation-probe.XXXXXX)"
   while read -r part; do
     [[ -n "$part" ]] || continue
     [[ -n "$live_disk" && \
        "$(lsblk -no pkname "$part" 2>/dev/null | head -1)" == "$live_disk" ]] && continue
-    if mount -o ro "$part" "$probe" 2>/dev/null; then
-      if [[ -x "$probe$REPO/install/run-all.sh" ]]; then
-        umount "$probe"; rmdir "$probe"
+    mnted="$(findmnt -no TARGET "$part" 2>/dev/null | head -1 || true)"
+    if [[ -n "$mnted" ]]; then
+      # Already mounted (leftover of an earlier run) — look, don't re-mount.
+      if [[ -e "$mnted$REPO/install/run-all.sh" ]]; then
+        rmdir "$probe"; echo "$part"; return 0
+      fi
+      continue
+    fi
+    if mount -o ro "$part" "$probe" >/dev/null 2>&1; then
+      if [[ -e "$probe$REPO/install/run-all.sh" ]]; then
+        umount "$probe" >/dev/null 2>&1 || true
+        rmdir "$probe" 2>/dev/null || true
         echo "$part"; return 0
       fi
-      umount "$probe"
+      umount "$probe" >/dev/null 2>&1 || true
     fi
   done < <(lsblk -plno NAME,FSTYPE,LABEL |
            awk '$2 == "ext4" && $3 == "foundation-root" {print $1}')
-  rmdir "$probe"
+  rmdir "$probe" 2>/dev/null || true
   return 1
 }
 
@@ -118,6 +135,15 @@ find_existing_install() {
 do_update() {
   local part="$1"
   c_step "Update from this medium"
+  # Clear leftovers from any earlier errored run — the ERR trap deliberately
+  # leaves the target mounted for inspection, and a stale mount is exactly
+  # what broke the first hardware update (see find_existing_install).
+  umount -R "$MNT" 2>/dev/null || true
+  local prior
+  prior="$(findmnt -no TARGET "$part" 2>/dev/null | head -1 || true)"
+  if [[ -n "$prior" && "$prior" != "$MNT" ]]; then
+    umount -R "$prior" 2>/dev/null || true
+  fi
   mount "$part" "$MNT"
 
   local cur_ver="unknown (pre-v0.0.3)" new_ver="unversioned"
@@ -238,6 +264,10 @@ main() {
   local live_disk existing=""
   live_disk="$(detect_live_disk)"
   existing="$(find_existing_install "$live_disk" || true)"
+  # Belt and braces: only a real block device may reach do_update — anything
+  # else means detection output got polluted, and offering UPDATE on it
+  # would fail (or worse) at the mount.
+  [[ -b "$existing" ]] || existing=""
   if [[ -n "$existing" ]]; then
     c_step "Existing installation found"
     echo "  Foundation TerminalOS is already installed on $existing."
