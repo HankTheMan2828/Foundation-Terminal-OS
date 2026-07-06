@@ -321,8 +321,8 @@ operator's download-don't-build call on Rogue specifically (feedback #2,
 `docs/FEEDBACK-FIRST-HARDWARE-RUN.md`), two real upstream binaries built from
 vendored source at ISO build time (`rogue`, `rogue54` — see `vendor/`)
 instead of borrowed ones. `ranger`, `btop`, and `nvim` are retired; `nethack`
-remains in `recreation.toml` as the interim third roguelike; `crawl` was
-never actually listed there. The in-house "Foundation Depths" modernized
+was removed entirely (operator direction 2026-07-05 — the two Rogue vintages
+cover the genre); `crawl` was never actually listed there. The in-house "Foundation Depths" modernized
 roguelike (`docs/ROGUELIKE-DESIGN.md`) remains a possible future project,
 separate from the classic Rogue vintages above. The Hub is glue + chrome + the
 Frank-facing surfaces; it does not reimplement the in-house programs — those

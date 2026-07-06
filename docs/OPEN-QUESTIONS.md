@@ -34,11 +34,12 @@ in-house mandate: arcade titles and chess are in-house programs now
 (Foundation Arcade, Foundation Chess — see STATUS row 12), so the old
 proposed-package table is moot. What remains:
 
-- **NetHack** is the one interim external game still shipped (the only game
-  left in `install/packages.txt`), holding the roguelike slot until the
-  in-house roguelikes are approved and built (§11). Dungeon Crawl's menu
-  entry was removed 2026-07-02 — `crawl` was never actually in
-  `packages.txt`, so it was a dead item on a real install.
+- **NetHack was removed entirely (operator direction 2026-07-05)** — dropped
+  from `install/packages.txt`, `recreation.toml`, and the `_DEFAULT` fallback.
+  The roguelike slot is covered by the two vendored Rogue vintages (feedback
+  #2); the in-house roguelike (§11) remains a possible future project.
+  Dungeon Crawl's menu entry was removed 2026-07-02 — `crawl` was never
+  actually in `packages.txt`, so it was a dead item on a real install.
 - The Recreation screen still reads
   [`system/etc/foundationhub/recreation.toml`], so list edits stay config,
   not code.

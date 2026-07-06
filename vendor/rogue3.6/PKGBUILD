@@ -16,6 +16,19 @@ makedepends=('gcc' 'make')
 source=()
 sha256sums=()
 
+prepare() {
+  cd "$startdir/src"
+  # ── Foundation TerminalOS addition (operator direction 2026-07-05) ──────────
+  # ESC-TO-EXIT. The kiosk had no way out of the game. Esc in the top-level
+  # command loop now invokes the game's own "Really quit?" confirm gate
+  # (quit(0), which scores + exits only on "y"); on "n" it falls through to the
+  # original Escape resets. Applied at build time so vendor/rogue3.6/src stays
+  # verbatim (see ../NOTICE.md). No color here on purpose: the 1981 original
+  # stays monochrome, which keeps it visually distinct from the colored 1985
+  # build (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2).
+  sed -i '/when ESCAPE/a\                    quit(0);' command.c
+}
+
 build() {
   cd "$startdir/src"
   # Upstream's plain Makefile hardcodes a cwd-relative scorefile and has no

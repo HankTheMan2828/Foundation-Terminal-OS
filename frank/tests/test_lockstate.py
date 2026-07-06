@@ -92,18 +92,20 @@ def test_expired_machine_lock_not_restored(tmp_path):
     assert not fresh.is_locked("alice", later)
 
 
-def test_public_summary_is_timestamps_and_usernames_only(tmp_path):
-    """The login screen's file discloses when, never why (§6)."""
+def test_public_summary_is_timestamps_names_and_counts_only(tmp_path):
+    """The login screen's file discloses when and how many, never why (§6)."""
     import json
     e = _session_locked("alice")
     e.process(_serious("bob"), now=0)
     p = tmp_path / "login.locks"
-    lockstate.write_public(p, e, now=0)
+    lockstate.write_public(p, e, now=0, violations={"alice": 3})
     data = json.loads(p.read_text())
-    assert set(data) == {"machine_end", "users"}
+    assert set(data) == {"machine_end", "users", "violations"}
     assert data["machine_end"] > 0
     assert set(data["users"]) == {"alice"}
     assert isinstance(data["users"]["alice"], (int, float))
+    # Violations are bare integers per username — no detail.
+    assert data["violations"] == {"alice": 3}
     # Nothing about severity, track, rule, or content leaks:
     assert "severity" not in p.read_text()
 
@@ -113,4 +115,4 @@ def test_public_summary_empty_when_clear(tmp_path):
     p = tmp_path / "login.locks"
     lockstate.write_public(p, UserEnforcers(), now=0)
     data = json.loads(p.read_text())
-    assert data == {"machine_end": 0, "users": {}}
+    assert data == {"machine_end": 0, "users": {}, "violations": {}}

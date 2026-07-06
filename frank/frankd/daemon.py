@@ -36,7 +36,7 @@ import time
 from collections import deque
 
 from . import ai, config, lockstate, sources
-from .enforcement import ReactionKind, UserEnforcers
+from .enforcement import DEFAULT_USER, ReactionKind, UserEnforcers
 from .eventlog import EventLog
 from .incidents import IncidentStore
 from .ledger import TimestampLedger
@@ -45,6 +45,7 @@ from .model import Severity, Source
 from .overseer import Overseer, Rulebook, VerdictLog
 from .rules import RuleEngine
 from .triage import TriageEngine, TriageStore
+from .violations import ViolationCounts
 
 # Only these sources carry free text worth persisting to the raw event log
 # for later content review — same restriction triage.py applies when reading
@@ -78,6 +79,9 @@ class Frank:
             # key); the deterministic rulebook is the brain either way.
             brain=(ai.build_overseer_brain() if self.cfg.overseer.ai_enabled else None))
         self.commentator = build_commentator(self.cfg.commentary.ai_enabled)
+        # Per-user violation counts, persistent — published (counts only) in
+        # the public login summary so the roster can show them (docs/USERS.md).
+        self.violations = ViolationCounts(self.cfg.violations_path)
         self.poll_interval = poll_interval
         self.lock_state_path = self.cfg.incidents_path.parent / "lockout.state"
         self._src_state: dict = {}
@@ -120,6 +124,9 @@ class Frank:
         if reaction.kind in (ReactionKind.WARN, ReactionKind.LOCKOUT):
             commentary = self.commentator.comment(reaction)
             self._queue_for_hub(reaction, commentary)
+            # A user-facing reaction is a violation on the person's permanent
+            # count (silent observations aren't). Count only, never detail.
+            self.violations.increment(finding.event.user or DEFAULT_USER)
         # Full detail always recorded, frank-only.
         self.incidents.record(finding, reaction.kind.value, commentary, now=now)
         # Immediate Overseer wake on SERIOUS (operator-confirmed scope this
@@ -155,7 +162,8 @@ class Frank:
         # so it applies new locks and releases expired ones promptly — plus
         # the public usernames+timestamps summary the login screen gates on.
         lockstate.write(self.lock_state_path, self.enforcers, now)
-        lockstate.write_public(self.cfg.login_locks_path, self.enforcers, now)
+        lockstate.write_public(self.cfg.login_locks_path, self.enforcers, now,
+                               violations=self.violations.counts)
 
     def _maybe_daily_reset(self, now: float) -> None:
         """Time-of-day reset of ledger + working memory (spec §6). Not lockouts."""

@@ -1,21 +1,25 @@
 # Recreation game list (spec §5). Data, not code — add/remove a game by editing
 # this file; the Recreation screen reads it live. The list follows the in-house
-# mandate (docs/OPEN-QUESTIONS.md §2/§10): in-house games plus interim NetHack.
+# mandate (docs/OPEN-QUESTIONS.md §2/§10): in-house games plus the vendored Rogues.
 #
 # Each bucket maps to a genre; each game has a display name and an argv `exec`.
+# Optional `full_color = true` runs the game with the kernel VT's stock palette
+# (instead of the phosphor theme) so its own colors render true; the phosphor
+# palette is restored when the game exits.
 
 # Rogue (both classic vintages) -- feedback #2: real upstream binaries, not
 # an in-house build (see vendor/rogue5.4, vendor/rogue3.6, install/packages.txt).
 # 1985 (5.4.5) listed first/default per the operator's own ordering
-# (docs/ROGUELIKE-DESIGN.md §2.2: "the nicer one to play"); 1981 (3.6, the OG)
-# below it. NetHack is the interim stand-in until the in-house roguelike
-# (docs/ROGUELIKE-DESIGN.md) lands. Dungeon Crawl was dropped: `crawl` was
-# never in install/packages.txt, so the entry was a dead menu item on a real install.
+# (docs/ROGUELIKE-DESIGN.md §2.2: "the nicer one to play"), and it carries the
+# DOS-style color rendition (vendor/rogue5.4/color/), hence full_color; 1981
+# (3.6, the OG) below it, monochrome -- authentic, and it keeps the two
+# vintages visually distinct. NetHack was removed entirely (operator direction
+# 2026-07-05). Dungeon Crawl was dropped earlier: `crawl` was never in
+# install/packages.txt, so the entry was a dead menu item on a real install.
 [bucket.roguelikes]
 games = [
-  { name = "Rogue (1985)",      exec = ["rogue54"] },
+  { name = "Rogue (1985)",      exec = ["rogue54"], full_color = true },
   { name = "Rogue (1981, OG)",  exec = ["rogue"] },
-  { name = "NetHack",           exec = ["nethack"] },
 ]
 
 [bucket.arcade]

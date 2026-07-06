@@ -16,11 +16,29 @@ package repo — never fetched on the target machine (see `PKGBUILD`).
   grants folded into the same restoration. The license permits redistribution
   (source and binary) with attribution; `PKGBUILD` installs `LICENSE.TXT` to
   `/usr/share/licenses/rogue5.4/`.
-- **Not modified.** `src/` is the upstream source tree as-is (Windows/MSVC
-  project files, the `.desktop`/`.png` icon, and `rogue.spec` RPM metadata
-  dropped — none apply to this OS's kernel-console-only model). `PKGBUILD`
-  only passes the project's own `./configure` flags (program name, setgid
-  group, score/lock file paths) — no game logic is touched.
+- **`src/` is the upstream source tree, verbatim** (Windows/MSVC project files,
+  the `.desktop`/`.png` icon, and `rogue.spec` RPM metadata dropped — none
+  apply to this OS's kernel-console-only model). Nothing in `src/` is edited in
+  the repo. `PKGBUILD` passes the project's own `./configure` flags (program
+  name, setgid group, score/lock file paths) and applies **build-time patches
+  to a throwaway copy** (`prepare()`; the repo tree is never touched):
+  - **`tstp()` ncurses fix** — swaps two pokes at ncurses' now-opaque WINDOW
+    fields for the public `wmove(curscr, …)`; behavior-identical, needed to
+    compile against modern ncurses.
+  - **Color** (operator direction 2026-07-05) — upstream 5.4 is monochrome, so
+    on this OS it looked identical to the 1981 build. The color layer in
+    [`color/xcolor.{h,c}`](color/) (not upstream) is copied into the build and
+    wired in: `rogue.h` includes it after `extern.h`, `main.c` starts color
+    after the gameplay `initscr()`, and `Makefile.in` links it. It wraps the
+    character-plotting primitives to attach a classic PC-Rogue color per
+    symbol; color lives only in the attribute bits, which the game masks off
+    with `CCHAR()` when reading the map back — purely cosmetic, no game logic.
+  - **Esc-to-exit** (operator direction 2026-07-05) — Esc in the top-level
+    command loop invokes the game's own `quit(0)` "really quit?" gate (mirrors
+    the existing `Q` command); the kiosk otherwise had no way out.
+
+  The `color/` sources are original to this repo (MIT-compatible, authored
+  here); everything under `src/` remains BSD-3 upstream.
 - **Score file / shared board:** built with `--enable-setgid=games
   --enable-scorefile=/var/lib/rogue/rogue54.scr
   --enable-lockfile=/var/lib/rogue/rogue54.lck` — the upstream build system's

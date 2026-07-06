@@ -15,11 +15,17 @@ package repo — never fetched on the target machine (see `PKGBUILD`).
   (`xcrypt.c`, FreeSec libcrypt) BSD grants folded into the same restoration.
   The license permits redistribution (source and binary) with attribution;
   `PKGBUILD` installs `LICENSE.TXT` to `/usr/share/licenses/rogue3.6/`.
-- **Not modified.** `src/` is the upstream source tree as-is (Windows/MSVC
-  project files dropped — `.sln`/`.vcproj` are dead weight on this OS).
-  `PKGBUILD` only overrides the score-file path via `CFLAGS` (see below); no
-  game logic is touched. This is a download-and-package job, not a build —
-  see the operator decision above.
+- **`src/` is the upstream source tree, verbatim** (Windows/MSVC project files
+  dropped — `.sln`/`.vcproj` are dead weight on this OS). Nothing in `src/` is
+  edited in the repo. `PKGBUILD` overrides the score-file path via `CFLAGS`
+  (see below) and applies **one build-time patch to a throwaway copy** (the
+  repo tree is never touched):
+  - **Esc-to-exit** (`prepare()`, operator direction 2026-07-05): Esc in the
+    top-level command loop invokes the game's own `quit(0)` "Really quit?"
+    confirm gate — the kiosk otherwise had no way out of the game. It reuses
+    the existing quit path; no new game logic. The 1981 build stays
+    **monochrome** on purpose, so it reads as visually distinct from the
+    colored 1985 build (which got a color layer in the same pass).
 - **Score file / shared board:** the upstream Makefile hardcodes a
   cwd-relative `rogue36.scr` with no setgid support (unlike 5.4's autotools
   build). `PKGBUILD` recompiles `SCOREFILE` to the absolute path

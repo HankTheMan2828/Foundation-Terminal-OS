@@ -7,7 +7,18 @@ machines: boot lands on a **login screen**, not the Hub.
 ## The rules
 
 - **8 accounts per machine, full stop.** (`accounts.MAX_ACCOUNTS`.) The login
-  screen shows the roster; when the machine is full, registration closes.
+  screen shows **all 8 slots**, spaced apart: a filled slot is an account, an
+  empty slot is a `[ CREATE NEW USER ]` placeholder that enters registration.
+  When the machine is full there are simply no placeholders left. Each account
+  row shows the username on the left and, right-aligned, its **storage
+  (used / allotment)** and Frank **violation count** (see below). The
+  `FROM THE FOUNDATION` tagline sits centered near the top, under the title
+  card. (Redesign 2026-07-05.)
+- **The roster is live, not load-once.** The login screen re-reads
+  `users.json` whenever it changes on disk, so an account created out-of-band
+  (the root helper, another console) appears immediately — no device restart.
+  (Fix 2026-07-05: the first-hardware-run report was "you must restart the
+  device to see a new account.")
 - **Fixed storage per account — no more, no less.** The allotment is set by
   the account's tier and enforced with filesystem quotas (soft = hard).
 - **Tiers are employee levels.** ✅ Names and amounts approved by the
@@ -66,8 +77,14 @@ machines: boot lands on a **login screen**, not the Hub.
 - A **MACHINE**-scope lockout (SERIOUS) freezes the terminal for everyone —
   the machine itself is compromised territory — and still survives reboots.
 - The login screen learns about locks from `/run/frank/login.locks`, a
-  public file carrying **usernames and expiry timestamps only** — same
-  disclosure philosophy as the timestamp ledger: when, never why.
+  public file carrying **usernames, expiry timestamps, and bare per-user
+  violation counts only** — same disclosure philosophy as the timestamp
+  ledger: when and how many, never why. A "violation" is any finding that
+  produced a user-facing reaction (warn or lockout), not a silent observation;
+  the count is persisted in `/var/lib/frank/violations.json`
+  (`frankd/violations.py`) so it survives reboots and the daily reset — the
+  record follows the person. The login roster shows each account's count; the
+  detail behind every increment stays in Frank's private incident store.
 - Users can NOT see each other's data; users have NO power over Frank —
   both unchanged from the single-user model. One narrow, deliberate
   exception to the data rule (operator, 2026-07-02): game **score boards**

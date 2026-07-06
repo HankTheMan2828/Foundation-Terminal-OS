@@ -130,9 +130,13 @@ class FrankConfig:
     triage_path: Path = Path("/var/lib/frank/triage.jsonl")
     verdicts_path: Path = Path("/var/lib/frank/verdicts.jsonl")
     ipc_socket: Path = Path("/run/frank/hub.sock")
-    # Public login-lock summary (usernames + expiry timestamps only) so the
-    # login screen can refuse locked accounts — docs/USERS.md.
+    # Public login summary (usernames + expiry timestamps + bare violation
+    # counts) so the login screen can refuse locked accounts and show each
+    # account's count — docs/USERS.md.
     login_locks_path: Path = Path("/run/frank/login.locks")
+    # Persistent per-user violation counts (frankd/violations.py) — survives
+    # reboots and the daily reset; records follow the person.
+    violations_path: Path = Path("/var/lib/frank/violations.json")
     reset_hour: int = 4                # daily reset time-of-day (context + ledger)
 
     def clamp_sensitivity(self, level: int) -> int:

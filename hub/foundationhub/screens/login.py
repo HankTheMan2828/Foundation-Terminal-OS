@@ -14,14 +14,17 @@ suspenders.
 """
 from __future__ import annotations
 
+import curses
 import time
+from pathlib import Path
 
-from .. import labels, session, theme
+from .. import fileops, labels, session, theme
 from ..accounts import (MAX_ACCOUNTS, Registry, RegistryError, Tier, TIERS,
                         GiB, MiB)
 from ..app import MenuScreen, Screen, POP
 from ..ui import LineEdit, Menu, MenuItem, KEYS_BACK
 from . import build_home, power
+from .notes import DATA as _DATA
 
 _FAILS_BEFORE_COOLDOWN = 3
 _COOLDOWN_SECONDS = 30
@@ -253,9 +256,23 @@ def _create_via_helper(username: str, password: str, tier: Tier,
     return None
 
 
+def _account_data_dir(username: str) -> Path:
+    """The account's data space (same layout notes/files use — docs/USERS.md)."""
+    return _DATA / "users" / username
+
+
 class LoginScreen(Screen):
-    """The account roster. Locked accounts (per Frank's public summary) are
-    disabled with a countdown; a machine lock disables everything."""
+    """The account roster: all 8 slots, always. A filled slot is the account
+    (username left; tier, then storage + Frank violation count right-aligned);
+    an empty slot is a [ CREATE NEW USER ] placeholder into registration.
+
+    Locked accounts (per Frank's public summary) are disabled with a
+    countdown; a machine lock disables everything.
+
+    The roster re-reads the registry whenever the file changes on disk (first
+    hardware run: an account created out-of-band — root helper, another
+    console — only appeared after a device restart, because the roster was
+    load-once for the life of the greeter process)."""
 
     title = labels.LOGIN_TITLE
     subtitle = labels.LOGIN_SUBTITLE
@@ -264,23 +281,56 @@ class LoginScreen(Screen):
         self.registry = Registry()
         self.notice = notice
         self._machine_locked_until = 0.0
+        self._violations: dict[str, int] = {}
         self._build_menu()
 
+    # ── roster ───────────────────────────────────────────────────────────────
+    def _registry_stamp(self):
+        try:
+            st = self.registry.path.stat()
+            return (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
+
+    def _maybe_reload(self) -> None:
+        """Re-read the registry if users.json changed since the menu was built."""
+        if self._registry_stamp() == self._stamp:
+            return
+        keep = self.menu.index
+        self.registry = Registry()
+        self._build_menu()
+        self.menu.set_index(keep)
+
+    def _account_status(self, acct):
+        """Right-aligned readout: storage used / allotment, then Frank's
+        violation count. Usage is measured once per roster build (a recursive
+        walk per keystroke would lag the greeter); violations refresh live."""
+        used = fileops.format_size(fileops.dir_size(_account_data_dir(acct.username)))
+        base = f"{used} / {_fmt_quota(TIERS[acct.tier].quota_bytes)}"
+        return lambda: (f"{base}   ·   "
+                        f"{self._violations.get(acct.username, 0)} "
+                        f"{labels.LOGIN_VIOLATIONS}")
+
     def _build_menu(self) -> None:
-        items = []
-        for acct in self.registry.accounts:
-            items.append(MenuItem(
-                acct.username,
-                (lambda a_: (lambda app: PasswordScreen(a_, self.registry)))(acct),
-                hint=TIERS[acct.tier].label))
-        if items:
-            items.append(MenuItem("", enabled=False))
-        if self.registry.full():
-            items.append(MenuItem(labels.LOGIN_AT_CAPACITY, enabled=False))
-        else:
-            items.append(MenuItem(
-                labels.LOGIN_REGISTER,
-                lambda app: RegistrationScreen(self.registry)))
+        self._stamp = self._registry_stamp()
+        # (item, account, stats-status) per filled slot, for _refresh_locks.
+        self._rows: list[tuple] = []
+        items: list[MenuItem] = []
+        for slot in range(MAX_ACCOUNTS):
+            if slot:
+                items.append(MenuItem("", enabled=False))  # spacing between slots
+            if slot < len(self.registry.accounts):
+                acct = self.registry.accounts[slot]
+                stats = self._account_status(acct)
+                item = MenuItem(
+                    acct.username,
+                    (lambda a_: (lambda app: PasswordScreen(a_, self.registry)))(acct),
+                    hint=TIERS[acct.tier].label, status=stats)
+                self._rows.append((item, acct, stats))
+            else:
+                item = MenuItem(labels.LOGIN_CREATE_SLOT,
+                                lambda app: RegistrationScreen(self.registry))
+            items.append(item)
         self.menu = Menu(items)
 
     def _refresh_locks(self) -> None:
@@ -288,8 +338,9 @@ class LoginScreen(Screen):
         now = time.time()
         self._machine_locked_until = locks["machine_end"] \
             if locks["machine_end"] > now else 0.0
+        self._violations = locks.get("violations", {})
         user_locks = locks["users"]
-        for item, acct in zip(self.menu.items, self.registry.accounts):
+        for item, acct, stats in self._rows:
             end = user_locks.get(acct.username, 0.0)
             if self._machine_locked_until:
                 item.enabled = False
@@ -300,10 +351,13 @@ class LoginScreen(Screen):
                     f"{labels.LOGIN_LOCKED} {_fmt_remaining(e, time.time())}"))(end)
             else:
                 item.enabled = True
-                item.status = None
+                item.status = stats
 
+    # ── rendering ────────────────────────────────────────────────────────────
     def draw(self, win, top, left):
+        self._maybe_reload()
         self._refresh_locks()
+        h, w = win.getmaxyx()
         if self._machine_locked_until:
             win.addstr(top, left, labels.LOGIN_MACHINE_LOCKED,
                        theme.attr(theme.PAIR_WARN, bold=True))
@@ -311,16 +365,19 @@ class LoginScreen(Screen):
                        _fmt_remaining(self._machine_locked_until, time.time()),
                        theme.attr(theme.PAIR_WARN))
             return
-        self.menu.draw(win, top, left)
-        h, w = win.getmaxyx()
-        if self.notice:
-            win.addstr(top + len(self.menu.items) + 1, left,
-                       self.notice[: w - left - 2],
-                       theme.attr(theme.PAIR_ACCENT, bold=True))
-        else:
-            win.addstr(top + len(self.menu.items) + 1, left,
-                       f"— {labels.TAGLINE} —"[: w - left - 2],
+        # Tagline centered, spaced down from the title card; a registration
+        # notice takes the spacer row below it.
+        tagline = f"— {labels.TAGLINE} —"
+        try:
+            win.addstr(top, max(1, (w - len(tagline)) // 2), tagline[: w - 2],
                        theme.attr(theme.PAIR_DIM, dim=True))
+            if self.notice:
+                win.addstr(top + 1, max(1, (w - len(self.notice)) // 2),
+                           self.notice[: w - 2],
+                           theme.attr(theme.PAIR_ACCENT, bold=True))
+        except curses.error:
+            pass
+        self.menu.draw(win, top + 2, left)
 
     def status_text(self):
         return labels.LOGIN_HINT

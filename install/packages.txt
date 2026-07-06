@@ -70,7 +70,8 @@ python-requests
 # (games/foundation_chess/, same install/08-games.sh) plays vs. a built-in
 # minimax AI. gnuchess was never listed here; recreation.toml now execs
 # foundation-chess.
-nethack
+# nethack REMOVED entirely (operator direction 2026-07-05). It was the interim
+# roguelike stand-in; the two vendored Rogues below cover the genre now.
 # Rogue -- feedback #2 (docs/FEEDBACK-FIRST-HARDWARE-RUN.md): operator wanted
 # the real thing, download don't build. Both classic vintages, vendored
 # source (vendor/rogue3.6, vendor/rogue5.4) built into Arch packages at ISO

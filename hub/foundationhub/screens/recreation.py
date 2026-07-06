@@ -3,7 +3,7 @@
 Reads /etc/foundationhub/recreation.toml so adding/removing a game is a config edit.
 Ships a genre-organized default matching the spec's direction (roguelikes /
 arcade / puzzle-strategy). The list follows the in-house mandate — see
-docs/OPEN-QUESTIONS.md §2/§10: in-house games plus interim NetHack.
+docs/OPEN-QUESTIONS.md §2/§10: in-house games plus the two vendored Rogues.
 """
 from __future__ import annotations
 
@@ -70,32 +70,35 @@ class HighScoresScreen(Screen):
 
 
 # Fallback list used off-device or before the config is installed.
+# Each entry: (display name, argv, full_color) — full_color launches with the
+# VT's stock palette so the game's own colors render true (app.Launch).
 _DEFAULT = {
     # Rogue (both classic vintages) — feedback #2: real upstream binaries,
-    # not an in-house build (see vendor/rogue5.4, vendor/rogue3.6). NetHack
-    # is the interim stand-in until the in-house roguelike (docs/ROGUELIKE-
-    # DESIGN.md) lands. Dungeon Crawl was dropped — `crawl` was never in
+    # not an in-house build (see vendor/rogue5.4, vendor/rogue3.6). The 1985
+    # build carries its DOS-style color rendition, hence full_color; the 1981
+    # original stays monochrome (authentic, and keeps the two vintages
+    # visually distinct). NetHack was removed entirely (operator direction
+    # 2026-07-05). Dungeon Crawl was dropped earlier — `crawl` was never in
     # install/packages.txt, so it was a dead entry on target.
     "roguelikes": [
-        ("Rogue (1985)", ["rogue54"]),
-        ("Rogue (1981, OG)", ["rogue"]),
-        ("NetHack", ["nethack"]),
+        ("Rogue (1985)", ["rogue54"], True),
+        ("Rogue (1981, OG)", ["rogue"], False),
     ],
     # One in-house program, five games (BUILD-QUEUE §5 item 1) — retires
     # nsnake, vitetris, ninvaders, 2048, and nudoku. Listed individually
     # (not nested under a "Foundation Arcade" sub-menu) per operator
     # request 2026-07-03 — each exec picks the game directly.
     "arcade": [
-        ("Snake", ["foundation-arcade", "snake"]),
-        ("Falling Blocks", ["foundation-arcade", "blocks"]),
-        ("2048", ["foundation-arcade", "2048"]),
-        ("Sudoku", ["foundation-arcade", "sudoku"]),
-        ("Invaders", ["foundation-arcade", "invaders"]),
+        ("Snake", ["foundation-arcade", "snake"], False),
+        ("Falling Blocks", ["foundation-arcade", "blocks"], False),
+        ("2048", ["foundation-arcade", "2048"], False),
+        ("Sudoku", ["foundation-arcade", "sudoku"], False),
+        ("Invaders", ["foundation-arcade", "invaders"], False),
     ],
     # Chess is in-house now (BUILD-QUEUE §5 item 2) — foundation-chess retires
     # gnuchess (vs. a built-in minimax AI).
     "puzzle / strategy": [
-        ("Chess", ["foundation-chess"]),
+        ("Chess", ["foundation-chess"], False),
     ],
 }
 
@@ -107,7 +110,9 @@ def _load():
             data = tomllib.loads(cfg.read_text())
             out = {}
             for bucket, games in data.get("bucket", {}).items():
-                out[bucket] = [(g["name"], g["exec"]) for g in games]
+                out[bucket] = [(g["name"], g["exec"],
+                                bool(g.get("full_color", False)))
+                               for g in games]
             if out:
                 return out
         except Exception:
@@ -124,6 +129,8 @@ def screen():
         items.append(MenuItem("", enabled=False))  # gap above the section title
         items.append(MenuItem(f"— {bucket.upper()} —", enabled=False))
         items.append(MenuItem("", enabled=False))  # gap below the section title
-        for name, argv in games:
-            items.append(MenuItem(name, (lambda av: (lambda a: Launch(av)))(argv)))
+        for name, argv, full_color in games:
+            items.append(MenuItem(
+                name,
+                (lambda av, fc: (lambda a: Launch(av, full_color=fc)))(argv, full_color)))
     return MenuScreen(labels.RECREATION, items)

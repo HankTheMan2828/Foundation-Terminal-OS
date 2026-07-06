@@ -123,18 +123,23 @@ def get_active_account():
 
 
 def read_login_locks() -> dict:
-    """Frank's public lock summary: {"machine_end": ts, "users": {name: ts}}.
+    """Frank's public login summary:
+    {"machine_end": ts, "users": {name: ts}, "violations": {name: count}}.
 
-    Timestamps + usernames only, by design. Missing/corrupt file = no locks
-    (off-device, or Frank not running)."""
+    Usernames, timestamps, and bare violation COUNTS only — when and how many,
+    never why (same disclosure philosophy as the timestamp ledger). The counts
+    feed the login roster's per-account readout. Missing/corrupt file = no
+    locks, no counts (off-device, or Frank not running)."""
     import json
     try:
         data = json.loads(LOGIN_LOCKS.read_text())
         return {"machine_end": float(data.get("machine_end", 0)),
                 "users": {str(k): float(v)
-                          for k, v in data.get("users", {}).items()}}
-    except (OSError, ValueError):
-        return {"machine_end": 0.0, "users": {}}
+                          for k, v in data.get("users", {}).items()},
+                "violations": {str(k): int(v)
+                               for k, v in data.get("violations", {}).items()}}
+    except (OSError, ValueError, TypeError):
+        return {"machine_end": 0.0, "users": {}, "violations": {}}
 
 
 # ── System Status (read-only identity + basic health checks) ─────────────────

@@ -74,16 +74,19 @@ def write(path: Path, enforcers: UserEnforcers, now: float) -> None:
         pass
 
 
-def write_public(path: Path, enforcers: UserEnforcers, now: float) -> None:
-    """The login screen's view: usernames + expiry timestamps ONLY (§6 —
-    when, never why). World-readable by design; there is nothing here the
-    ledger doesn't already disclose."""
+def write_public(path: Path, enforcers: UserEnforcers, now: float,
+                 violations: dict[str, int] | None = None) -> None:
+    """The login screen's view: usernames + expiry timestamps + bare per-user
+    violation COUNTS (§6 — when and how many, never why). World-readable by
+    design; there is nothing here the ledger doesn't already disclose in
+    volume, and no category/severity/content ever appears."""
     path = Path(path)
     machine = enforcers.machine_lockout(now)
     data = {
         "machine_end": machine[1].end if machine else 0,
         "users": {user: lk.end
                   for user, lk in enforcers.session_lockouts(now).items()},
+        "violations": dict(violations or {}),
     }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

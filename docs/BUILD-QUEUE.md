@@ -178,11 +178,13 @@ Build order (operator said fine to split across chats):
    it's a terminal, not a rating ladder). Retires gnuchess.
 3. **Roguelike** — the big one, its own project (`games/foundationdepths/` or a
    name the operator picks): procedural floors, turn-based, permadeath,
-   Aperture/Vault flavor. Retires nethack/crawl. Expect multiple sessions;
+   Aperture/Vault flavor. (nethack was already removed outright, operator
+   direction 2026-07-05; crawl was never shipped.) Expect multiple sessions;
    start with a design doc for the operator to approve.
 4. As each lands: update recreation.toml defaults + `_DEFAULT` in
    `hub/foundationhub/screens/recreation.py`, drop the replaced packages from
-   packages.txt (`nethack` is currently the only one actually listed).
+   packages.txt (none left to drop — the vendored rogue3.6/rogue5.4 stay;
+   they ARE the real thing per feedback #2).
 
 ## §6 CAPABILITY TIERS: LEAN BASE + POCKET8086 (operator-directed)
 

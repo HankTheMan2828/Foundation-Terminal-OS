@@ -31,6 +31,35 @@ prepare() {
   # vendor/ to a throwaway build dir, so nothing in the repo is touched.
   sed -i -e 's/curscr->_cury = oy;/wmove(curscr, oy, ox);/' \
          -e '/curscr->_curx = ox;/d' main.c
+
+  # ── Foundation TerminalOS additions (operator direction 2026-07-05) ─────────
+  # Applied here at build time, so vendor/rogue5.4/src stays verbatim upstream
+  # (same discipline as the tstp() fix above; see ../NOTICE.md). Two changes:
+  #
+  #   1. COLOR. Upstream 5.4 is monochrome, so on this OS it looked identical to
+  #      the 1981 build -- "two of the 1981 games." Drop in the color layer
+  #      (../color/xcolor.[ch]) and wire it in: rogue.h includes the header
+  #      (after extern.h) so every unit picks up the wrapped character-plotting
+  #      primitives; main.c starts color right after the gameplay initscr();
+  #      Makefile.in links the new object + header. Color rides only in the
+  #      attribute bits, which the game masks off with CCHAR() when it reads the
+  #      map back -- purely cosmetic (see xcolor.h).
+  #
+  #   2. ESC-TO-EXIT. The kiosk had no way out of the game. Esc in the top-level
+  #      command loop now invokes the game's own "really quit?" confirm gate,
+  #      mirroring the existing 'Q' command (q_comm around quit(0)). On "n" it
+  #      falls through to the original Escape resets; on "y" the native quit
+  #      path scores and exits back to the Hub.
+  install -m644 "$startdir/color/xcolor.h" "$startdir/color/xcolor.c" ./
+  sed -i '/#include "extern.h"/a\#include "xcolor.h"' rogue.h
+  sed -i '/Start up cursor package/a\    roguecolor_start();' main.c
+  sed -i -e 's/rogue\.h extern\.h score\.h/rogue.h extern.h score.h xcolor.h/' \
+         -e 's/wizard\.\$(O) xcrypt\.\$(O)/wizard.$(O) xcrypt.$(O) xcolor.$(O)/' \
+         Makefile.in
+  sed -i -e '/when ESCAPE:/a\                    q_comm = TRUE;' \
+         -e '/when ESCAPE:/a\                    quit(0);' \
+         -e '/when ESCAPE:/a\                    q_comm = FALSE;' \
+         command.c
 }
 
 build() {
