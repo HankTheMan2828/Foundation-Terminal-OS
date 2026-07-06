@@ -16,6 +16,7 @@ import curses
 from dataclasses import dataclass
 from typing import Optional
 
+from . import activity
 from . import theme
 from . import ui
 from . import labels
@@ -90,6 +91,9 @@ class App:
 
     # -- navigation helpers usable from screens --
     def push(self, screen: Screen) -> None:
+        # Report the navigation to Frank (report-only; see activity.py). This is
+        # the "screen the user opened" half of "everything the user does".
+        activity.record("screen", getattr(screen, "title", ""))
         self.stack.append(screen)
 
     def pop(self) -> None:
@@ -105,6 +109,9 @@ class App:
         if shutil.which(exe) is None:
             self.status_message = f"{exe} {launch.missing_hint}"
             return
+        # The program the user started — reported to Frank before we hand the
+        # console over to the child (report-only; see activity.py).
+        activity.record("launch", " ".join(launch.argv))
         curses.def_prog_mode()
         curses.endwin()
         try:

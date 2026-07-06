@@ -35,7 +35,9 @@ from .incidents import IncidentStore
 # Sources worth a content-classification pass. Deliberately excludes
 # `process`/`network` — those are numeric/destination signals with nothing
 # for a text classifier to read, and including them would be pure volume.
-_CONTENT_SOURCES = {"shell", "browser"}
+# `activity` is the Hub's per-action feed (note/file/chat text) — the main
+# content stream on this OS, so the periodic sift reads it too.
+_CONTENT_SOURCES = {"shell", "browser", "activity"}
 
 
 @dataclass

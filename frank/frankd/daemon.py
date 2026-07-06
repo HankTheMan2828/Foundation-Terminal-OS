@@ -51,7 +51,10 @@ from .violations import ViolationCounts
 # for later content review — same restriction triage.py applies when reading
 # it back. Process/network events are numeric/destination signals already
 # handled by the rule engine; logging them here would be pure volume.
-_LOGGABLE_SOURCES = {Source.SHELL, Source.BROWSER}
+# ACTIVITY is the Hub's per-action feed (programs opened, notes/files edited,
+# screens navigated, chat sent) — the main content stream on this OS, so it
+# belongs in the base log the sift/Overseer tiers read.
+_LOGGABLE_SOURCES = {Source.SHELL, Source.BROWSER, Source.ACTIVITY}
 
 # How far back an Overseer check-in's activity snapshot looks (spec: it should
 # see "the user's current happenings" at check-in time, not just history).

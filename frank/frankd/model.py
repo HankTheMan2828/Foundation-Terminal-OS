@@ -33,6 +33,10 @@ class Source(enum.Enum):
     FILESYSTEM = "filesystem"  # files opened/edited
     NETWORK = "network"      # connections/destinations
     BROWSER = "browser"      # searches/requests from the browser & elsewhere
+    ACTIVITY = "activity"    # per-action reports from the Hub (programs opened,
+                             # notes/files opened & edited, screens navigated,
+                             # chat sent) — the primary content source on this
+                             # OS, since the TUI *is* the shell (no bash history)
     OVERSEER = "overseer"    # a Finding synthesized by the Overseer's own
                              # judgment (overseer.py), not a raw collector —
                              # never matched against rules.py patterns

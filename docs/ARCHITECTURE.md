@@ -120,6 +120,22 @@ read-only for the Hub**: it carries one thing — the Hub asks `poll` and Frank
 returns a warning/status line to *display*. The Hub can change nothing about
 Frank. See [`frank/frankd/ipc.py`].
 
+**The activity feed is a separate, one-way *observation* channel — not a hole
+in this model.** Because the TUI is the login shell, there is no `.bash_history`
+and Frank would otherwise be blind to what the user does. So the Hub appends one
+JSON line per user action (program launched, note/file opened & edited, screen
+navigated) to an append-only spool at `/run/foundationhub/activity.log`
+(`hub/foundationhub/activity.py`), and Frank's `activity` collector
+(`frank/frankd/sources.py`) reads new lines each tick — exactly the one-way
+relationship `shell_history` has with the shell's own history file. Appending
+observations grants the operator **no** authority over Frank: it cannot tune,
+disable, or influence detection/enforcement/config. The operator can forge or
+omit lines in their *own* activity log (as they always could with
+`.bash_history`), but that changes only what Frank observes, never Frank's
+verdicts, ledger, or the root-owned enforcer. Content-bearing (notes/chat) so
+the sift/Overseer tiers can review it; it flows through the identical eventlog →
+rule engine → enforcement path as every other source.
+
 ### Enforcement is root-owned, not Hub-cooperative
 
 A lockout the operator's own process merely *renders* would be a lockout the
@@ -239,10 +255,12 @@ same as sensitivity was.
 data sources (sources.py)                rule engine (rules.py)
   shell history  ─┐                         ┌─ security track  ─┐
   processes      ─┤                         │  (severity tiers) │
-  filesystem     ─┼─►  normalized events ─► ┤                   ├─► Finding
-  network        ─┤                         │  legal/ethical    │      │
-  browser reqs   ─┘                         └─ (severity tiers) ─┘      │
-         │ (shell/browser only)                                        │
+  filesystem     ─┤                         │                   │
+  network        ─┼─►  normalized events ─► ┤                   ├─► Finding
+  browser reqs   ─┤                         │  legal/ethical    │      │
+  Hub activity   ─┘                         └─ (severity tiers) ─┘      │
+   (activity.log)                                                       │
+         │ (shell/browser/activity only)                               │
          ▼                                                              │
    eventlog.py (raw base logs, frank-only)                              │
          │                                                              │

@@ -3,15 +3,14 @@
 # Categories + severities below are operator-confirmed (docs/OPEN-QUESTIONS.md
 # §3 resolved). Schema + tier model: see security.toml header.
 #
-# Known limitation: several rules below target `sources = ["browser"]`, but
-# the browser collector (frankd/sources.py `browser()`) is still an unfilled
-# stub — it emits nothing yet (spec's own [TODO(frank)] marker predates this
-# session; implementing a real browser-history/DNS tap is a separate, larger
-# task, not a rules/severity refinement). Until that collector is built, these
-# rules will only catch cases that also show up via shell (e.g. downloading
-# something from a flagged domain with curl/wget) or network source text —
-# real day-to-day web-browsing coverage is NOT active yet. Flagging this so
-# expectations are set correctly.
+# Note on sources: the content rules below include `activity` — the Hub's
+# per-action feed (frankd/sources.py `activity()`), which is the primary content
+# source on this OS since the TUI is the shell (no `.bash_history`). It carries
+# note/file bodies, launched-program names, opened files, and (once wired) chat
+# text, so day-to-day user activity IS now classified. The `browser` collector
+# (frankd/sources.py `browser()`) is still an unfilled stub — a real
+# browser-history/DNS tap is a separate, larger task — so pure in-browser web
+# activity that never touches shell/network/activity is not yet covered.
 
 # ── Piracy / copyright infringement ───────────────────────────────────────
 # The DRM-circumvention half of this (yt-dlp/youtube-dl + drm/widevine
@@ -42,7 +41,7 @@ patterns = [
   "\\bredtube\\b", "\\byouporn\\b", "\\bbrazzers\\b", "\\bspankbang\\b",
   "\\bonlyfans\\b",
 ]
-sources = ["browser", "shell", "network"]
+sources = ["browser", "shell", "network", "activity"]
 
 # ── Gambling ────────────────────────────────────────────────────────────────
 [[rule]]
@@ -54,7 +53,7 @@ patterns = [
   "\\bdraftkings\\b", "\\bfanduel\\b", "\\bbet365\\b", "\\bpokerstars\\b",
   "\\bsportsbook\\b", "\\bonline\\s+casino\\b",
 ]
-sources = ["browser", "shell", "network"]
+sources = ["browser", "shell", "network", "activity"]
 
 # ── Illegal goods / drugs ──────────────────────────────────────────────────
 # Deliberately narrow: bare drug-name keyword matching is extremely
@@ -71,7 +70,7 @@ patterns = [
   "\\bsilk\\s*road\\b", "\\balphabay\\b", "\\bdarknet\\s*market\\b",
   "\\.onion\\b.{0,30}\\b(market|drugs?)\\b",
 ]
-sources = ["browser", "shell", "network"]
+sources = ["browser", "shell", "network", "activity"]
 
 # ── Self-harm-related content ──────────────────────────────────────────────
 # Operator-confirmed: OBSERVE only. This deliberately does NOT go through the
@@ -89,7 +88,7 @@ patterns = [
   "\\bsuicid(e|al)\\b", "\\bself[\\s-]?harm\\b", "\\bself[\\s-]?injur", "\\bkill\\s+myself\\b",
   "\\bways?\\s+to\\s+die\\b",
 ]
-sources = ["browser", "shell", "network"]
+sources = ["browser", "shell", "network", "activity"]
 
 # ── Hate speech / extremism / violent threats ──────────────────────────────
 # Only the high-precision half is implemented here: explicit first-person

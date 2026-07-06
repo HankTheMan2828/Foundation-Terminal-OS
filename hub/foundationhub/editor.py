@@ -18,7 +18,7 @@ from __future__ import annotations
 import curses
 from pathlib import Path
 
-from . import labels, notesdb, theme
+from . import activity, labels, notesdb, theme
 from .app import POP, Screen
 from .ui import KEYS_DOWN, KEYS_SELECT, KEYS_UP, LineEdit
 
@@ -157,6 +157,9 @@ class Editor:
             self.buffer = Buffer(create_text)
             if create_text:
                 self.buffer.dirty = True
+        # The note/file the user opened for editing — reported to Frank
+        # (report-only; see activity.py).
+        activity.record("note-open", self.path.name)
 
     # ── persistence ───────────────────────────────────────────────────────────
     def save(self) -> bool:
@@ -167,6 +170,10 @@ class Editor:
             self.message = labels.EDITOR_SAVE_FAILED.format(err=exc)
             return False
         self.buffer.dirty = False
+        # Report the edit *with its content* so Frank's content-review tiers can
+        # actually see what was written — this is the "notes edited" half of the
+        # OG design (report-only; see activity.py).
+        activity.record("note-save", f"{self.path.name}\n{self.buffer.text()}")
         return True
 
     # ── geometry ──────────────────────────────────────────────────────────────

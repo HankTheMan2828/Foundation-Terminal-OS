@@ -12,6 +12,7 @@ the rule engine (offline) classifies whatever they emit.
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -53,6 +54,18 @@ def active_user() -> str:
         return ACTIVE_USER_FILE.read_text().strip()
     except OSError:
         return ""
+
+# Report-only activity spool the Hub appends to (hub/foundationhub/activity.py).
+# This is the primary content source on a running machine: everything the user
+# actually does happens inside the Hub, and there is no shell to leave a
+# .bash_history behind. Frank OBSERVES this file; the Hub only appends to it and
+# thereby gains no authority over Frank (same one-way relationship the shell's
+# own history file has with shell_history). Default path is shared with the Hub
+# (docs/ARCHITECTURE.md); FRANK_ACTIVITY_SPOOL overrides it for tests/off-target.
+ACTIVITY_SPOOL = Path(os.environ.get(
+    "FRANK_ACTIVITY_SPOOL",
+    os.environ.get("FOUNDATIONHUB_ACTIVITY_LOG",
+                   "/run/foundationhub/activity.log")))
 
 # Operator-confirmed (docs/OPEN-QUESTIONS.md §3): 85% sustained for 10s. Streak
 # is expressed in polls, not seconds, since the daemon's poll interval is what
@@ -138,7 +151,42 @@ def browser(_state: dict) -> Iterator[Event]:
     return iter(())
 
 
-ALL = [shell_history, processes, network, filesystem, browser]
+def activity(state: dict) -> Iterator[Event]:
+    """Per-action reports the Hub appended to the activity spool since last poll.
+
+    One JSON line per user action: {"ts", "user", "kind", "text"}. We yield each
+    new line as an ACTIVITY event, preserving the reported user (so records
+    follow the person even before collect() fills it in) and the reported ts (so
+    the raw event log timestamps the action, not the poll). Cursor-by-line-count
+    mirrors shell_history; malformed/blank lines are skipped, never fatal."""
+    try:
+        lines = ACTIVITY_SPOOL.read_text(errors="replace").splitlines()
+    except OSError:
+        return
+    seen = state.get("activity_seen", 0)
+    for line in lines[seen:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        text = str(rec.get("text", "")).strip()
+        if not text:
+            continue
+        try:
+            ts = float(rec.get("ts"))
+        except (TypeError, ValueError):
+            ts = None
+        ev = Event(Source.ACTIVITY, text, user=str(rec.get("user", "")))
+        if ts is not None:
+            ev.ts = ts
+        yield ev
+    state["activity_seen"] = len(lines)
+
+
+ALL = [shell_history, processes, network, filesystem, browser, activity]
 
 
 def collect(state: dict) -> Iterator[Event]:
