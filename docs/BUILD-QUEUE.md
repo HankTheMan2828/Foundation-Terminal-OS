@@ -183,8 +183,9 @@ Build order (operator said fine to split across chats):
    start with a design doc for the operator to approve.
 4. As each lands: update recreation.toml defaults + `_DEFAULT` in
    `hub/foundationhub/screens/recreation.py`, drop the replaced packages from
-   packages.txt (none left to drop — the vendored rogue3.6/rogue5.4 stay;
-   they ARE the real thing per feedback #2).
+   packages.txt (none left to drop — the vendored rogue3.6 stays; it IS the real
+   thing per feedback #2. The graphical 1985 Rogue is a downloadable slot, not
+   shipped — `docs/ROGUE-DOWNLOADABLE.md`).
 
 ## §6 CAPABILITY TIERS: LEAN BASE + POCKET8086 (operator-directed)
 

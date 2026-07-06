@@ -23,9 +23,12 @@ package repo — never fetched on the target machine (see `PKGBUILD`).
   - **Esc-to-exit** (`prepare()`, operator direction 2026-07-05): Esc in the
     top-level command loop invokes the game's own `quit(0)` "Really quit?"
     confirm gate — the kiosk otherwise had no way out of the game. It reuses
-    the existing quit path; no new game logic. The 1981 build stays
-    **monochrome** on purpose, so it reads as visually distinct from the
-    colored 1985 build (which got a color layer in the same pass).
+    the existing quit path; no new game logic.
+
+This is the only Rogue shipped on the OS. The "nicer" 1985 build the operator
+wanted with a graphical DOS/PC look is a **downloadable** slot, not vendored —
+no redistributable upstream exists to bake into the ISO (see
+[`docs/ROGUE-DOWNLOADABLE.md`](../../docs/ROGUE-DOWNLOADABLE.md)).
 - **Score file / shared board:** the upstream Makefile hardcodes a
   cwd-relative `rogue36.scr` with no setgid support (unlike 5.4's autotools
   build). `PKGBUILD` recompiles `SCOREFILE` to the absolute path

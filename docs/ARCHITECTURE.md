@@ -318,13 +318,15 @@ media player and the games — are separate in-house programs the Hub still
 reaches with `launch()`, now pointed at our own binaries
 (`foundation-arcade`, `foundation-chess`, `foundationmedia`) plus, per the
 operator's download-don't-build call on Rogue specifically (feedback #2,
-`docs/FEEDBACK-FIRST-HARDWARE-RUN.md`), two real upstream binaries built from
-vendored source at ISO build time (`rogue`, `rogue54` — see `vendor/`)
-instead of borrowed ones. `ranger`, `btop`, and `nvim` are retired; `nethack`
-was removed entirely (operator direction 2026-07-05 — the two Rogue vintages
-cover the genre); `crawl` was never actually listed there. The in-house "Foundation Depths" modernized
+`docs/FEEDBACK-FIRST-HARDWARE-RUN.md`), the 1981 Berkeley original built from
+vendored source at ISO build time (`rogue` — see `vendor/rogue3.6`) instead of
+a borrowed one. `ranger`, `btop`, and `nvim` are retired; `nethack` was removed
+entirely (operator direction 2026-07-05); `crawl` was never actually listed
+there. The "nicer" graphical 1985 Rogue is a **downloadable** slot, not shipped
+— no redistributable upstream (operator direction 2026-07-06;
+`docs/ROGUE-DOWNLOADABLE.md`). The in-house "Foundation Depths" modernized
 roguelike (`docs/ROGUELIKE-DESIGN.md`) remains a possible future project,
-separate from the classic Rogue vintages above. The Hub is glue + chrome + the
+separate from the classic Rogue above. The Hub is glue + chrome + the
 Frank-facing surfaces; it does not reimplement the in-house programs — those
 live in their own top-level `games/`/`media/` packages and import
 `foundationhub.theme`/`ui` for chrome rather than the other way around.

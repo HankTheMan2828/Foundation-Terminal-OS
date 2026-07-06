@@ -23,9 +23,8 @@ prepare() {
   # command loop now invokes the game's own "Really quit?" confirm gate
   # (quit(0), which scores + exits only on "y"); on "n" it falls through to the
   # original Escape resets. Applied at build time so vendor/rogue3.6/src stays
-  # verbatim (see ../NOTICE.md). No color here on purpose: the 1981 original
-  # stays monochrome, which keeps it visually distinct from the colored 1985
-  # build (docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2).
+  # verbatim (see ../NOTICE.md). This 1981 original is the only Rogue shipped;
+  # the graphical 1985 build is a downloadable slot (docs/ROGUE-DOWNLOADABLE.md).
   sed -i '/when ESCAPE/a\                    quit(0);' command.c
 }
 

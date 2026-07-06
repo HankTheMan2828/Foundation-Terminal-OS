@@ -26,15 +26,9 @@ QUIT = object()
 
 @dataclass
 class Launch:
-    """Suspend the TUI and run an external program (ranger, btop, a game…).
-
-    full_color: run with the kernel VT's stock palette instead of the phosphor
-    one (a global VT setting — see theme.vt_stock_palette). For programs whose
-    own colors matter, like Rogue 5.4's DOS-style rendition; restored after.
-    """
+    """Suspend the TUI and run an external program (ranger, btop, a game…)."""
     argv: list[str]
     missing_hint: str = labels.NOT_INSTALLED
-    full_color: bool = False
 
 
 class Screen:
@@ -113,15 +107,11 @@ class App:
             return
         curses.def_prog_mode()
         curses.endwin()
-        if launch.full_color:
-            theme.vt_stock_palette()
         try:
             subprocess.run(launch.argv)
         except Exception as exc:  # keep the Hub alive no matter what a child does
             self.status_message = f"launch failed: {exc}"
         finally:
-            if launch.full_color:
-                theme.vt_theme_palette()
             curses.reset_prog_mode()
             self.stdscr.refresh()
 

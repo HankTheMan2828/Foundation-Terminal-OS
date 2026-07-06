@@ -4,7 +4,7 @@
 # What it does:
 #   1. stages image/profile/ into a work dir
 #   2. embeds THIS repo at /opt/terminal-os inside the live image
-#   3. builds vendor/rogue3.6 + vendor/rogue5.4 into Arch packages and
+#   3. builds vendor/rogue3.6 into an Arch package and
 #      downloads every other package the installed system needs, into an
 #      offline repo inside the image (so flashing + installing needs no network)
 #   4. runs mkarchiso -> image/out/foundation-terminalos-<date>-x86_64.iso
@@ -119,10 +119,11 @@ else
 
   # ── 3a. vendored packages (Rogue, feedback #2 -- download upstream, don't
   # build in-house; docs/FEEDBACK-FIRST-HARDWARE-RUN.md item 2). Source lives
-  # in vendor/rogue3.6 + vendor/rogue5.4 (see NOTICE.md in each); built here,
-  # at ISO build time, from the vendored source -- never fetched on the
-  # target. makepkg refuses to run as root, so a throwaway build user does it.
-  VENDORED=(rogue3.6 rogue5.4)
+  # in vendor/rogue3.6 (see NOTICE.md); built here, at ISO build time, from the
+  # vendored source -- never fetched on the target. makepkg refuses to run as
+  # root, so a throwaway build user does it. (The 1985 build isn't vendored --
+  # it's a downloadable slot now; docs/ROGUE-DOWNLOADABLE.md.)
+  VENDORED=(rogue3.6)
   c_info "building vendored packages: ${VENDORED[*]}"
   # pacman-contrib: paccache, used below to prune superseded package versions
   pacman -S --needed --noconfirm base-devel ncurses pacman-contrib

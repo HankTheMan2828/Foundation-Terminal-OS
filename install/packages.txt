@@ -71,13 +71,16 @@ python-requests
 # minimax AI. gnuchess was never listed here; recreation.toml now execs
 # foundation-chess.
 # nethack REMOVED entirely (operator direction 2026-07-05). It was the interim
-# roguelike stand-in; the two vendored Rogues below cover the genre now.
+# roguelike stand-in; the vendored Rogue below covers the genre now.
 # Rogue -- feedback #2 (docs/FEEDBACK-FIRST-HARDWARE-RUN.md): operator wanted
-# the real thing, download don't build. Both classic vintages, vendored
-# source (vendor/rogue3.6, vendor/rogue5.4) built into Arch packages at ISO
-# build time (image/build-iso.sh) and baked into the offline repo -- never
-# fetched on the target. rogue3.6 -> binary "rogue" (1981, OG); rogue5.4 ->
-# binary "rogue54" (1985, the authors' finished version). BSD-3, see NOTICE.md
-# in each vendor dir.
+# the real thing, download don't build. The 1981 Berkeley original is vendored
+# (vendor/rogue3.6) and built into an Arch package at ISO build time
+# (image/build-iso.sh), baked into the offline repo -- never fetched on the
+# target. rogue3.6 -> binary "rogue". BSD-3, see NOTICE.md in the vendor dir.
+#
+# The 1985 "nicer" build is NOT shipped: the graphical DOS/PC look the operator
+# wants (docs/ROGUE-DOWNLOADABLE.md) has no redistributable upstream, so it's
+# left as a downloadable `rogue54` slot in recreation.toml (operator will wire
+# it up). The old BSD rogue5.4 vendoring was dropped 2026-07-06 -- monochrome it
+# only duplicated the 1981 game.
 rogue3.6
-rogue5.4

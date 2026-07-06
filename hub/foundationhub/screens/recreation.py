@@ -70,35 +70,40 @@ class HighScoresScreen(Screen):
 
 
 # Fallback list used off-device or before the config is installed.
-# Each entry: (display name, argv, full_color) — full_color launches with the
-# VT's stock palette so the game's own colors render true (app.Launch).
+# Each entry is a dict: {"name", "exec", optional "hint", optional "missing_hint"}.
+# `hint` shows to the right of the row; `missing_hint` is what the Hub prints if
+# the binary isn't installed (app.Launch) — used to mark the downloadable slot.
 _DEFAULT = {
-    # Rogue (both classic vintages) — feedback #2: real upstream binaries,
-    # not an in-house build (see vendor/rogue5.4, vendor/rogue3.6). The 1985
-    # build carries its DOS-style color rendition, hence full_color; the 1981
-    # original stays monochrome (authentic, and keeps the two vintages
-    # visually distinct). NetHack was removed entirely (operator direction
-    # 2026-07-05). Dungeon Crawl was dropped earlier — `crawl` was never in
-    # install/packages.txt, so it was a dead entry on target.
+    # Roguelikes. The 1981 original (rogue3.6 -> "rogue") is the one vendored
+    # game we ship (feedback #2: a real upstream binary, not an in-house build).
+    #
+    # "Rogue (1985)" is a DOWNLOADABLE skeleton, not shipped. The graphical
+    # DOS/PC look the operator wants (docs/ROGUE-DOWNLOADABLE.md) has no
+    # redistributable upstream we can bake into the ISO, so the slot is left as
+    # a not-installed placeholder for a user-provided `rogue54` build. NetHack
+    # was removed entirely (operator direction 2026-07-05). Dungeon Crawl was
+    # dropped earlier — `crawl` was never in install/packages.txt.
     "roguelikes": [
-        ("Rogue (1985)", ["rogue54"], True),
-        ("Rogue (1981, OG)", ["rogue"], False),
+        {"name": "Rogue (1981, OG)", "exec": ["rogue"]},
+        {"name": "Rogue (1985)", "exec": ["rogue54"],
+         "hint": "downloadable — not installed",
+         "missing_hint": "[ downloadable graphical build — see docs/ROGUE-DOWNLOADABLE.md ]"},
     ],
     # One in-house program, five games (BUILD-QUEUE §5 item 1) — retires
     # nsnake, vitetris, ninvaders, 2048, and nudoku. Listed individually
     # (not nested under a "Foundation Arcade" sub-menu) per operator
     # request 2026-07-03 — each exec picks the game directly.
     "arcade": [
-        ("Snake", ["foundation-arcade", "snake"], False),
-        ("Falling Blocks", ["foundation-arcade", "blocks"], False),
-        ("2048", ["foundation-arcade", "2048"], False),
-        ("Sudoku", ["foundation-arcade", "sudoku"], False),
-        ("Invaders", ["foundation-arcade", "invaders"], False),
+        {"name": "Snake", "exec": ["foundation-arcade", "snake"]},
+        {"name": "Falling Blocks", "exec": ["foundation-arcade", "blocks"]},
+        {"name": "2048", "exec": ["foundation-arcade", "2048"]},
+        {"name": "Sudoku", "exec": ["foundation-arcade", "sudoku"]},
+        {"name": "Invaders", "exec": ["foundation-arcade", "invaders"]},
     ],
     # Chess is in-house now (BUILD-QUEUE §5 item 2) — foundation-chess retires
     # gnuchess (vs. a built-in minimax AI).
     "puzzle / strategy": [
-        ("Chess", ["foundation-chess"], False),
+        {"name": "Chess", "exec": ["foundation-chess"]},
     ],
 }
 
@@ -110,14 +115,18 @@ def _load():
             data = tomllib.loads(cfg.read_text())
             out = {}
             for bucket, games in data.get("bucket", {}).items():
-                out[bucket] = [(g["name"], g["exec"],
-                                bool(g.get("full_color", False)))
-                               for g in games]
+                out[bucket] = [dict(g) for g in games]
             if out:
                 return out
         except Exception:
             pass
     return _DEFAULT
+
+
+def _launch_action(game: dict):
+    argv = game["exec"]
+    missing = game.get("missing_hint", labels.NOT_INSTALLED)
+    return lambda a: Launch(argv, missing_hint=missing)
 
 
 def screen():
@@ -129,8 +138,8 @@ def screen():
         items.append(MenuItem("", enabled=False))  # gap above the section title
         items.append(MenuItem(f"— {bucket.upper()} —", enabled=False))
         items.append(MenuItem("", enabled=False))  # gap below the section title
-        for name, argv, full_color in games:
-            items.append(MenuItem(
-                name,
-                (lambda av, fc: (lambda a: Launch(av, full_color=fc)))(argv, full_color)))
+        for game in games:
+            items.append(MenuItem(game["name"],
+                                  (lambda g: _launch_action(g))(game),
+                                  hint=game.get("hint", "")))
     return MenuScreen(labels.RECREATION, items)

@@ -1,25 +1,25 @@
 # Recreation game list (spec §5). Data, not code — add/remove a game by editing
 # this file; the Recreation screen reads it live. The list follows the in-house
-# mandate (docs/OPEN-QUESTIONS.md §2/§10): in-house games plus the vendored Rogues.
+# mandate (docs/OPEN-QUESTIONS.md §2/§10): in-house games plus the vendored Rogue.
 #
 # Each bucket maps to a genre; each game has a display name and an argv `exec`.
-# Optional `full_color = true` runs the game with the kernel VT's stock palette
-# (instead of the phosphor theme) so its own colors render true; the phosphor
-# palette is restored when the game exits.
+# Optional `hint` shows to the right of the row; optional `missing_hint` is what
+# the Hub prints if the binary isn't installed (used for the downloadable slot).
 
-# Rogue (both classic vintages) -- feedback #2: real upstream binaries, not
-# an in-house build (see vendor/rogue5.4, vendor/rogue3.6, install/packages.txt).
-# 1985 (5.4.5) listed first/default per the operator's own ordering
-# (docs/ROGUELIKE-DESIGN.md §2.2: "the nicer one to play"), and it carries the
-# DOS-style color rendition (vendor/rogue5.4/color/), hence full_color; 1981
-# (3.6, the OG) below it, monochrome -- authentic, and it keeps the two
-# vintages visually distinct. NetHack was removed entirely (operator direction
-# 2026-07-05). Dungeon Crawl was dropped earlier: `crawl` was never in
-# install/packages.txt, so the entry was a dead menu item on a real install.
+# Rogue. The 1981 original (rogue3.6 -> "rogue") is the one vendored game we
+# ship (feedback #2: a real upstream binary, not an in-house build; see
+# vendor/rogue3.6, install/packages.txt).
+#
+# "Rogue (1985)" is a DOWNLOADABLE skeleton, NOT shipped: the graphical DOS/PC
+# look the operator wants (docs/ROGUE-DOWNLOADABLE.md) has no redistributable
+# upstream to bake into the ISO, so the slot is a not-installed placeholder for
+# a user-provided `rogue54` build. NetHack was removed entirely (operator
+# direction 2026-07-05). Dungeon Crawl was dropped earlier: `crawl` was never
+# in install/packages.txt, so it was a dead menu item on a real install.
 [bucket.roguelikes]
 games = [
-  { name = "Rogue (1985)",      exec = ["rogue54"], full_color = true },
   { name = "Rogue (1981, OG)",  exec = ["rogue"] },
+  { name = "Rogue (1985)",      exec = ["rogue54"], hint = "downloadable — not installed", missing_hint = "[ downloadable graphical build — see docs/ROGUE-DOWNLOADABLE.md ]" },
 ]
 
 [bucket.arcade]
