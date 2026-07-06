@@ -26,3 +26,29 @@ warning_threshold = 4
 # session (docs/OPEN-QUESTIONS.md §3); this file previously still said 3600
 # and, since it overrides the code default, was silently undoing that call.
 hard_ceiling_seconds = 1800
+
+# ── Content sensor backend (docs/FRANK-AI-GUARDIAN.md) ───────────────────────
+# The lightweight LOCAL model direction (2026-07-06): IBM Granite Guardian, run
+# through a local OpenAI-compatible server on 127.0.0.1, so Frank's AI layer
+# needs no cloud key and no network. It stays a SENSOR — its readings become
+# findings only through the Overseer's deterministic Rulebook.
+#   backend = "offline"  no model; rules/stats still run (current shipped default
+#                         until Guardian weights are installed on the target).
+#   backend = "local"    Granite Guardian on base_url (the intended default).
+#   backend = "cloud"    legacy Mistral sifter (needs a key).
+[sift]
+backend = "offline"
+base_url = "http://127.0.0.1:8080/v1/chat/completions"
+model = "granite-guardian"
+confidence_threshold = 0.6
+
+# ── Negotiable lockouts (docs/FRANK-AI-GUARDIAN.md §4) ───────────────────────
+# A SESSION lock can be talked down early; a MACHINE/serious lock never can.
+# Every value here is a HARD bound the LLM advisor cannot cross — Frank always
+# keeps the last word.
+[negotiation]
+enabled = true
+max_attempts = 3
+min_served_fraction = 0.3          # must serve 30% before negotiating
+floor_fraction = 0.5               # even fully negotiated, 50% is always served
+per_attempt_reduction_fraction = 0.25

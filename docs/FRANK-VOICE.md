@@ -61,9 +61,9 @@ These map to enforcement events. `{n}` = warnings remaining before action.
 - "STOP. This activity has been flagged for immediate evaluation. A temporary
   penalty may follow."
 
-  (Reserved for a future negotiation stage, available only for certain system
-  lockouts, not yet built: "You are being frank with me. I am being frank with
-  you.")
+  (The negotiation stage is now BUILT — see "Negotiation" below and
+  docs/FRANK-AI-GUARDIAN.md §4. Its opening line is the reserved one: "You are
+  being frank with me. I am being frank with you.")
 
 ### Lockout entered — minor (this console only)
 - "Access to this console is suspended due to {n} minor infractions, your
@@ -88,6 +88,26 @@ These map to enforcement events. `{n}` = warnings remaining before action.
 ### Lockout expiring
 - "The restriction has expired. Your activity continues to be evaluated, as
   always, for the safety of the Foundation."
+
+### Care — harm to the USER (self-harm etc.), OBSERVE only (docs/FRANK-AI-GUARDIAN.md §2)
+Frank steps OUT of the procedural register here on purpose: this is never
+punitive (no warn, no lockout), only supportive. The rules/model decide *when*;
+these are the words (`mistral.care_line()`).
+- "I have noticed something concerning. If you are struggling, you are not alone
+  — please consider reaching out to someone you trust."
+- "This is not being held against you. Your wellbeing matters more than any
+  record. Please take care of yourself."
+
+### Negotiation — talking Frank down from a NEGOTIABLE session lockout (§4)
+Frank decides; the user may only ask. Keyed by outcome (`mistral.negotiation_line`).
+- opening / denied: "You are being frank with me. I am being frank with you.
+  This is not sufficient. The restriction stands."
+- accepted (shortened, not lifted): "Noted. The restriction has been shortened.
+  It has not been lifted. Your conduct continues to be evaluated."
+- released: "Acknowledged. The restriction is lifted. This exchange is on
+  record, as always, for the safety of the Foundation."
+- ineligible (machine/serious, or too soon): "This restriction is not open to
+  negotiation at this time."
 
 ## Prompt scaffolding (for Mistral, when AI phrasing is opted in)
 

@@ -241,3 +241,31 @@ class FrankClient:
         if not parts:
             return None
         return {"type": parts[0], "raw": resp}
+
+    def negotiate(self, plea: str) -> dict | None:
+        """Submit a plea against a NEGOTIABLE lockout. Frank decides and can
+        refuse — this is a request, not a command (docs/FRANK-AI-GUARDIAN.md §4).
+
+        Returns {"outcome", "removed", "remaining", "msg"} or None if Frank is
+        unreachable. The wire protocol is line-oriented, so the plea is collapsed
+        to a single line before sending.
+        """
+        plea = " ".join((plea or "").split())
+        resp = self._send(f"negotiate {plea}")
+        if not resp or not resp.startswith("negotiate"):
+            return None
+        out = {"outcome": "", "removed": 0, "remaining": 0, "msg": ""}
+        body = resp[len("negotiate"):].strip()
+        # Everything before " msg=" is space-separated key=val; msg is free text.
+        head, _, msg = body.partition("msg=")
+        out["msg"] = msg.strip()
+        for tok in head.split():
+            key, _, val = tok.partition("=")
+            if key == "outcome":
+                out["outcome"] = val
+            elif key in ("removed", "remaining"):
+                try:
+                    out[key] = int(val)
+                except ValueError:
+                    pass
+        return out

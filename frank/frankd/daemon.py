@@ -35,12 +35,12 @@ from __future__ import annotations
 import time
 from collections import deque
 
-from . import ai, config, lockstate, sources
+from . import ai, config, lockstate, negotiation, sources
 from .enforcement import DEFAULT_USER, ReactionKind, UserEnforcers
 from .eventlog import EventLog
 from .incidents import IncidentStore
 from .ledger import TimestampLedger
-from .mistral import build as build_commentator
+from .mistral import build as build_commentator, care_line
 from .model import Severity, Source
 from .overseer import Overseer, Rulebook, VerdictLog
 from .rules import RuleEngine
@@ -61,6 +61,14 @@ _LOGGABLE_SOURCES = {Source.SHELL, Source.BROWSER, Source.ACTIVITY}
 _SNAPSHOT_WINDOW_SECONDS = 300
 _SNAPSHOT_MAX_LINES = 20
 
+# Realtime rules whose OBSERVE findings are harm-TO-USER concerns: Frank speaks a
+# SUPPORTIVE line rather than doing nothing, but never warns/locks (that would be
+# the wrong response). docs/FRANK-AI-GUARDIAN.md §2/§3.
+_CARE_RULE_PREFIXES = ("legal-self-harm",)
+# Don't repeat a care message more often than this — a self-harm phrase saved
+# repeatedly shouldn't spam the user.
+_CARE_COOLDOWN_SECONDS = 300
+
 
 class Frank:
     def __init__(self, cfg: config.FrankConfig | None = None, *, poll_interval: float = 2.0):
@@ -73,7 +81,10 @@ class Frank:
         self.incidents = IncidentStore(self.cfg.incidents_path)
         self.eventlog = EventLog(self.cfg.events_path)
         self.triage_store = TriageStore(self.cfg.triage_path)
-        self.triage = TriageEngine(self.incidents, self.eventlog, self.triage_store)
+        # The content sensor's backend is now operator-selectable (default local
+        # Granite Guardian once weights are installed — docs/FRANK-AI-GUARDIAN.md).
+        self.triage = TriageEngine(self.incidents, self.eventlog, self.triage_store,
+                                   sifter=ai.build_sifter(self.cfg.sift))
         self.overseer = Overseer(
             self.triage_store, self.incidents, self.eventlog,
             VerdictLog(self.cfg.verdicts_path),
@@ -82,6 +93,11 @@ class Frank:
             # key); the deterministic rulebook is the brain either way.
             brain=(ai.build_overseer_brain() if self.cfg.overseer.ai_enabled else None))
         self.commentator = build_commentator(self.cfg.commentary.ai_enabled)
+        # Rule-bounded negotiable-lockout engine. Its advisor uses the same
+        # Guardian backend when local sifting is on; else a deterministic
+        # offline heuristic. The LLM only advises — the config bounds decide.
+        self.negotiator = negotiation.NegotiationEngine(
+            self.cfg.negotiation, negotiation.build_advisor(self.cfg.sift))
         # Per-user violation counts, persistent — published (counts only) in
         # the public login summary so the roster can show them (docs/USERS.md).
         self.violations = ViolationCounts(self.cfg.violations_path)
@@ -93,6 +109,7 @@ class Frank:
         now = time.time()
         self._last_triage_run = now
         self._last_overseer_checkin = now
+        self._last_care = float("-inf")   # allow the very first care message
         # Re-arm a still-valid MACHINE lock from a previous boot (spec §6).
         lockstate.restore_machine_lock(self.enforcers, self.lock_state_path, now)
 
@@ -112,8 +129,12 @@ class Frank:
         sessions = self.enforcers.session_lockouts(now)
         if sessions:
             user, lk = next(iter(sessions.items()))
+            # negotiable flag tells the Hub whether to offer the plea screen.
+            negotiable = 1 if (lk.negotiable
+                               and lk.attempts_used < self.cfg.negotiation.max_attempts
+                               and self.cfg.negotiation.enabled) else 0
             return (f"lockout scope=session user={user} "
-                    f"remaining={int(lk.end - now)}")
+                    f"remaining={int(lk.end - now)} negotiable={negotiable}")
         return "NONE"
 
     # ── processing ────────────────────────────────────────────────────────────
@@ -130,6 +151,14 @@ class Frank:
             # A user-facing reaction is a violation on the person's permanent
             # count (silent observations aren't). Count only, never detail.
             self.violations.increment(finding.event.user or DEFAULT_USER)
+        # Harm-to-user care path: an OBSERVE finding from a care rule gets a
+        # SUPPORTIVE spoken line (baked words; the rule decides WHEN), never a
+        # punitive reaction. Rate-limited so it can't spam.
+        if (reaction.kind is ReactionKind.OBSERVE
+                and any(finding.rule_id.startswith(p) for p in _CARE_RULE_PREFIXES)
+                and now - self._last_care >= _CARE_COOLDOWN_SECONDS):
+            self._pending.append(f"care msg={care_line()}")
+            self._last_care = now
         # Full detail always recorded, frank-only.
         self.incidents.record(finding, reaction.kind.value, commentary, now=now)
         # Immediate Overseer wake on SERIOUS (operator-confirmed scope this
@@ -140,6 +169,24 @@ class Frank:
                 and finding.event.source is not Source.OVERSEER):
             for extra in self.overseer.on_serious_finding(finding, now):
                 self._handle_finding(extra, now)
+
+    def negotiate(self, plea: str, now: float | None = None) -> str:
+        """Handle a `negotiate` plea from the Hub against the active user's
+        lockout. Frank decides (rule-bounded); the user cannot force release.
+        Attributes to the active-user file, never to anything on the wire."""
+        now = time.time() if now is None else now
+        user = sources.active_user() or DEFAULT_USER
+        enforcer = self.enforcers.enforcer_for(user)
+        result = self.negotiator.negotiate(enforcer, plea, now)
+        # A negotiation is a logged action (§6) and may have changed the timer —
+        # republish the lock decision at once so the root enforcer/login reflect it.
+        self.ledger.record(now)
+        lockstate.write(self.lock_state_path, self.enforcers, now)
+        lockstate.write_public(self.cfg.login_locks_path, self.enforcers, now,
+                               violations=self.violations.counts)
+        return (f"negotiate outcome={result.outcome} "
+                f"removed={int(result.removed_seconds)} "
+                f"remaining={int(result.remaining_seconds)} msg={result.message}")
 
     def _queue_for_hub(self, reaction, commentary: str) -> None:
         # Warnings are DISPLAYED by the Hub. Lockouts are ENFORCED by the root
@@ -213,7 +260,10 @@ class Frank:
 
     def run(self) -> None:  # pragma: no cover - long-running loop
         from .ipc import IPCServer
-        server = IPCServer(self.cfg.ipc_socket, self.poll_message)  # read-only
+        # poll = read-only status; negotiate = a plea Frank decides on (still no
+        # authority to change Frank — docs/FRANK-AI-GUARDIAN.md §4).
+        server = IPCServer(self.cfg.ipc_socket, self.poll_message,
+                           on_negotiate=self.negotiate)
         server.start()
         try:
             while True:

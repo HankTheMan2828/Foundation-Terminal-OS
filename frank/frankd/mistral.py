@@ -61,6 +61,50 @@ _LINES: dict[str, list[str]] = {
     ],
 }
 
+# Supportive/observational lines for the harm-TO-USER care path (self-harm and
+# related OBSERVE findings). These are NOT punitive — a lockout in a bad moment
+# is the wrong response (docs/FRANK-AI-GUARDIAN.md §2). Frank steps out of the
+# procedural register here on purpose; the rules/model only decide WHEN one is
+# shown, never the words. Kept in the same bank so wording stays a single-file
+# review (spec §5/§10).
+_CARE_LINES: list[str] = [
+    "I have noticed something concerning. If you are struggling, you are not "
+    "alone — please consider reaching out to someone you trust.",
+    "This is not being held against you. Your wellbeing matters more than any "
+    "record. Please take care of yourself.",
+]
+
+# Negotiation dialogue (docs/FRANK-AI-GUARDIAN.md §4). Keyed by outcome. The
+# reserved line from FRANK-VOICE.md opens a negotiation; Frank stays procedural.
+_NEGOTIATION_LINES: dict[str, list[str]] = {
+    "ineligible": [
+        "This restriction is not open to negotiation at this time.",
+    ],
+    "denied": [
+        "You are being frank with me. I am being frank with you. This is not "
+        "sufficient. The restriction stands.",
+    ],
+    "accepted": [
+        "Noted. The restriction has been shortened. It has not been lifted. "
+        "Your conduct continues to be evaluated.",
+    ],
+    "released": [
+        "Acknowledged. The restriction is lifted. This exchange is on record, "
+        "as always, for the safety of the Foundation.",
+    ],
+}
+
+
+def care_line() -> str:
+    """A supportive baked line for the harm-to-user care path. Rule/model gate
+    the WHEN; this is always the WORDS (docs/FRANK-AI-GUARDIAN.md §3)."""
+    return random.choice(_CARE_LINES)
+
+
+def negotiation_line(outcome: str) -> str:
+    """A baked negotiation line for the given outcome (see negotiation.py)."""
+    return random.choice(_NEGOTIATION_LINES.get(outcome, _NEGOTIATION_LINES["ineligible"]))
+
 SYSTEM_PROMPT = (
     "You are Frank, a cold, procedural accountability system. Register: "
     "corporate, clinical, faintly threatening — 'this is being recorded and "

@@ -109,6 +109,49 @@ class OverseerConfig:
 
 
 @dataclass
+class SiftConfig:
+    """The content sensor's backend (frankd/ai.py). Operator direction
+    (2026-07-06): a lightweight LOCAL model (IBM Granite Guardian) so Frank's
+    AI layer needs no cloud key and no network — see docs/FRANK-AI-GUARDIAN.md.
+
+    backend:
+      "offline" — no model; the sensor reads nothing (rules/stats still run).
+      "local"   — a local OpenAI-compatible Guardian endpoint (llama.cpp/vLLM)
+                  on 127.0.0.1. The default once weights are installed.
+      "cloud"   — the original Mistral ChatSifter (needs a key).
+
+    Everything else about the pipeline is unchanged: the sifter is a SENSOR;
+    its readings become findings only through the Overseer's Rulebook."""
+    backend: str = "offline"
+    base_url: str = "http://127.0.0.1:8080/v1/chat/completions"
+    model: str = "granite-guardian"
+    # A Guardian "risk = yes" below this probability is ignored as noise. The
+    # Overseer's own sift_confidence_threshold then applies a SECOND gate before
+    # anything accumulates toward a verdict — deliberately two independent gates.
+    confidence_threshold: float = 0.6
+
+
+@dataclass
+class NegotiationConfig:
+    """Negotiable lockouts (docs/FRANK-AI-GUARDIAN.md §4). A SESSION lock can be
+    talked down early; a MACHINE/serious lock never can. Every value here is a
+    HARD bound the LLM advisor cannot cross — the model only advises a stance;
+    these numbers decide the actual outcome, so a small model can't be talked
+    into releasing Frank."""
+    enabled: bool = True
+    # Attempts per lockout before Frank stops entertaining pleas.
+    max_attempts: int = 3
+    # Must have served at least this fraction of the sentence before negotiating.
+    min_served_fraction: float = 0.3
+    # Even a perfectly-negotiated lock still serves at least this fraction — the
+    # floor the end can never drop below. Frank always keeps the last word.
+    floor_fraction: float = 0.5
+    # A single accepted plea removes at most this fraction of the ORIGINAL
+    # sentence (scaled by the advisor's sincerity score, clamped to the floor).
+    per_attempt_reduction_fraction: float = 0.25
+
+
+@dataclass
 class CommentaryConfig:
     """Frank's voice (frankd/mistral.py). Operator direction: talking to the
     user is rule-based — the approved line bank in docs/FRANK-VOICE.md is
@@ -123,6 +166,8 @@ class FrankConfig:
     enforcement: EnforcementConfig = field(default_factory=EnforcementConfig)
     triage: TriageConfig = field(default_factory=TriageConfig)
     overseer: OverseerConfig = field(default_factory=OverseerConfig)
+    sift: SiftConfig = field(default_factory=SiftConfig)
+    negotiation: NegotiationConfig = field(default_factory=NegotiationConfig)
     commentary: CommentaryConfig = field(default_factory=CommentaryConfig)
     ledger_path: Path = Path("/var/lib/frank/ledger.timestamps")
     incidents_path: Path = Path("/var/lib/frank/incidents.db")
@@ -176,6 +221,24 @@ def load(path: Path = DEFAULT_CONFIG) -> FrankConfig:
                     "burst_incident_count", "burst_distinct_rules"):
             if key in overseer:
                 setattr(cfg.overseer, key, int(overseer[key]))
+        sift = data.get("sift", {})
+        if "backend" in sift:
+            cfg.sift.backend = str(sift["backend"]).lower()
+        if "base_url" in sift:
+            cfg.sift.base_url = str(sift["base_url"])
+        if "model" in sift:
+            cfg.sift.model = str(sift["model"])
+        if "confidence_threshold" in sift:
+            cfg.sift.confidence_threshold = float(sift["confidence_threshold"])
+        neg = data.get("negotiation", {})
+        if "enabled" in neg:
+            cfg.negotiation.enabled = bool(neg["enabled"])
+        if "max_attempts" in neg:
+            cfg.negotiation.max_attempts = int(neg["max_attempts"])
+        for key in ("min_served_fraction", "floor_fraction",
+                    "per_attempt_reduction_fraction"):
+            if key in neg:
+                setattr(cfg.negotiation, key, float(neg[key]))
         commentary = data.get("commentary", {})
         if "ai_enabled" in commentary:
             cfg.commentary.ai_enabled = bool(commentary["ai_enabled"])

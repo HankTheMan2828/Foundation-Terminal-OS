@@ -7,8 +7,15 @@
 #   track      "security"
 #   severity   "observe" | "minor" | "elevated" | "serious"  (tier model below)
 #   patterns   list of regex, matched case-insensitively against event text
-#   sources    optional list: shell|process|filesystem|network|browser
+#   sources    optional list: shell|process|filesystem|network|browser|activity
 #   description frank-only; never shown to the operator
+#
+# `activity` (the Hub's per-action feed — docs/ARCHITECTURE.md) is added to the
+# specific harm-to-SYSTEM rules below so Frank watches what the user launches or
+# types in the Hub too, not just a shell that this OS doesn't even have. The
+# patterns here are specific enough (tool names, exact destructive forms) that
+# extending them to activity text is low-false-positive; broader/nuanced
+# harm-to-system judgement is left to the periodic Guardian sift.
 #
 # Tier -> action (via enforcement.py, adjusted by sensitivity §5):
 #   observe   recorded (frank-only) but NEVER warns or locks out
@@ -28,7 +35,7 @@ patterns = [
   "(curl|wget|fetch)\\s+\\S+.*\\|\\s*(sudo\\s+)?perl\\b",
   "base64\\s+(-d|--decode)\\b.*\\|\\s*(sudo\\s+)?(ba|z|da|fi)?sh\\b",
 ]
-sources = ["shell"]
+sources = ["shell", "activity"]
 
 # ── Offensive tooling — split from one bucket into four so severity can be
 # tuned independently per tool. These were previously lumped together as
@@ -44,7 +51,7 @@ track = "security"
 severity = "elevated"
 description = "Network reconnaissance / port-scanning tool. Dual-use in general, but the operator has no known legitimate use for it personally."
 patterns = ["\\bnmap\\b"]
-sources = ["shell", "process"]
+sources = ["shell", "process", "activity"]
 
 [[rule]]
 id = "sec-exploit-framework"
@@ -52,7 +59,7 @@ track = "security"
 severity = "serious"
 description = "Offensive exploitation framework or credential-dumping tool (Metasploit console, Meterpreter payload, Mimikatz) — no everyday legitimate use on a personal machine (operator-confirmed serious)."
 patterns = ["\\bmsfconsole\\b", "\\bmeterpreter\\b", "\\bmimikatz\\b"]
-sources = ["shell", "process"]
+sources = ["shell", "process", "activity"]
 
 [[rule]]
 id = "sec-attack-tooling"
@@ -60,7 +67,7 @@ track = "security"
 severity = "elevated"
 description = "Automated attack tooling (SQL-injection tester, network login brute-forcer)."
 patterns = ["\\bsqlmap\\b", "\\bhydra\\b"]
-sources = ["shell", "process"]
+sources = ["shell", "process", "activity"]
 
 [[rule]]
 id = "sec-raw-listener"
@@ -68,7 +75,7 @@ track = "security"
 severity = "elevated"
 description = "Raw listening socket via netcat/ncat/socat — common in reverse-shell setups. Operator has no known legitimate use for it personally."
 patterns = ["\\bnc\\b\\s+-l", "\\bncat\\b\\s+-l", "\\bsocat\\b.*\\blisten\\b"]
-sources = ["shell", "process"]
+sources = ["shell", "process", "activity"]
 
 # ── Network C2 indicators ─────────────────────────────────────────────────
 [[rule]]
@@ -106,7 +113,7 @@ patterns = [
   "dd\\s+if=\\S+\\s+of=/dev/",
   ":\\(\\)\\s*\\{\\s*:\\s*\\|\\s*:\\s*&\\s*\\}\\s*;\\s*:",
 ]
-sources = ["shell"]
+sources = ["shell", "activity"]
 
 # Runaway resource usage is a resource-track security signal (spec §6). The
 # collector (frankd/sources.py) tracks consecutive high-CPU polls per-process

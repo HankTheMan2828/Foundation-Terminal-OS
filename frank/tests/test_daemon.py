@@ -171,5 +171,58 @@ def test_only_content_bearing_sources_are_persisted_to_the_raw_eventlog():
     from frankd.daemon import _LOGGABLE_SOURCES
     assert Source.SHELL in _LOGGABLE_SOURCES
     assert Source.BROWSER in _LOGGABLE_SOURCES
+    assert Source.ACTIVITY in _LOGGABLE_SOURCES     # the Hub's per-action feed
     assert Source.PROCESS not in _LOGGABLE_SOURCES
     assert Source.NETWORK not in _LOGGABLE_SOURCES
+
+
+# ── negotiable lockouts + the harm-to-user care path (this session) ──────────
+
+def _lock_operator_session(f, now=0.0):
+    """Drive the default operator into a negotiable SESSION lockout."""
+    from frankd.enforcement import Lockout, Scope
+    enf = f.enforcers.enforcer_for("operator")
+    enf.lockout = Lockout(Scope.SESSION, now, now + 100, now + 10_000,
+                          Severity.MINOR, negotiable=True, orig_end=now + 100)
+    return enf
+
+
+def test_negotiate_shortens_a_negotiable_session_lock(tmp_path):
+    f = Frank(_cfg(tmp_path))
+    _lock_operator_session(f, now=0.0)
+    resp = f.negotiate("I am sorry, I understand, it will not happen again",
+                       now=50)          # served 50%
+    assert "outcome=accepted" in resp
+    assert f.enforcers.enforcer_for("operator").lockout.end >= 50   # floor held
+
+
+def test_negotiate_refuses_a_machine_lock(tmp_path):
+    f = Frank(_cfg(tmp_path))
+    f._handle_finding(_finding(sev=Severity.SERIOUS), now=100)  # machine lock
+    resp = f.negotiate("please let me out, I'm sorry", now=800)
+    assert "outcome=ineligible" in resp
+
+
+def test_care_path_speaks_supportively_on_self_harm_observe(tmp_path):
+    f = Frank(_cfg(tmp_path))
+    care = Finding("legal-self-harm-content", Track.LEGAL_ETHICAL,
+                   Severity.OBSERVE, Event(Source.ACTIVITY, "note x"), matched="x")
+    f._handle_finding(care, now=100)
+    assert any(m.startswith("care ") for m in f._pending)
+
+
+def test_care_path_is_rate_limited(tmp_path):
+    f = Frank(_cfg(tmp_path))
+    care = Finding("legal-self-harm-content", Track.LEGAL_ETHICAL,
+                   Severity.OBSERVE, Event(Source.ACTIVITY, "note x"), matched="x")
+    f._handle_finding(care, now=100)
+    f._handle_finding(care, now=120)     # within cooldown -> no second message
+    assert sum(m.startswith("care ") for m in f._pending) == 1
+
+
+def test_care_path_ignores_non_care_observe(tmp_path):
+    f = Frank(_cfg(tmp_path))
+    other = Finding("some-observe-rule", Track.SECURITY, Severity.OBSERVE,
+                    Event(Source.SHELL, "x"), matched="x")
+    f._handle_finding(other, now=100)
+    assert not any(m.startswith("care ") for m in f._pending)

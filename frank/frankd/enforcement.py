@@ -68,6 +68,15 @@ class Lockout:
     end: float
     ceiling_end: float          # start + hard ceiling; end may never exceed this
     trigger_severity: Severity
+    # Negotiation (docs/FRANK-AI-GUARDIAN.md §4). Only SESSION locks are
+    # negotiable; MACHINE/serious locks never are — Frank's side always wins.
+    negotiable: bool = False
+    orig_end: float = 0.0       # the end at entry, for computing served/floor fractions
+    attempts_used: int = 0      # pleas entertained so far (capped by config)
+
+    def __post_init__(self) -> None:
+        if not self.orig_end:
+            self.orig_end = self.end
 
     def active(self, now: float) -> bool:
         return now < self.end
@@ -144,7 +153,9 @@ class Enforcer:
         base = self.cfg.base_lockout_seconds[trigger]
         ceiling_end = now + self.cfg.hard_ceiling_seconds
         end = min(now + base, ceiling_end)      # never exceed the hard ceiling
-        self.lockout = Lockout(scope, now, end, ceiling_end, trigger)
+        # SESSION locks are negotiable; MACHINE/serious locks never are.
+        self.lockout = Lockout(scope, now, end, ceiling_end, trigger,
+                               negotiable=(scope is Scope.SESSION), orig_end=end)
         # Reset this track's working escalation; the lockout timer now governs.
         self.tracks[track] = _TrackState()
         return Reaction(ReactionKind.LOCKOUT, Delivery.BANNER, trigger, track,
@@ -159,6 +170,28 @@ class Enforcer:
         if finding.severity is Severity.SERIOUS:
             lk.scope = Scope.MACHINE
             lk.trigger_severity = Severity.SERIOUS
+
+    # ── negotiation (docs/FRANK-AI-GUARDIAN.md §4) ───────────────────────────
+    def reduce_lockout(self, now: float, seconds: float, floor_end: float) -> float:
+        """Shorten the active lockout by up to `seconds`, but NEVER below
+        `floor_end` (and never below `now`). Returns the seconds actually
+        removed. This is the only path negotiation has to the timer, so the
+        floor is enforced here, in the same place that owns the ceiling — the
+        model that advises a reduction cannot reach past this clamp. If the
+        reduction reaches the floor at/behind `now`, the lockout lifts."""
+        if not self.is_locked(now):
+            return 0.0
+        lk = self.lockout
+        target = max(floor_end, now, lk.end - max(0.0, seconds))
+        removed = max(0.0, lk.end - target)
+        lk.end = target
+        if lk.end <= now:
+            self.lockout = None
+        return removed
+
+    def note_negotiation_attempt(self, now: float) -> None:
+        if self.is_locked(now):
+            self.lockout.attempts_used += 1
 
     # ── override + reset ─────────────────────────────────────────────────────
     def request_override(self, now: float, verified: bool) -> bool:

@@ -182,6 +182,15 @@ EDITOR_SAVE_FAILED = "SAVE FAILED: {err}"
 EDITOR_RENAME_PROMPT = "RENAME TO"
 EDITOR_RENAME_EXISTS = "A RECORD BY THAT NAME EXISTS"
 
+# ── Frank negotiation (docs/FRANK-AI-GUARDIAN.md §4) ─────────────────────────
+NEGOTIATE_TITLE = "REVIEW"
+NEGOTIATE_SUBTITLE = "this restriction is open to negotiation"
+NEGOTIATE_INTRO = ("You are being frank with me. I am being frank with you. "
+                   "State your case. I decide.")
+NEGOTIATE_PROMPT = "Your statement"
+NEGOTIATE_DONE = "Esc to return · any key to speak again"
+NEGOTIATE_OFFLINE = "The overseer is not reachable."
+
 # ── Power ────────────────────────────────────────────────────────────────────
 POWER_LOGOUT = "LOG OUT"
 POWER_REBOOT = "REBOOT"
