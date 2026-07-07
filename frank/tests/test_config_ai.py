@@ -5,7 +5,7 @@ from frankd import config
 
 def test_defaults():
     cfg = config.FrankConfig()
-    assert cfg.sift.backend == "offline"          # no model until installed
+    assert cfg.sift.backend == "local"            # AI runs locally, installed w/ OS
     assert cfg.negotiation.enabled is True
     assert cfg.negotiation.floor_fraction == 0.5
 

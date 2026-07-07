@@ -1,7 +1,8 @@
 # Frank — Local Guardian AI + Negotiable Lockouts (design)
 
-Status: **designed + built this pass (2026-07-06)**, offline-safe with fakes;
-a real Granite Guardian endpoint is a `TODO(model)` drop-in. Read alongside
+Status: **designed + built this pass (2026-07-06)**, offline-safe. The AI runs
+LOCALLY, installed with the OS (`install/11-frank-ai.sh` + `frank-ai.service`);
+the one open choice is which Guardian GGUF to lay down. Read alongside
 [`ARCHITECTURE.md`](ARCHITECTURE.md) ("Three tiers, one enforcement path" and
 "AI integrations are separate trust domains") and [`FRANK-VOICE.md`](FRANK-VOICE.md).
 
@@ -101,17 +102,35 @@ The hard-ceiling / severity→duration / time-of-day→reset invariants are all
 untouched — negotiation only ever *shortens* a session lock toward its floor, and
 runs through the enforcer that owns those invariants.
 
+## Runs locally, installed with the OS (operator decision 2026-07-06)
+The AI runs on-device, period — no per-machine choice. `install/11-frank-ai.sh`
+installs the runtime (`llama.cpp`'s `llama-server`), lays down the Guardian GGUF
+under `/var/lib/frank/models/` (frank-only), and enables `frank-ai.service`,
+which serves an OpenAI-compatible endpoint on `127.0.0.1:8080` as user `frank`,
+bound to loopback and RAM-capped (`MemoryMax=6G`, leaving the OS its ≥2 GB). The
+shipped default is `[sift] backend = "local"`.
+
+**Model delivery + the ISO 2 GiB limit.** A quantized ~2–3 B Guardian GGUF is
+~1.5–2.5 GB — too big to bake into the ISO's offline repo without exceeding
+GitHub's 2 GiB release-asset limit (see the build-iso history). So the model is
+**fetched on install** by default (`FRANK_GUARDIAN_MODEL_URL` + optional
+`FRANK_GUARDIAN_MODEL_SHA256`), or **pre-staged** at `vendor/models/guardian.gguf`
+for an offline install. If neither is present the service's `ExecCondition`
+keeps it idle and Frank's sensor safely reads nothing — the rules keep running.
+*Open item:* pick the exact Guardian GGUF (size/quant) + its URL/checksum, and
+decide the offline-ISO delivery (separate asset vs. staged).
+
 ## What is real vs. stubbed
-- Sifter/negotiation **logic, gates, math, wiring, IPC, Hub client + screen**:
-  built + unit-tested, offline-safe.
-- The **Guardian weights + local server**: not shipped — `TODO(model)`; point
-  `[sift] base_url` at a llama.cpp/vLLM Guardian endpoint to activate.
+- Sifter/negotiation **logic, gates, math, wiring, IPC, Hub client + screen**,
+  **the runtime + service + install step**: built + unit-tested, offline-safe.
+- The specific **Guardian GGUF (which quant, URL, checksum)** is the one open
+  choice — `install/11-frank-ai.sh` takes it as config; nothing else is stubbed.
 - The **root VT locker** showing the negotiation prompt during an *enforced*
   machine lock stays `TODO(hardware)` (same status the locker's DRM takeover
   already had); session-scope negotiation works through the Hub today.
 
 ## Config surface (root-only, `/etc/frank/config.toml`)
-`[sift]` backend/base_url/model/threshold/categories · `[negotiation]`
+`[sift]` backend(=local)/base_url/model/confidence_threshold · `[negotiation]`
 enabled/max_attempts/min_served_fraction/floor_fraction/per_attempt_reduction_fraction.
 All root-only, loaded once at startup — the operator still has **no** tunable
 knob (spec §6).

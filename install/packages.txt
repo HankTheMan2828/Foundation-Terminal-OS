@@ -59,8 +59,15 @@ ffmpeg          # foundationmedia's optional decode engine (mp3/flac/ogg/…)
 # directly, stdlib only — view-only, no kill/renice.
 networkmanager  # nmtui network config
 
-# --- optional: AI features (spec §5, §6) need python-requests when a key is set ---
-python-requests
+# --- AI features (spec §5, §6) ---
+python-requests   # Frank/AI-Chat HTTP clients (also used to reach the LOCAL server)
+# Frank's LOCAL AI sensor runs on-device (operator decision 2026-07-06): IBM
+# Granite Guardian served by llama.cpp's `llama-server` on 127.0.0.1, installed
+# and enabled by install/11-frank-ai.sh (docs/FRANK-AI-GUARDIAN.md). The model
+# GGUF is NOT a package — it's laid down by that step (fetched on install, or
+# pre-staged for offline) since a ~1.5-2.5 GB weight would blow the ISO's 2 GiB
+# asset limit if baked into the offline repo.
+llama.cpp
 
 # --- Recreation defaults (spec §5; in-house mandate — see OPEN-QUESTIONS §2/§10) ---
 # nsnake/vitetris/ninvaders/2048/nudoku RETIRED (BUILD-QUEUE §5 item 1):

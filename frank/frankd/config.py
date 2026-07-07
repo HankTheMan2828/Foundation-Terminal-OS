@@ -121,8 +121,14 @@ class SiftConfig:
       "cloud"   — the original Mistral ChatSifter (needs a key).
 
     Everything else about the pipeline is unchanged: the sifter is a SENSOR;
-    its readings become findings only through the Overseer's Rulebook."""
-    backend: str = "offline"
+    its readings become findings only through the Overseer's Rulebook.
+
+    Operator decision (2026-07-06): the AI runs LOCALLY, period — installed with
+    the OS (install/11-frank-ai.sh + frank-ai.service), no per-machine choice.
+    So the default is "local". If the local server isn't up (off-device dev, or
+    before install), the backend safely reads nothing (no crash), and the rules
+    keep running — same posture as offline."""
+    backend: str = "local"
     base_url: str = "http://127.0.0.1:8080/v1/chat/completions"
     model: str = "granite-guardian"
     # A Guardian "risk = yes" below this probability is ignored as noise. The

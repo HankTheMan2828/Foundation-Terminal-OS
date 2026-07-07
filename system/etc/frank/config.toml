@@ -28,16 +28,17 @@ warning_threshold = 4
 hard_ceiling_seconds = 1800
 
 # ── Content sensor backend (docs/FRANK-AI-GUARDIAN.md) ───────────────────────
-# The lightweight LOCAL model direction (2026-07-06): IBM Granite Guardian, run
-# through a local OpenAI-compatible server on 127.0.0.1, so Frank's AI layer
-# needs no cloud key and no network. It stays a SENSOR — its readings become
-# findings only through the Overseer's deterministic Rulebook.
-#   backend = "offline"  no model; rules/stats still run (current shipped default
-#                         until Guardian weights are installed on the target).
-#   backend = "local"    Granite Guardian on base_url (the intended default).
+# Operator decision (2026-07-06): the AI runs LOCALLY, period — IBM Granite
+# Guardian, installed WITH the OS (install/11-frank-ai.sh + frank-ai.service)
+# and served on 127.0.0.1, so Frank's AI layer needs no cloud key and no
+# network. It stays a SENSOR — readings become findings only through the
+# Overseer's deterministic Rulebook. If the local server isn't up yet the sensor
+# safely reads nothing and the rules keep running.
+#   backend = "local"    Granite Guardian on base_url (default, installed w/ OS).
+#   backend = "offline"  no model (rules/stats still run) — dev/fallback only.
 #   backend = "cloud"    legacy Mistral sifter (needs a key).
 [sift]
-backend = "offline"
+backend = "local"
 base_url = "http://127.0.0.1:8080/v1/chat/completions"
 model = "granite-guardian"
 confidence_threshold = 0.6

@@ -61,17 +61,19 @@ _LINES: dict[str, list[str]] = {
     ],
 }
 
-# Supportive/observational lines for the harm-TO-USER care path (self-harm and
-# related OBSERVE findings). These are NOT punitive — a lockout in a bad moment
-# is the wrong response (docs/FRANK-AI-GUARDIAN.md §2). Frank steps out of the
-# procedural register here on purpose; the rules/model only decide WHEN one is
-# shown, never the words. Kept in the same bank so wording stays a single-file
-# review (spec §5/§10).
+# Lines for the harm-TO-USER care path (self-harm and related OBSERVE findings).
+# NOT punitive — a lockout in a bad moment is the wrong response
+# (docs/FRANK-AI-GUARDIAN.md §2). Operator direction (2026-07-06): keep Frank IN
+# CHARACTER — cold and procedural — but caring underneath: point the user toward
+# someone close to them, or anyone who knows them even slightly. They just need
+# to talk to a person. The rules/model decide WHEN one is shown, never the words.
 _CARE_LINES: list[str] = [
-    "I have noticed something concerning. If you are struggling, you are not "
-    "alone — please consider reaching out to someone you trust.",
-    "This is not being held against you. Your wellbeing matters more than any "
-    "record. Please take care of yourself.",
+    "A pattern of concern has been recorded. It is not a violation and carries "
+    "no penalty. My recommendation: speak with someone close to you — or anyone "
+    "who knows you, even slightly. You should not process this alone.",
+    "This has been noted, not charged against you. I would advise you to reach "
+    "out to someone who knows you, however little. Talk to a person. That is the "
+    "correct course.",
 ]
 
 # Negotiation dialogue (docs/FRANK-AI-GUARDIAN.md §4). Keyed by outcome. The
