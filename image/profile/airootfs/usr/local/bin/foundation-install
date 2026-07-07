@@ -469,7 +469,7 @@ EOF
   # so this staged copy is the ONLY way the AI reaches them.
   c_step "Frank local AI (staged model, if present)"
   stage_frank_ai() {
-    local disk="/dev/$1" off=3221225472       # STAGE_OFFSET (3 GiB), matches the creator
+    local disk="/dev/$1" off=2147483648       # STAGE_OFFSET (2 GiB), matches the creators
     [[ -b "$disk" ]] || { c_info "live device not found — Frank runs rule-based (AI idle)"; return 0; }
     local hdr
     hdr="$(dd if="$disk" bs=4096 skip=$((off / 4096)) count=1 2>/dev/null | tr -d '\000')"

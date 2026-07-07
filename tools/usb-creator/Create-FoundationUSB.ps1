@@ -234,6 +234,14 @@ if ($confirm -cne 'ERASE') {
 # stick's free space during the write below. Best-effort: any problem just writes
 # the OS (Frank still runs rule-based, AI idle). Skip with -NoModel.
 $stageAI = $false
+# Raw-offset where the AI sidecar header is written (and where foundation-install
+# reads it back). MUST be defined before the size checks below — a use-before-def
+# left it $null, and `$IsoSize -ge $null` coerces to `-ge 0` (always true), so the
+# creator silently skipped AI staging on every run (2026-07-07). 2 GiB, not 3:
+# it sits just past a sub-2 GB ISO (our size target) and leaves room for the
+# ~1.2 GB AI on a 3.8 GB stick. Keep in sync with create-foundation-usb.sh and
+# foundation-install (off=…). Contract: the ISO must stay under 2 GiB.
+$STAGE_OFFSET = 2147483648   # 2 GiB
 $modelPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
 $serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
 if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
@@ -267,7 +275,7 @@ if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
     if (-not (Test-Path $modelPath)) {
       Bad 'AI model download failed - writing the OS only (AI can be added later).'
     } elseif ($IsoSize -ge $STAGE_OFFSET) {
-      Bad 'ISO is larger than the 3 GiB staging offset - writing the OS only.'
+      Bad 'ISO is larger than the 2 GiB staging offset - writing the OS only.'
     } else {
       $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
       if (Test-Path $serverPath) { $need += (Get-Item $serverPath).Length + 512 }
@@ -337,7 +345,8 @@ public static class RawDisk {
 # bytes at a fixed offset in the stick's free space PAST the ISO, and the Linux
 # installer reads them straight off the raw device. Contract shared with
 # create-foundation-usb.sh and foundation-install (docs/FRANK-LOCAL-AI.md).
-$STAGE_OFFSET = 3221225472   # 3 GiB — past any current ISO, within any 8 GB+ stick
+# ($STAGE_OFFSET is defined up in section 2b — it has to exist before the size
+# checks there. 2 GiB; see the note at its definition.)
 
 # Stream a file to the raw disk handle, zero-padding the final chunk up to a
 # 512-byte sector (raw disk writes must be whole sectors). The header records

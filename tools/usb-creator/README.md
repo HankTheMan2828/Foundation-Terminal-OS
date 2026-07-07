@@ -1,6 +1,6 @@
 # tools/usb-creator — make the install USB from any normal PC
 
-This is the "program you download": it turns a blank USB stick (8 GB+) into
+This is the "program you download": it turns a blank USB stick (4 GB+) into
 the bootable Foundation TerminalOS installer. You run it on any ordinary
 computer — Windows, macOS, or Linux — and then boot the *target* machine
 from the stick. Neither machine needs Arch, Linux knowledge, or anything
@@ -49,7 +49,8 @@ BitNet b1.58 2B4T, ~1.2 GB. That's too big to bake into the ISO (it would blow
 GitHub's 2 GiB release-asset limit), and the target mini PCs have **no network**,
 so the model must ride on the stick. The creator downloads the model + the AI
 server binary and writes them, as a **raw-offset sidecar**, into the stick's free
-space *past the ISO* (a fixed 3 GiB offset). The OS installer reads them straight
+space *past the ISO* (a fixed 2 GiB offset — just past a sub-2 GB ISO, so the AI
+plus a 2 GiB image fits a 3.8 GB stick). The OS installer reads them straight
 off the raw device — so a fully-offline install already has a working AI, with no
 building on the target.
 

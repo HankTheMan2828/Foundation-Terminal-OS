@@ -136,7 +136,8 @@ sidecar**:
   workflow_dispatch, built on ubuntu (older glibc → runs on the Arch target).
 - **The USB creator writes a raw sidecar.** On the online host, it downloads the
   model (HF) + the binary (release) and writes, at a fixed offset (`STAGE_OFFSET`
-  = 3 GiB, in the stick's free space **past the ISO**), a block: a header
+  = 2 GiB — just past a sub-2 GB ISO so the AI still fits a 3.8 GB stick; in the
+  stick's free space **past the ISO**), a block: a header
   (`FOUNDATIONAI2` magic + `model_offset`/`model_size`/`server_offset`/
   `server_size`) then the model then the binary. **No partition, no filesystem** —
   nothing for Windows to refuse. Same contract in `Create-FoundationUSB.ps1`

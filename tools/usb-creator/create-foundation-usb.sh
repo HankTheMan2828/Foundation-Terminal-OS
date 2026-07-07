@@ -149,7 +149,11 @@ fi
 # skip with FOUNDATION_NO_MODEL=1. Contract shared with Create-FoundationUSB.ps1
 # + foundation-install (docs/FRANK-LOCAL-AI.md).
 MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf}"
-STAGE_OFFSET=3221225472    # 3 GiB — past any current ISO, within any 8 GB+ stick
+STAGE_OFFSET=2147483648    # 2 GiB — just past a sub-2 GB ISO (our size target),
+                           # leaves room for the ~1.2 GB AI on a 3.8 GB stick.
+                           # Was 3 GiB (assumed 8 GB+ sticks). MUST match
+                           # Create-FoundationUSB.ps1 + foundation-install's off=.
+                           # Contract: the ISO must stay under 2 GiB.
 STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
 stage_ai() {
   [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]] && { c_info "FOUNDATION_NO_MODEL=1 — not staging the AI."; return 0; }
@@ -167,7 +171,7 @@ stage_ai() {
   local msize ssize=0
   msize=$(stat -c %s "$model" 2>/dev/null || stat -f %z "$model")
   [[ -f "$server" ]] && ssize=$(stat -c %s "$server" 2>/dev/null || stat -f %z "$server")
-  if (( ISO_BYTES >= STAGE_OFFSET )); then c_warn "ISO exceeds the 3 GiB staging offset — writing OS only."; return 0; fi
+  if (( ISO_BYTES >= STAGE_OFFSET )); then c_warn "ISO exceeds the 2 GiB staging offset — writing OS only."; return 0; fi
   local model_off=$(( STAGE_OFFSET + STAGE_HDR ))
   # round the model up to a 1 MiB boundary so the server write stays aligned
   local srv_off=$(( model_off + ( (msize + STAGE_HDR - 1) / STAGE_HDR ) * STAGE_HDR ))

@@ -14,7 +14,7 @@ from bare metal and needs no network. The whole flow is:
 1. **Get the installer ISO.** Download it from the repo's GitHub Releases
    page (CI builds it automatically — see `.github/workflows/build-iso.yml`),
    or build it yourself with [`image/build-iso.sh`](../image/README.md).
-2. **Write it to a USB stick (8 GB+) on any ordinary PC.** Use the USB
+2. **Write it to a USB stick (4 GB+) on any ordinary PC.** Use the USB
    creator in [`tools/usb-creator/`](../tools/usb-creator/README.md) —
    on Windows that's double-clicking `FoundationUSBCreator.cmd`; on
    macOS/Linux it's `sudo ./create-foundation-usb.sh`. (Rufus, Etcher,
