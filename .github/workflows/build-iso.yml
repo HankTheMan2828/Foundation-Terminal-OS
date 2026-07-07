@@ -100,15 +100,17 @@ jobs:
           curl -s -H "Authorization: Bearer $GH_TOKEN" "$api/releases?per_page=100" |
             jq -r --arg tag "${{ github.ref_name }}" \
               '.[] | select(.tag_name == $tag) | .assets[] |
-               select(.name | test("^(foundation-terminalos-.*\\.iso|terminalos-payload-.*|SHA256SUMS|foundation-ai-llama-server-.*)$")) |
+               select(.name | test("^(foundation-terminalos-.*\\.iso|terminalos-payload-.*|SHA256SUMS)$")) |
                "\(.id) \(.name)"' |
             while read -r aid aname; do
               echo "pruning stale asset: $aname ($aid)"
               curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
                 "$api/releases/assets/$aid"
             done
-        # (regex also matches the AI server binary the `bitnet` job attaches, so
-        # a re-cut tag doesn't leave last build's llama-server on the release)
+        # ONLY prunes this job's own assets. The AI server binary is owned by
+        # build-ai-binary.yml (which runs concurrently on the same tag and
+        # replaces its own same-named asset) — pruning it here would race-delete
+        # the binary that job just uploaded, which is exactly what bit v0.0.6.
 
       - name: Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/TerminalOS-v')
