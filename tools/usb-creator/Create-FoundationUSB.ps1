@@ -423,10 +423,35 @@ if (-not $skipModel) {
     }
     Say 'Creating a data partition on the stick for the model...'
     # Refresh Windows' view of the just-written disk, then carve the free space.
+    # NOTE: the Storage cmdlets (New-Partition/Format-Volume) are unreliable right
+    # after a raw hybrid-ISO write — the new partition often has no associated
+    # MSFT_Volume yet, so Format-Volume fails with a CIM "no matching MSFT_Volume"
+    # error. diskpart is far more tolerant, so we create + format + assign with it.
     Update-Disk -Number $n -ErrorAction SilentlyContinue
-    $part = New-Partition -DiskNumber $n -UseMaximumSize -AssignDriveLetter
-    Format-Volume -Partition $part -FileSystem FAT32 -NewFileSystemLabel 'FOUNDATIONAI' -Confirm:$false | Out-Null
-    $dl = "$($part.DriveLetter):"
+    Start-Sleep -Seconds 2
+    $dpScript = @"
+select disk $n
+create partition primary
+format fs=fat32 quick label=FOUNDATIONAI
+assign
+exit
+"@
+    $dpOut = ($dpScript | diskpart) 2>&1
+    Start-Sleep -Seconds 3
+    Update-Disk -Number $n -ErrorAction SilentlyContinue
+    # Find the drive letter diskpart assigned to the FOUNDATIONAI volume.
+    $vol = $null
+    foreach ($try in 1..10) {
+      $vol = Get-Volume -ErrorAction SilentlyContinue |
+             Where-Object { $_.FileSystemLabel -eq 'FOUNDATIONAI' -and $_.DriveLetter } |
+             Select-Object -First 1
+      if ($vol) { break }
+      Start-Sleep -Seconds 1
+    }
+    if (-not $vol) {
+      throw "created the data partition but Windows did not surface a FOUNDATIONAI volume (diskpart: $(($dpOut | Out-String).Trim()))"
+    }
+    $dl = "$($vol.DriveLetter):"
     Copy-Item $modelPath (Join-Path $dl 'model.gguf') -Force
     # The bitnet.cpp llama-server binary rides along too, so the target needs no
     # building at all. Prefer one dropped next to this script; else fetch the
