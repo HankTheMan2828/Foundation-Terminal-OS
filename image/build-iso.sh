@@ -183,6 +183,13 @@ else
   fi
   repo-add --quiet "$PKGDIR/foundation.db.tar.gz" "$PKGDIR"/*.pkg.tar.*
   c_ok "offline repo: $(ls "$PKGDIR"/*.pkg.tar.* | wc -l) packages ($(du -sh "$PKGDIR" | cut -f1))"
+
+  # Per-package size manifest — the total alone hid which packages dominate the
+  # repo (2026-07-07 size work). Print the 25 biggest so cuts are measured, not
+  # guessed, and stash the full list beside the build for diffing across builds.
+  c_info "largest packages in the offline repo:"
+  du -h "$PKGDIR"/*.pkg.tar.* | sort -rh | tee "$OUT/pkg-sizes.txt" | head -25
+  c_info "full manifest: $OUT/pkg-sizes.txt"
 fi
 
 # ── 4. mkarchiso ─────────────────────────────────────────────────────────────

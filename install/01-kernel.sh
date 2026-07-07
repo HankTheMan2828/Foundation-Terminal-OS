@@ -10,7 +10,11 @@ source "$(dirname "$0")/common.sh"
 require_root
 c_step "Kernel: linux-lts (pinned)"
 
-pac linux-lts linux-lts-headers
+# linux-lts-headers intentionally NOT installed (2026-07-07, size): this fixed
+# appliance compiles no out-of-tree/DKMS modules at runtime, so headers (~200 MB
+# installed) bought nothing. A hardware profile that must build a module installs
+# them itself. Keep this in sync with install/packages.txt.
+pac linux-lts
 
 # Pin linux-lts against accidental replacement by the mainline `linux` package.
 if is_arch && ! grep -q '^IgnorePkg.*linux\b' /etc/pacman.conf; then

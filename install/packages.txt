@@ -5,8 +5,31 @@
 
 # --- kernel (spec §1: linux-lts, pinned) ---
 linux-lts
-linux-lts-headers
-linux-firmware
+# linux-lts-headers DROPPED (2026-07-07, size): headers only exist to COMPILE
+# out-of-tree/DKMS kernel modules ON the device. This is a fixed appliance that
+# builds no modules at runtime, so the ~200 MB installed cost bought nothing. A
+# hardware profile that genuinely needs to build a module re-adds it in its own
+# packages.txt. Runtime kernel + modules ship with linux-lts itself.
+#
+# Firmware: Arch split monolithic `linux-firmware` into vendor sub-packages
+# (20250613). We list the DEFAULT set explicitly and OMIT linux-firmware-nvidia
+# (2026-07-07, size, ~99 MB): it's discrete-NVIDIA GPU firmware, which the
+# Intel/AMD mini-PC targets never load — they render on integrated Intel/AMD
+# graphics. All consumer GPU/Wi-Fi/Ethernet/audio firmware is kept, so a browser
+# and graphical games still work. The datacenter blobs (qcom/marvell/mellanox/
+# nfp/liquidio/qlogic) were OPTIONAL deps of the metapackage — never shipped
+# anyway, nothing to drop. A target that actually has an NVIDIA dGPU re-adds
+# linux-firmware-nvidia via a hardware profile's packages.txt.
+linux-firmware-amdgpu
+linux-firmware-atheros
+linux-firmware-broadcom
+linux-firmware-cirrus
+linux-firmware-intel
+linux-firmware-mediatek
+linux-firmware-other
+linux-firmware-radeon
+linux-firmware-realtek
+linux-firmware-whence   # license/attribution manifest — tiny, keep for compliance
 # CPU microcode is vendor-specific; a profile targeting an AMD device should
 # add amd-ucode instead. intel-ucode is a reasonable generic default since
 # it's a no-op on non-Intel CPUs, but move it to a profile if that stops being true.
@@ -65,13 +88,17 @@ python-requests   # Frank/AI-Chat HTTP clients (also used to reach the LOCAL ser
 # b1.58 2B4T served by bitnet.cpp's `llama-server` on 127.0.0.1, installed and
 # enabled by install/11-frank-ai.sh (docs/FRANK-LOCAL-AI.md). BitNet needs
 # bitnet.cpp (a llama.cpp fork with the 1-bit kernels), which is NOT packaged for
-# Arch — install/11 builds it (or uses a prebuilt binary staged by the USB
-# creator / image build). The build deps below are for that; the ~1.2 GB model
-# GGUF is laid down by that step too (fetched on install, or pre-staged for
+# Arch. install/11 PREFERS a prebuilt llama-server binary staged beside the ISO
+# by the USB creator / image build — the path every offline target actually
+# takes. The ~1.2 GB model GGUF is laid down the same way (pre-staged for
 # offline), never baked into the ISO repo (it would blow the 2 GiB asset limit).
-git
-cmake
-clang
+#
+# git/cmake/clang DROPPED from the offline repo (2026-07-07, size, ~380 MB): the
+# toolchain is ONLY used by install/11's online build-from-source fallback, and
+# an offline install (FOUNDATION_OFFLINE=1) returns before that path — it uses
+# the staged binary. So the compiler set was pure dead weight in the offline
+# repo. If anyone ever builds bitnet.cpp on-device (online box), install/11
+# `pac`-installs git/cmake/clang on demand at that moment instead.
 
 # --- Recreation defaults (spec §5; in-house mandate — see OPEN-QUESTIONS §2/§10) ---
 # nsnake/vitetris/ninvaders/2048/nudoku RETIRED (BUILD-QUEUE §5 item 1):

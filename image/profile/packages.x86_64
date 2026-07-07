@@ -6,7 +6,20 @@
 # boot/kernel — linux-lts to match the OS itself (spec §1)
 base
 linux-lts
-linux-firmware
+# Firmware: same default-set-minus-nvidia as install/packages.txt (2026-07-07,
+# size). The live installer boots on the same Intel/AMD mini-PC target, so it
+# needs the same consumer firmware and not the ~99 MB discrete-NVIDIA blob. Keep
+# this list in sync with install/packages.txt's firmware block.
+linux-firmware-amdgpu
+linux-firmware-atheros
+linux-firmware-broadcom
+linux-firmware-cirrus
+linux-firmware-intel
+linux-firmware-mediatek
+linux-firmware-other
+linux-firmware-radeon
+linux-firmware-realtek
+linux-firmware-whence
 mkinitcpio
 mkinitcpio-archiso
 
