@@ -460,6 +460,37 @@ EOF
     c_warn "root account LOCKED — rescue requires booting this installer USB"
   fi
 
+  # ── 6b. stage Frank's local AI from the USB, if the creator put it there ─────
+  # The USB creator can drop BitNet's GGUF (+ a prebuilt bitnet.cpp llama-server)
+  # onto a data partition labelled FOUNDATIONAI beside the ISO
+  # (docs/FRANK-LOCAL-AI.md), so a fully-offline install gets the model without
+  # bloating the ISO past GitHub's 2 GiB asset cap. Copy them into the embedded
+  # repo's vendor/ staging dirs, exactly where install/11-frank-ai.sh looks first.
+  c_step "Frank local AI (staged model, if present)"
+  stage_frank_ai() {
+    local dev; dev="$(blkid -L FOUNDATIONAI 2>/dev/null || true)"
+    if [[ -z "$dev" ]]; then
+      c_info "no FOUNDATIONAI data partition on the USB — Frank's model will build/fetch on the first online run"
+      return 0
+    fi
+    local m=/tmp/foundation-ai-stage
+    mkdir -p "$m"
+    if ! mount -o ro "$dev" "$m" 2>/dev/null; then
+      c_warn "found $dev but could not mount it — skipping AI staging"; return 0
+    fi
+    if [[ -f "$m/model.gguf" ]]; then
+      mkdir -p "$REPO/vendor/models"
+      cp "$m/model.gguf" "$REPO/vendor/models/model.gguf" && c_ok "staged AI model from USB"
+    fi
+    if [[ -f "$m/llama-server" ]]; then
+      mkdir -p "$REPO/vendor/bitnet"
+      cp "$m/llama-server" "$REPO/vendor/bitnet/llama-server" \
+        && chmod +x "$REPO/vendor/bitnet/llama-server" && c_ok "staged AI server from USB"
+    fi
+    umount "$m" 2>/dev/null || true
+  }
+  stage_frank_ai
+
   # ── 7. Foundation TerminalOS itself ─────────────────────────────────────────
   c_step "Installing Foundation TerminalOS (install/run-all.sh in the target)"
   mkdir -p "$MNT$REPO"

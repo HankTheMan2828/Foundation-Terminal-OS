@@ -139,6 +139,45 @@ else
   sync
 fi
 
+# ── 4. stage Frank's local AI onto the stick (best-effort) ───────────────────
+# Frank runs a small LOCAL model (BitNet b1.58 2B4T, ~1.2 GB) too big to bake
+# into the ISO (GitHub's 2 GiB asset cap). Drop it onto a FAT32 data partition
+# labelled FOUNDATIONAI in the stick's free space; the OS installer stages it
+# from there, so a fully-offline install already has the model. BEST-EFFORT: any
+# failure is non-fatal — the target builds/fetches the model online instead.
+# Skip with FOUNDATION_NO_MODEL=1.
+MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf}"
+stage_ai() {
+  [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]] && { c_info "FOUNDATION_NO_MODEL=1 — not staging the AI model."; return 0; }
+  if [[ "$OS" != "Linux" ]]; then
+    c_warn "AI-model staging is Linux-only for now; on macOS the target fetches the model online."
+    return 0
+  fi
+  command -v parted >/dev/null 2>&1 && command -v mkfs.fat >/dev/null 2>&1 || {
+    c_warn "parted/mkfs.fat not found — skipping AI staging (target fetches online)."; return 0; }
+  local model="$SCRIPT_DIR/model.gguf"
+  if [[ ! -f "$model" ]]; then
+    c_info "downloading the AI model (~1.2 GB) to stage on the stick…"
+    curl -fL --progress-bar -o "$model" "$MODEL_URL" || {
+      c_warn "model download failed — skipping AI staging (target fetches online)."; return 0; }
+  fi
+  local start_mib=$(( ISO_BYTES / 1024 / 1024 + 8 ))   # just past the ISO image
+  c_info "creating a data partition (FOUNDATIONAI) on the stick…"
+  parted -s "$DEV" -- mkpart primary fat32 "${start_mib}MiB" 100% 2>/dev/null || {
+    c_warn "could not add a data partition — skipping AI staging (target fetches online)."; return 0; }
+  sync; partprobe "$DEV" 2>/dev/null || true; sleep 2
+  local part; part="$(lsblk -lnpo NAME "$DEV" | tail -1)"
+  mkfs.fat -F32 -n FOUNDATIONAI "$part" >/dev/null 2>&1 || {
+    c_warn "could not format the data partition — skipping AI staging."; return 0; }
+  local mnt; mnt="$(mktemp -d)"
+  mount "$part" "$mnt" 2>/dev/null || { c_warn "could not mount the data partition — skipping AI staging."; rmdir "$mnt"; return 0; }
+  cp "$model" "$mnt/model.gguf" && c_ok "staged the AI model onto the stick (partition FOUNDATIONAI)."
+  # A prebuilt bitnet.cpp llama-server dropped next to this script rides along too.
+  [[ -f "$SCRIPT_DIR/llama-server" ]] && cp "$SCRIPT_DIR/llama-server" "$mnt/llama-server"
+  sync; umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true
+}
+stage_ai
+
 echo
 c_ok "All done — it is now safe to unplug the stick."
 echo

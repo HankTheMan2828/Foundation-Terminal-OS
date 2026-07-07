@@ -42,6 +42,25 @@ network needed), and reboots into the Home Hub.
 > ⚠️ The installed system is a locked-down, no-shell kiosk with an always-on
 > overseer (Frank). Don't point it at a machine you still need as a normal PC.
 
+## Frank's local AI model (staged onto the stick)
+
+The installed OS runs a small **local** AI model for its overseer (Frank) —
+BitNet b1.58 2B4T, ~1.2 GB. That's too big to bake into the ISO (it would blow
+GitHub's 2 GiB release-asset limit), so after writing the ISO the creator
+**downloads the model and drops it onto a small data partition (`FOUNDATIONAI`)
+in the stick's free space**. The OS installer stages it from there, so a
+fully-offline install already has the model — no network needed on the target.
+
+- This is **best-effort**: if the download or the extra partition can't be
+  created, the stick still boots and installs fine; the target just builds or
+  fetches the model on its first online run instead.
+- Skip it (write only the ISO, smaller/faster): pass `-NoModel` on Windows
+  (`... -File .\Create-FoundationUSB.ps1 -NoModel`) or set `FOUNDATION_NO_MODEL=1`
+  on Linux/macOS. macOS staging isn't wired yet — those installs fetch online.
+- A prebuilt `bitnet.cpp` `llama-server` binary dropped next to the creator
+  script (named `llama-server`) is staged too, so even the inference server
+  doesn't need building on the target. Otherwise the target builds it online.
+
 ## Alternatives
 
 Any ISO flasher works on the same ISO: Rufus, balenaEtcher, Ventoy, or plain

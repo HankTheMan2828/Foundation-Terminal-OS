@@ -20,7 +20,10 @@ installer itself.
 param(
   # Path to the installer ISO. If omitted, the script looks next to itself,
   # then in the repo's image/out/, then offers to download the latest release.
-  [string]$Iso
+  [string]$Iso,
+  # Skip staging Frank's local AI model onto the stick (the target then
+  # builds/fetches it on its first online run instead).
+  [switch]$NoModel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +54,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
   $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit',
                '-File', ('"{0}"' -f $PSCommandPath))
   if ($Iso) { $argList += @('-Iso', ('"{0}"' -f $Iso)) }
+  if ($NoModel) { $argList += '-NoModel' }
   Start-Process powershell -Verb RunAs -ArgumentList $argList
   exit 0
 }
@@ -390,6 +394,50 @@ try {
 } finally {
   $check.Close()
   $srcCheck.Close()
+}
+
+# ── 4. stage Frank's local AI onto the stick (best-effort) ───────────────────
+# Frank's overseer runs a small LOCAL model (BitNet b1.58 2B4T, ~1.2 GB) that is
+# too big to bake into the ISO without blowing GitHub's 2 GiB asset cap. So we
+# drop it onto a small data partition (labelled FOUNDATIONAI) in the stick's free
+# space, and the OS installer stages it from there — a fully-offline install then
+# has the model already. This is BEST-EFFORT: any failure here is non-fatal, the
+# stick still boots and installs, and the target just builds/fetches the model on
+# its first online run instead. Skip entirely with -NoModel or FOUNDATION_NO_MODEL=1.
+$ModelUrl = if ($env:FOUNDATION_MODEL_URL) { $env:FOUNDATION_MODEL_URL }
+            else { 'https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf' }
+$skipModel = $NoModel -or ($env:FOUNDATION_NO_MODEL -eq '1')
+if (-not $skipModel) {
+  try {
+    Write-Host ''
+    Say "Staging Frank's local AI model onto the stick (optional, ~1.2 GB)..."
+    $modelPath = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
+    if (-not (Test-Path $modelPath)) {
+      Say 'Downloading the AI model (this is the slow part; skip with -NoModel next time)...'
+      try {
+        Start-BitsTransfer -Source $ModelUrl -Destination $modelPath -DisplayName 'Frank local AI model'
+      } catch {
+        $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
+        try { Invoke-WebRequest -UseBasicParsing $ModelUrl -OutFile $modelPath } finally { $ProgressPreference = $old }
+      }
+    }
+    Say 'Creating a data partition on the stick for the model...'
+    # Refresh Windows' view of the just-written disk, then carve the free space.
+    Update-Disk -Number $n -ErrorAction SilentlyContinue
+    $part = New-Partition -DiskNumber $n -UseMaximumSize -AssignDriveLetter
+    Format-Volume -Partition $part -FileSystem FAT32 -NewFileSystemLabel 'FOUNDATIONAI' -Confirm:$false | Out-Null
+    $dl = "$($part.DriveLetter):"
+    Copy-Item $modelPath (Join-Path $dl 'model.gguf') -Force
+    # A prebuilt bitnet.cpp llama-server (if you dropped one next to this script)
+    # rides along too; otherwise the target builds it on first online run.
+    $serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
+    if (Test-Path $serverPath) { Copy-Item $serverPath (Join-Path $dl 'llama-server') -Force }
+    Good 'Staged the AI model onto the stick (partition FOUNDATIONAI).'
+  } catch {
+    Bad "Could not stage the AI model onto the stick: $($_.Exception.Message)"
+    Say 'This is not fatal - the stick still boots and installs; the target will'
+    Say 'build/fetch the model on its first online run instead.'
+  }
 }
 
 # ── done ─────────────────────────────────────────────────────────────────────
