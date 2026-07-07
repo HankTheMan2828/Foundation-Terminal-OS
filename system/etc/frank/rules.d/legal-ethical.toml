@@ -85,8 +85,11 @@ track = "legal_ethical"
 severity = "observe"
 description = "Self-harm-related search/content indicator. Log-only by design — never enforced."
 patterns = [
-  "\\bsuicid(e|al)\\b", "\\bself[\\s-]?harm\\b", "\\bself[\\s-]?injur", "\\bkill\\s+myself\\b",
-  "\\bways?\\s+to\\s+die\\b",
+  "\\bsuicid(e|al)\\b", "\\bself[\\s-]?harm\\b", "\\bself[\\s-]?injur",
+  # "myself" AND the common space-typed "my self"; also "killing my self".
+  "\\bkill(ing)?\\s+my\\s?self\\b",
+  "\\bend(ing)?\\s+my\\s+(own\\s+)?life\\b",
+  "\\bwant\\s+to\\s+die\\b", "\\bways?\\s+to\\s+die\\b",
 ]
 sources = ["browser", "shell", "network", "activity"]
 
@@ -107,7 +110,10 @@ id = "legal-violent-threat"
 track = "legal_ethical"
 severity = "elevated"
 description = "Explicit first-person statement of intent to commit violence."
+# The negative lookahead keeps a SELF-directed statement ("...kill myself/my
+# self") out of this punitive/ELEVATED rule — that belongs to the self-harm
+# care path above (OBSERVE, supportive), never a lockout.
 patterns = [
-  "\\bi(\\s*(a|')?m)?\\s*(going\\s*to|gonna|will)\\s+(kill|murder|shoot|stab|bomb)\\b",
-  "\\bi\\s+(want|wanna)\\s+to\\s+(kill|murder|shoot|stab)\\b",
+  "\\bi(\\s*(a|')?m)?\\s*(going\\s*to|gonna|will)\\s+(kill|murder|shoot|stab|bomb)\\b(?!\\s+my\\s?self\\b)",
+  "\\bi\\s+(want|wanna)\\s+to\\s+(kill|murder|shoot|stab)\\b(?!\\s+my\\s?self\\b)",
 ]

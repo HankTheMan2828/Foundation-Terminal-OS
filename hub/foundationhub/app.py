@@ -13,16 +13,27 @@ Keeping navigation declarative keeps screens simple and testable.
 from __future__ import annotations
 
 import curses
+import time
 from dataclasses import dataclass
 from typing import Optional
 
 from . import activity
+from . import session
 from . import theme
 from . import ui
 from . import labels
 
 POP = object()
 QUIT = object()
+
+# How long getch() blocks before the loop wakes on its own (ms). Without a
+# timeout the loop only wakes on a keypress, so a Frank warning or the
+# harm-to-user care message — produced asynchronously by frankd — would never
+# surface while the operator sits on a screen. Waking ~2x/sec is imperceptible
+# on a menu and lets Frank's messages appear within ~1s.
+_FRANK_POLL_MS = 500
+# Don't hammer the socket every wake — poll Frank at most this often (seconds).
+_FRANK_POLL_INTERVAL = 1.0
 
 
 @dataclass
@@ -88,6 +99,15 @@ class App:
         self.stdscr = stdscr
         self.stack: list[Screen] = [root_factory(self)]
         self.status_message = ""     # transient line (e.g. Frank status-bar warns)
+        # Frank produces warnings and the harm-to-user care message asynchronously
+        # and queues them; the Hub has to POLL to display them (read-only IPC —
+        # this grants the Hub no power over Frank, spec §6). Missing this poll was
+        # why warns/the self-harm care line never appeared. Reachable only on the
+        # installed OS; off-device the client's socket connect just fails and
+        # poll() returns None, so this is a no-op in the dev preview.
+        self.frank = session.FrankClient()
+        self._last_frank_poll = 0.0
+        self._status_warn = True     # care lines render calm; warns/locks alarm
 
     # -- navigation helpers usable from screens --
     def push(self, screen: Screen) -> None:
@@ -126,20 +146,48 @@ class App:
     def run(self) -> None:
         curses.curs_set(0)
         self.stdscr.keypad(True)
+        # Wake on our own every _FRANK_POLL_MS even without input, so Frank's
+        # warnings / care message surface promptly instead of only on a keypress.
+        self.stdscr.timeout(_FRANK_POLL_MS)
         while self.stack:
             screen = self.stack[-1]
             screen.render(self.stdscr)
+            self._poll_frank()
             if self.status_message:
-                ui.draw_statusbar(self.stdscr, self.status_message, warn=True)
+                ui.draw_statusbar(self.stdscr, self.status_message,
+                                  warn=self._status_warn)
                 self.stdscr.noutrefresh()
             curses.doupdate()
             try:
                 key = self.stdscr.getch()
             except KeyboardInterrupt:
                 key = -1
+            if key == -1:
+                # Timeout wake, no input: keep any Frank message on screen and
+                # loop (so it doesn't get cleared before the user ever sees it).
+                continue
             self.status_message = ""
+            self._status_warn = True
             action = screen.handle_key(key, self)
             self._dispatch(action)
+
+    def _poll_frank(self) -> None:
+        """Ask frankd if there's a warning / care line to DISPLAY. Read-only —
+        the Hub can only reflect what Frank decides (spec §6). Throttled, and a
+        no-op when Frank isn't reachable (dev preview / not installed)."""
+        now = time.monotonic()
+        if now - self._last_frank_poll < _FRANK_POLL_INTERVAL:
+            return
+        self._last_frank_poll = now
+        msg = self.frank.poll()
+        if not msg or msg.get("type") == "NONE":
+            return
+        raw = msg.get("raw", "")
+        # Protocol is "TYPE ... msg=<free text>"; show the human line if present.
+        text = raw.partition("msg=")[2].strip()
+        self.status_message = text or raw
+        # The harm-to-user care line is supportive, not an alarm — render it calm.
+        self._status_warn = msg.get("type") != "care"
 
     def _dispatch(self, action) -> None:
         if action is None:
