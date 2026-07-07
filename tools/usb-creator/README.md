@@ -46,22 +46,27 @@ network needed), and reboots into the Home Hub.
 
 The installed OS runs a small **local** AI model for its overseer (Frank) —
 BitNet b1.58 2B4T, ~1.2 GB. That's too big to bake into the ISO (it would blow
-GitHub's 2 GiB release-asset limit), so after writing the ISO the creator
-**downloads the model and drops it onto a small data partition (`FOUNDATIONAI`)
-in the stick's free space**. The OS installer stages it from there, so a
-fully-offline install already has the model — no network needed on the target.
+GitHub's 2 GiB release-asset limit), and the target mini PCs have **no network**,
+so the model must ride on the stick. The creator downloads the model + the AI
+server binary and writes them, as a **raw-offset sidecar**, into the stick's free
+space *past the ISO* (a fixed 3 GiB offset). The OS installer reads them straight
+off the raw device — so a fully-offline install already has a working AI, with no
+building on the target.
 
-- This is **best-effort**: if the download or the extra partition can't be
-  created, the stick still boots and installs fine; the target just builds or
-  fetches the model on its first online run instead.
+- **Why raw bytes, not a data partition?** Windows won't surface a volume for a
+  second partition on a removable stick that was raw-written with an ISO (both the
+  Storage cmdlets and diskpart fail). Writing raw bytes past the ISO sidesteps
+  that entirely and can't affect bootability.
+- This is **best-effort**: if the download can't complete or the stick is too
+  small, the stick still boots and installs fine — Frank just runs rule-based
+  (AI idle) until a model is provided.
 - Skip it (write only the ISO, smaller/faster): pass `-NoModel` on Windows
   (`... -File .\Create-FoundationUSB.ps1 -NoModel`) or set `FOUNDATION_NO_MODEL=1`
-  on Linux/macOS. macOS staging isn't wired yet — those installs fetch online.
-- The inference server binary is staged too, so the target needs **no building
-  at all** — a fully-offline install gets a working AI. The creator fetches the
-  prebuilt `bitnet.cpp` `llama-server` (built by CI, attached to the release as
-  `foundation-ai-llama-server-x86_64`) automatically; dropping your own
-  `llama-server` next to the creator script overrides it.
+  on Linux/macOS.
+- The server binary rides along too (the prebuilt `bitnet.cpp` `llama-server`,
+  built by CI and attached to the release as `foundation-ai-llama-server-x86_64`),
+  so the target needs **no building at all**. Dropping your own `llama-server`
+  next to the creator script overrides the download.
 
 ## Alternatives
 

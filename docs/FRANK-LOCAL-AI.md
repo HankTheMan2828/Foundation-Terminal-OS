@@ -121,32 +121,35 @@ or uses a prebuilt binary staged next to the ISO) — lays down the model GGUF u
 serves the OpenAI endpoint on `127.0.0.1:8080` as user `frank`, bound to loopback
 and RAM-capped (`MemoryMax=6G`). The shipped default is `[sift] backend = "local"`.
 
-**Model + binary delivery, and the ISO 2 GiB limit.** The BitNet GGUF is ~1.2 GB —
-too big to bake into the ISO's offline repo without exceeding GitHub's 2 GiB
-release-asset limit. So both the `llama-server` binary and the model are either
-**built/fetched on install** (`FRANK_MODEL_URL` defaults to the HF weight;
-`FRANK_MODEL_SHA256` optional; the binary builds from `FRANK_BITNET_REPO`), or
-**pre-staged for an offline install** at `vendor/bitnet/llama-server` and
-`vendor/models/model.gguf`. **The USB creator stages both onto the stick beside
-the ISO** (operator idea, 2026-07-06 — see below): it downloads them while it
-downloads the ISO and drops them where the live installer finds them, so a
-fully-offline install still gets the model without bloating the ISO. If neither
-staged nor fetchable, the service's `ExecCondition`s keep it idle and Frank's
-sensor safely reads nothing — the rules keep running.
+## Model + server delivery — the offline story (raw-offset staging)
+The installed mini PCs have **no network** (until ~v0.1.0), so the model + server
+binary can't be fetched on the target — they must ride on the USB stick. But the
+GGUF is ~1.2 GB, too big to bake into the ISO (GitHub's 2 GiB asset cap), and
+**Windows won't surface a volume for a 2nd partition on a removable ISO stick**
+(both the Storage cmdlets and diskpart fail). So delivery uses a **raw-offset
+sidecar**:
 
-## Model + server delivery (the offline story)
-- **CI builds the server binary.** `.github/workflows/build-iso.yml`'s `bitnet`
-  job builds `bitnet.cpp`'s `llama-server` (BitNet 2B4T, i2_s) on a tag and
-  attaches it to the release as `foundation-ai-llama-server-x86_64`. Built on
-  ubuntu (older glibc) so it also runs on the Arch target.
-- **The USB creator stages both** the binary and the model onto a `FOUNDATIONAI`
-  data partition beside the ISO (it fetches the binary from the release, the
-  model from HF), and `foundation-install` copies them into the embedded repo's
-  `vendor/` dirs — so a **fully-offline install has a working AI, no on-target
-  building**. `install/11-frank-ai.sh` reads those staged paths first.
-- **Fallback:** if the binary/model aren't staged and the box is online,
-  `install/11` builds bitnet.cpp + fetches the model itself; if neither, the
-  service stays idle and the sensor safely no-ops while the rules keep running.
+- **CI builds the server binary.** `.github/workflows/build-ai-binary.yml` builds
+  `bitnet.cpp`'s `llama-server` (BitNet 2B4T, i2_s) — needs **clang** + a const
+  patch to `ggml-bitnet-mad.cpp` — and attaches it to the release as
+  `foundation-ai-llama-server-x86_64`. Independent, re-runnable via
+  workflow_dispatch, built on ubuntu (older glibc → runs on the Arch target).
+- **The USB creator writes a raw sidecar.** On the online host, it downloads the
+  model (HF) + the binary (release) and writes, at a fixed offset (`STAGE_OFFSET`
+  = 3 GiB, in the stick's free space **past the ISO**), a block: a header
+  (`FOUNDATIONAI2` magic + `model_offset`/`model_size`/`server_offset`/
+  `server_size`) then the model then the binary. **No partition, no filesystem** —
+  nothing for Windows to refuse. Same contract in `Create-FoundationUSB.ps1`
+  (raw FileStream) and `create-foundation-usb.sh` (dd).
+- **The installer reads it raw.** `foundation-install` `dd`s the header off the
+  live device (from `detect_live_disk`) at `STAGE_OFFSET`, and if the magic is
+  present, `dd`s the model + binary into the embedded repo's `vendor/models/` and
+  `vendor/bitnet/` — where `install/11-frank-ai.sh` looks first. So a
+  **fully-offline install gets a working AI with zero on-target building**.
+- **Fallback:** if nothing is staged (e.g. `-NoModel`), the service's
+  `ExecCondition`s keep it idle and the sensor safely no-ops — the rules keep
+  running. (The on-target build/fetch path in `install/11` exists but never fires
+  on a network-less mini PC.)
 
 ## What is real vs. stubbed
 - Sifter/negotiation **logic, gates, math, wiring, IPC, Hub client + screen**,
@@ -155,8 +158,10 @@ sensor safely reads nothing — the rules keep running.
 - The **bitnet.cpp build steps** (both the CI job and `install/11`'s on-target
   fallback) are best-effort — bitnet.cpp's build evolves; confirm on the first
   tag run and a real install.
-- The **creator-side partition writing** is untested on real hardware (guarded /
-  non-fatal); wants one real USB pass.
+- The **raw-offset staging** (creator raw-write + installer raw-read) round-trips
+  byte-exact in a local test; the real device write/read wants one hardware pass.
+  It replaced a partition-based approach that Windows blocks on removable ISO
+  sticks (both Storage cmdlets and diskpart fail to surface a 2nd-partition volume).
 - The **root VT locker** showing the negotiation prompt during an *enforced*
   machine lock stays `TODO(hardware)`; session-scope negotiation works through the
   Hub today.

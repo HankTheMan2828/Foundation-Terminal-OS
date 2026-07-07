@@ -228,6 +228,61 @@ if ($confirm -cne 'ERASE') {
   exit 0
 }
 
+# ── 2b. prepare Frank's local AI to stage (downloaded on THIS online PC) ──────
+# The installed mini PCs have no network, so the model + server binary must ride
+# on the stick. We fetch them here (this PC is online) and stage them into the
+# stick's free space during the write below. Best-effort: any problem just writes
+# the OS (Frank still runs rule-based, AI idle). Skip with -NoModel.
+$stageAI = $false
+$modelPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
+$serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
+if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
+  try {
+    $ModelUrl = if ($env:FOUNDATION_MODEL_URL) { $env:FOUNDATION_MODEL_URL }
+                else { 'https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf' }
+    if (-not (Test-Path $modelPath)) {
+      Say 'Downloading the AI model to stage (~1.2 GB; skip with -NoModel)...'
+      try { Start-BitsTransfer -Source $ModelUrl -Destination $modelPath -DisplayName 'Frank local AI model' }
+      catch {
+        $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
+        try { Invoke-WebRequest -UseBasicParsing $ModelUrl -OutFile $modelPath } finally { $ProgressPreference = $old }
+      }
+    }
+    if (-not (Test-Path $serverPath)) {
+      $srvUrl = $env:FOUNDATION_AI_SERVER_URL
+      if (-not $srvUrl) {
+        try {
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
+          $srvUrl = ($rels | ForEach-Object { $_.assets } |
+                     Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' } |
+                     Select-Object -First 1).browser_download_url
+        } catch { $srvUrl = $null }
+      }
+      if ($srvUrl) {
+        Say 'Downloading the AI server binary...'
+        try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $serverPath } catch {}
+      }
+    }
+    if (-not (Test-Path $modelPath)) {
+      Bad 'AI model download failed - writing the OS only (AI can be added later).'
+    } elseif ($IsoSize -ge $STAGE_OFFSET) {
+      Bad 'ISO is larger than the 3 GiB staging offset - writing the OS only.'
+    } else {
+      $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
+      if (Test-Path $serverPath) { $need += (Get-Item $serverPath).Length + 512 }
+      if ($target.Size -lt $need) {
+        Bad ("Stick too small to also stage the AI ({0:N1} GB) - writing the OS only." -f ($target.Size / 1GB))
+      } else {
+        $stageAI = $true
+        Good 'AI ready - it will be staged onto the stick after the OS is written.'
+      }
+    }
+  } catch {
+    Bad "Could not prepare the AI to stage: $($_.Exception.Message). Writing the OS only."
+  }
+}
+
 # ── 3. write the image ───────────────────────────────────────────────────────
 # Windows refuses raw writes to a disk while any volume on it counts as
 # mounted. The reliable sequence (same as Rufus/Win32DiskImager) is: lock and
@@ -273,6 +328,32 @@ public static class RawDisk {
   }
 }
 '@
+}
+
+# ── Frank local-AI staging (raw-offset sidecar) ──────────────────────────────
+# Windows won't surface a volume for a 2nd partition on a REMOVABLE stick that
+# was raw-written with a hybrid ISO (both the Storage cmdlets and diskpart fail),
+# so we do NOT partition. Instead we write [4 KB header][model][server] as raw
+# bytes at a fixed offset in the stick's free space PAST the ISO, and the Linux
+# installer reads them straight off the raw device. Contract shared with
+# create-foundation-usb.sh and foundation-install (docs/FRANK-LOCAL-AI.md).
+$STAGE_OFFSET = 3221225472   # 3 GiB — past any current ISO, within any 8 GB+ stick
+
+# Stream a file to the raw disk handle, zero-padding the final chunk up to a
+# 512-byte sector (raw disk writes must be whole sectors). The header records
+# exact byte sizes, so the padding is invisible to the reader.
+function Write-RawFileSectorPadded($dst, $path) {
+  $f = [IO.File]::OpenRead($path)
+  try {
+    $buf = New-Object byte[] (4MB)
+    while (($r = $f.Read($buf, 0, $buf.Length)) -gt 0) {
+      if ($r % 512 -ne 0) {
+        $pad = 512 * [math]::Ceiling($r / 512.0)
+        [Array]::Clear($buf, $r, $pad - $r); $r = $pad
+      }
+      $dst.Write($buf, 0, $r)
+    }
+  } finally { $f.Close() }
 }
 
 $n = $target.Number
@@ -357,6 +438,27 @@ try {
   Say 'Data written. Finalizing the stick - do NOT unplug it yet...'
   $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
   $dst.Write($firstChunk, 0, $firstLen)
+  if ($stageAI) {
+    # Raw-offset sidecar: [4 KB header][model][server] at STAGE_OFFSET, past the
+    # ISO. The header records exact byte offsets/sizes; the Linux installer reads
+    # them off the raw device. No partition, so Windows has nothing to refuse.
+    Say "Staging Frank's local AI into the stick's free space..."
+    $modelOff  = [long]$STAGE_OFFSET + 4096
+    $modelSize = (Get-Item $modelPath).Length
+    $srvSize   = if (Test-Path $serverPath) { (Get-Item $serverPath).Length } else { 0 }
+    $srvOff    = $modelOff + [long]([math]::Ceiling($modelSize / 512.0) * 512)
+    $hdrText   = "FOUNDATIONAI2`nmodel_offset=$modelOff`nmodel_size=$modelSize`nserver_offset=$srvOff`nserver_size=$srvSize`n"
+    $hdr = New-Object byte[] 4096
+    [Array]::Copy([Text.Encoding]::ASCII.GetBytes($hdrText), $hdr, [Text.Encoding]::ASCII.GetByteCount($hdrText))
+    $null = $dst.Seek([long]$STAGE_OFFSET, [IO.SeekOrigin]::Begin)
+    $dst.Write($hdr, 0, 4096)
+    Write-RawFileSectorPadded $dst $modelPath
+    if ($srvSize -gt 0) {
+      $null = $dst.Seek($srvOff, [IO.SeekOrigin]::Begin)
+      Write-RawFileSectorPadded $dst $serverPath
+    }
+    Good 'AI model + server staged onto the stick.'
+  }
   Say 'Flushing everything to the stick (can take a minute, still do NOT unplug)...'
   $dst.Flush($true)
 } catch [System.UnauthorizedAccessException] {
@@ -396,96 +498,8 @@ try {
   $srcCheck.Close()
 }
 
-# ── 4. stage Frank's local AI onto the stick (best-effort) ───────────────────
-# Frank's overseer runs a small LOCAL model (BitNet b1.58 2B4T, ~1.2 GB) that is
-# too big to bake into the ISO without blowing GitHub's 2 GiB asset cap. So we
-# drop it onto a small data partition (labelled FOUNDATIONAI) in the stick's free
-# space, and the OS installer stages it from there — a fully-offline install then
-# has the model already. This is BEST-EFFORT: any failure here is non-fatal, the
-# stick still boots and installs, and the target just builds/fetches the model on
-# its first online run instead. Skip entirely with -NoModel or FOUNDATION_NO_MODEL=1.
-$ModelUrl = if ($env:FOUNDATION_MODEL_URL) { $env:FOUNDATION_MODEL_URL }
-            else { 'https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf' }
-$skipModel = $NoModel -or ($env:FOUNDATION_NO_MODEL -eq '1')
-if (-not $skipModel) {
-  try {
-    Write-Host ''
-    Say "Staging Frank's local AI model onto the stick (optional, ~1.2 GB)..."
-    $modelPath = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
-    if (-not (Test-Path $modelPath)) {
-      Say 'Downloading the AI model (this is the slow part; skip with -NoModel next time)...'
-      try {
-        Start-BitsTransfer -Source $ModelUrl -Destination $modelPath -DisplayName 'Frank local AI model'
-      } catch {
-        $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
-        try { Invoke-WebRequest -UseBasicParsing $ModelUrl -OutFile $modelPath } finally { $ProgressPreference = $old }
-      }
-    }
-    Say 'Creating a data partition on the stick for the model...'
-    # Refresh Windows' view of the just-written disk, then carve the free space.
-    # NOTE: the Storage cmdlets (New-Partition/Format-Volume) are unreliable right
-    # after a raw hybrid-ISO write — the new partition often has no associated
-    # MSFT_Volume yet, so Format-Volume fails with a CIM "no matching MSFT_Volume"
-    # error. diskpart is far more tolerant, so we create + format + assign with it.
-    Update-Disk -Number $n -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-    $dpScript = @"
-select disk $n
-create partition primary
-format fs=fat32 quick label=FOUNDATIONAI
-assign
-exit
-"@
-    $dpOut = ($dpScript | diskpart) 2>&1
-    Start-Sleep -Seconds 3
-    Update-Disk -Number $n -ErrorAction SilentlyContinue
-    # Find the drive letter diskpart assigned to the FOUNDATIONAI volume.
-    $vol = $null
-    foreach ($try in 1..10) {
-      $vol = Get-Volume -ErrorAction SilentlyContinue |
-             Where-Object { $_.FileSystemLabel -eq 'FOUNDATIONAI' -and $_.DriveLetter } |
-             Select-Object -First 1
-      if ($vol) { break }
-      Start-Sleep -Seconds 1
-    }
-    if (-not $vol) {
-      throw "created the data partition but Windows did not surface a FOUNDATIONAI volume (diskpart: $(($dpOut | Out-String).Trim()))"
-    }
-    $dl = "$($vol.DriveLetter):"
-    Copy-Item $modelPath (Join-Path $dl 'model.gguf') -Force
-    # The bitnet.cpp llama-server binary rides along too, so the target needs no
-    # building at all. Prefer one dropped next to this script; else fetch the
-    # prebuilt CI binary (foundation-ai-llama-server-x86_64) from the release.
-    $serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
-    if (-not (Test-Path $serverPath)) {
-      $srvUrl = $env:FOUNDATION_AI_SERVER_URL
-      if (-not $srvUrl) {
-        try {
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
-          $srvUrl = ($rels | ForEach-Object { $_.assets } |
-                     Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' } |
-                     Select-Object -First 1).browser_download_url
-        } catch { $srvUrl = $null }
-      }
-      if ($srvUrl) {
-        Say 'Downloading the AI server binary...'
-        try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $serverPath } catch {}
-      }
-    }
-    if (Test-Path $serverPath) {
-      Copy-Item $serverPath (Join-Path $dl 'llama-server') -Force
-      Good 'Staged the AI server binary onto the stick.'
-    } else {
-      Say 'No prebuilt AI server binary yet - the target will build it on first online run.'
-    }
-    Good 'Staged the AI model onto the stick (partition FOUNDATIONAI).'
-  } catch {
-    Bad "Could not stage the AI model onto the stick: $($_.Exception.Message)"
-    Say 'This is not fatal - the stick still boots and installs; the target will'
-    Say 'build/fetch the model on its first online run instead.'
-  }
-}
+# (Frank's local AI was staged during the write above, as a raw-offset sidecar in
+#  the stick's free space — see the STAGE_OFFSET section. No post-write step.)
 
 # ── done ─────────────────────────────────────────────────────────────────────
 Write-Host ''

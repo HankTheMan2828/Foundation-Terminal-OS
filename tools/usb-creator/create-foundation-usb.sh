@@ -124,78 +124,75 @@ read -rp "> type ERASE (all caps) to continue, anything else aborts: " confirm
 c_info "writing the installer (this takes a few minutes — do not unplug)…"
 if [[ "$OS" == "Darwin" ]]; then
   diskutil unmountDisk force "$DEV" >/dev/null
-  rdev="${DEV/\/dev\//\/dev\/r}"          # raw device is much faster on macOS
-  dd if="$ISO" of="$rdev" bs=4m
+  WRITE_DEV="${DEV/\/dev\//\/dev\/r}"     # raw device is much faster on macOS
+  dd if="$ISO" of="$WRITE_DEV" bs=4m
   c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
   sync
-  diskutil eject "$DEV" >/dev/null || true
+  # NB: eject happens AFTER the AI staging below, not here.
 else
   # unmount anything auto-mounted from the stick
   for part in $(lsblk -lnpo NAME "$DEV" | tail -n +2); do
     umount "$part" 2>/dev/null || true
   done
-  dd if="$ISO" of="$DEV" bs=4M status=progress conv=fsync
+  WRITE_DEV="$DEV"
+  dd if="$ISO" of="$WRITE_DEV" bs=4M status=progress conv=fsync
   c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
   sync
 fi
 
-# ── 4. stage Frank's local AI onto the stick (best-effort) ───────────────────
-# Frank runs a small LOCAL model (BitNet b1.58 2B4T, ~1.2 GB) too big to bake
-# into the ISO (GitHub's 2 GiB asset cap). Drop it onto a FAT32 data partition
-# labelled FOUNDATIONAI in the stick's free space; the OS installer stages it
-# from there, so a fully-offline install already has the model. BEST-EFFORT: any
-# failure is non-fatal — the target builds/fetches the model online instead.
-# Skip with FOUNDATION_NO_MODEL=1.
+# ── 4. stage Frank's local AI onto the stick (raw-offset sidecar) ────────────
+# The installed mini PCs have no network, so the model + server binary must ride
+# on the stick. Windows can't add a 2nd partition to a raw-ISO removable stick,
+# so for ONE cross-platform contract we don't partition: we write [1 MiB header]
+# [model][server] as raw bytes at a fixed offset PAST the ISO, and the OS
+# installer reads them off the raw device. Best-effort (writes the OS regardless);
+# skip with FOUNDATION_NO_MODEL=1. Contract shared with Create-FoundationUSB.ps1
+# + foundation-install (docs/FRANK-LOCAL-AI.md).
 MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf}"
+STAGE_OFFSET=3221225472    # 3 GiB — past any current ISO, within any 8 GB+ stick
+STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
 stage_ai() {
-  [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]] && { c_info "FOUNDATION_NO_MODEL=1 — not staging the AI model."; return 0; }
-  if [[ "$OS" != "Linux" ]]; then
-    c_warn "AI-model staging is Linux-only for now; on macOS the target fetches the model online."
-    return 0
-  fi
-  command -v parted >/dev/null 2>&1 && command -v mkfs.fat >/dev/null 2>&1 || {
-    c_warn "parted/mkfs.fat not found — skipping AI staging (target fetches online)."; return 0; }
-  local model="$SCRIPT_DIR/model.gguf"
+  [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]] && { c_info "FOUNDATION_NO_MODEL=1 — not staging the AI."; return 0; }
+  local model="$SCRIPT_DIR/model.gguf" server="$SCRIPT_DIR/llama-server"
   if [[ ! -f "$model" ]]; then
     c_info "downloading the AI model (~1.2 GB) to stage on the stick…"
-    curl -fL --progress-bar -o "$model" "$MODEL_URL" || {
-      c_warn "model download failed — skipping AI staging (target fetches online)."; return 0; }
+    curl -fL --progress-bar -o "$model" "$MODEL_URL" || { c_warn "model download failed — writing OS only."; return 0; }
   fi
-  local start_mib=$(( ISO_BYTES / 1024 / 1024 + 8 ))   # just past the ISO image
-  c_info "creating a data partition (FOUNDATIONAI) on the stick…"
-  parted -s "$DEV" -- mkpart primary fat32 "${start_mib}MiB" 100% 2>/dev/null || {
-    c_warn "could not add a data partition — skipping AI staging (target fetches online)."; return 0; }
-  sync; partprobe "$DEV" 2>/dev/null || true; sleep 2
-  local part; part="$(lsblk -lnpo NAME "$DEV" | tail -1)"
-  mkfs.fat -F32 -n FOUNDATIONAI "$part" >/dev/null 2>&1 || {
-    c_warn "could not format the data partition — skipping AI staging."; return 0; }
-  local mnt; mnt="$(mktemp -d)"
-  mount "$part" "$mnt" 2>/dev/null || { c_warn "could not mount the data partition — skipping AI staging."; rmdir "$mnt"; return 0; }
-  cp "$model" "$mnt/model.gguf" && c_ok "staged the AI model onto the stick (partition FOUNDATIONAI)."
-  # The bitnet.cpp llama-server binary rides along too, so the target needs no
-  # building. Prefer one next to this script; else fetch the prebuilt CI binary
-  # (foundation-ai-llama-server-x86_64) from the release.
-  local server="$SCRIPT_DIR/llama-server"
   if [[ ! -f "$server" ]]; then
     local surl="${FOUNDATION_AI_SERVER_URL:-}"
-    if [[ -z "$surl" ]]; then
-      surl="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null \
-        | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' \
-        | grep -v '\.sha256' | head -1 | cut -d'"' -f4 || true)"
-    fi
-    if [[ -n "$surl" ]]; then
-      c_info "downloading the AI server binary…"
-      curl -fL --progress-bar -o "$server" "$surl" || rm -f "$server"
-    fi
+    [[ -z "$surl" ]] && surl="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null \
+      | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' | grep -v '\.sha256' | head -1 | cut -d'"' -f4 || true)"
+    [[ -n "$surl" ]] && { c_info "downloading the AI server binary…"; curl -fL --progress-bar -o "$server" "$surl" || rm -f "$server"; }
   fi
-  if [[ -f "$server" ]]; then
-    cp "$server" "$mnt/llama-server" && c_ok "staged the AI server binary onto the stick."
+  local msize ssize=0
+  msize=$(stat -c %s "$model" 2>/dev/null || stat -f %z "$model")
+  [[ -f "$server" ]] && ssize=$(stat -c %s "$server" 2>/dev/null || stat -f %z "$server")
+  if (( ISO_BYTES >= STAGE_OFFSET )); then c_warn "ISO exceeds the 3 GiB staging offset — writing OS only."; return 0; fi
+  local model_off=$(( STAGE_OFFSET + STAGE_HDR ))
+  # round the model up to a 1 MiB boundary so the server write stays aligned
+  local srv_off=$(( model_off + ( (msize + STAGE_HDR - 1) / STAGE_HDR ) * STAGE_HDR ))
+  local hdr="FOUNDATIONAI2
+model_offset=$model_off
+model_size=$msize
+server_offset=$srv_off
+server_size=$ssize
+"
+  local BS=1M; [[ "$OS" == "Darwin" ]] && BS=1m     # GNU dd uses 1M, BSD dd uses 1m
+  c_info "staging the AI into the stick's free space (raw-offset, no partition)…"
+  { printf '%s' "$hdr"; head -c $(( STAGE_HDR - ${#hdr} )) /dev/zero; } \
+    | dd of="$WRITE_DEV" bs="$BS" seek=$(( STAGE_OFFSET / 1048576 )) count=1 conv=notrunc 2>/dev/null
+  dd if="$model" of="$WRITE_DEV" bs="$BS" seek=$(( model_off / 1048576 )) conv=notrunc 2>/dev/null \
+    && c_ok "staged the AI model onto the stick ($msize bytes)."
+  if (( ssize > 0 )); then
+    dd if="$server" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
+      && c_ok "staged the AI server binary onto the stick ($ssize bytes)."
   else
-    c_info "no prebuilt AI server binary yet — the target builds it on first online run."
+    c_info "no prebuilt AI server binary — the target builds it only if it ever gets online."
   fi
-  sync; umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true
+  sync
 }
 stage_ai
+[[ "$OS" == "Darwin" ]] && { diskutil eject "$DEV" >/dev/null 2>&1 || true; }
 
 echo
 c_ok "All done — it is now safe to unplug the stick."

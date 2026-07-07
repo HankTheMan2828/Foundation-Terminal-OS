@@ -460,36 +460,44 @@ EOF
     c_warn "root account LOCKED — rescue requires booting this installer USB"
   fi
 
-  # ── 6b. stage Frank's local AI from the USB, if the creator put it there ─────
-  # The USB creator can drop BitNet's GGUF (+ a prebuilt bitnet.cpp llama-server)
-  # onto a data partition labelled FOUNDATIONAI beside the ISO
-  # (docs/FRANK-LOCAL-AI.md), so a fully-offline install gets the model without
-  # bloating the ISO past GitHub's 2 GiB asset cap. Copy them into the embedded
-  # repo's vendor/ staging dirs, exactly where install/11-frank-ai.sh looks first.
+  # ── 6b. stage Frank's local AI from the USB (raw-offset sidecar) ────────────
+  # The USB creator wrote [header][model][server] as RAW bytes past the ISO in
+  # the stick's free space — Windows can't add a 2nd partition to a removable ISO
+  # stick, so there's no filesystem to mount (docs/FRANK-LOCAL-AI.md). Read them
+  # off the raw live device into the embedded repo's vendor/ dirs, where
+  # install/11-frank-ai.sh looks first. The installed mini PCs have no network,
+  # so this staged copy is the ONLY way the AI reaches them.
   c_step "Frank local AI (staged model, if present)"
   stage_frank_ai() {
-    local dev; dev="$(blkid -L FOUNDATIONAI 2>/dev/null || true)"
-    if [[ -z "$dev" ]]; then
-      c_info "no FOUNDATIONAI data partition on the USB — Frank's model will build/fetch on the first online run"
-      return 0
+    local disk="/dev/$1" off=3221225472       # STAGE_OFFSET (3 GiB), matches the creator
+    [[ -b "$disk" ]] || { c_info "live device not found — Frank runs rule-based (AI idle)"; return 0; }
+    local hdr
+    hdr="$(dd if="$disk" bs=4096 skip=$((off / 4096)) count=1 2>/dev/null | tr -d '\000')"
+    if [[ "$hdr" != FOUNDATIONAI2* ]]; then
+      c_info "no staged AI payload on the USB — Frank runs rule-based (AI idle)"; return 0
     fi
-    local m=/tmp/foundation-ai-stage
-    mkdir -p "$m"
-    if ! mount -o ro "$dev" "$m" 2>/dev/null; then
-      c_warn "found $dev but could not mount it — skipping AI staging"; return 0
+    local mo ms so ss
+    mo="$(printf '%s\n' "$hdr" | sed -n 's/^model_offset=//p'  | head -1)"
+    ms="$(printf '%s\n' "$hdr" | sed -n 's/^model_size=//p'    | head -1)"
+    so="$(printf '%s\n' "$hdr" | sed -n 's/^server_offset=//p' | head -1)"
+    ss="$(printf '%s\n' "$hdr" | sed -n 's/^server_size=//p'   | head -1)"
+    [[ "$mo" =~ ^[0-9]+$ && "$ms" =~ ^[0-9]+$ ]] || { c_warn "AI header unreadable — skipping"; return 0; }
+    mkdir -p "$REPO/vendor/models" "$REPO/vendor/bitnet"
+    if dd if="$disk" of="$REPO/vendor/models/model.gguf" bs=1M iflag=skip_bytes,count_bytes \
+          skip="$mo" count="$ms" 2>/dev/null; then
+      c_ok "staged AI model from USB ($ms bytes)"
+    else
+      c_warn "could not read the staged model — skipping"; return 0
     fi
-    if [[ -f "$m/model.gguf" ]]; then
-      mkdir -p "$REPO/vendor/models"
-      cp "$m/model.gguf" "$REPO/vendor/models/model.gguf" && c_ok "staged AI model from USB"
+    if [[ "$ss" =~ ^[0-9]+$ && "$ss" -gt 0 && "$so" =~ ^[0-9]+$ ]]; then
+      if dd if="$disk" of="$REPO/vendor/bitnet/llama-server" bs=1M iflag=skip_bytes,count_bytes \
+            skip="$so" count="$ss" 2>/dev/null; then
+        chmod +x "$REPO/vendor/bitnet/llama-server"
+        c_ok "staged AI server from USB ($ss bytes)"
+      fi
     fi
-    if [[ -f "$m/llama-server" ]]; then
-      mkdir -p "$REPO/vendor/bitnet"
-      cp "$m/llama-server" "$REPO/vendor/bitnet/llama-server" \
-        && chmod +x "$REPO/vendor/bitnet/llama-server" && c_ok "staged AI server from USB"
-    fi
-    umount "$m" 2>/dev/null || true
   }
-  stage_frank_ai
+  stage_frank_ai "$live_disk"
 
   # ── 7. Foundation TerminalOS itself ─────────────────────────────────────────
   c_step "Installing Foundation TerminalOS (install/run-all.sh in the target)"
