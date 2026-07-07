@@ -134,13 +134,29 @@ fully-offline install still gets the model without bloating the ISO. If neither
 staged nor fetchable, the service's `ExecCondition`s keep it idle and Frank's
 sensor safely reads nothing — the rules keep running.
 
+## Model + server delivery (the offline story)
+- **CI builds the server binary.** `.github/workflows/build-iso.yml`'s `bitnet`
+  job builds `bitnet.cpp`'s `llama-server` (BitNet 2B4T, i2_s) on a tag and
+  attaches it to the release as `foundation-ai-llama-server-x86_64`. Built on
+  ubuntu (older glibc) so it also runs on the Arch target.
+- **The USB creator stages both** the binary and the model onto a `FOUNDATIONAI`
+  data partition beside the ISO (it fetches the binary from the release, the
+  model from HF), and `foundation-install` copies them into the embedded repo's
+  `vendor/` dirs — so a **fully-offline install has a working AI, no on-target
+  building**. `install/11-frank-ai.sh` reads those staged paths first.
+- **Fallback:** if the binary/model aren't staged and the box is online,
+  `install/11` builds bitnet.cpp + fetches the model itself; if neither, the
+  service stays idle and the sensor safely no-ops while the rules keep running.
+
 ## What is real vs. stubbed
 - Sifter/negotiation **logic, gates, math, wiring, IPC, Hub client + screen**,
-  the **service + install step**: built + unit-tested, offline-safe.
-- The **bitnet.cpp build invocation** in `install/11` is best-effort and marked
-  `TODO(hardware)` — verify the exact cmake target on the target toolchain.
-- The **USB-creator staging** of the binary+model beside the ISO: planned;
-  wiring is the next step (the installer already reads the staged paths).
+  the **service + install step + CI binary build + USB staging**: built (the
+  Python is unit-tested; the disk/CI/build paths are `[verify-on-CI/hardware]`).
+- The **bitnet.cpp build steps** (both the CI job and `install/11`'s on-target
+  fallback) are best-effort — bitnet.cpp's build evolves; confirm on the first
+  tag run and a real install.
+- The **creator-side partition writing** is untested on real hardware (guarded /
+  non-fatal); wants one real USB pass.
 - The **root VT locker** showing the negotiation prompt during an *enforced*
   machine lock stays `TODO(hardware)`; session-scope negotiation works through the
   Hub today.

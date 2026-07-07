@@ -172,8 +172,27 @@ stage_ai() {
   local mnt; mnt="$(mktemp -d)"
   mount "$part" "$mnt" 2>/dev/null || { c_warn "could not mount the data partition — skipping AI staging."; rmdir "$mnt"; return 0; }
   cp "$model" "$mnt/model.gguf" && c_ok "staged the AI model onto the stick (partition FOUNDATIONAI)."
-  # A prebuilt bitnet.cpp llama-server dropped next to this script rides along too.
-  [[ -f "$SCRIPT_DIR/llama-server" ]] && cp "$SCRIPT_DIR/llama-server" "$mnt/llama-server"
+  # The bitnet.cpp llama-server binary rides along too, so the target needs no
+  # building. Prefer one next to this script; else fetch the prebuilt CI binary
+  # (foundation-ai-llama-server-x86_64) from the release.
+  local server="$SCRIPT_DIR/llama-server"
+  if [[ ! -f "$server" ]]; then
+    local surl="${FOUNDATION_AI_SERVER_URL:-}"
+    if [[ -z "$surl" ]]; then
+      surl="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null \
+        | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' \
+        | grep -v '\.sha256' | head -1 | cut -d'"' -f4 || true)"
+    fi
+    if [[ -n "$surl" ]]; then
+      c_info "downloading the AI server binary…"
+      curl -fL --progress-bar -o "$server" "$surl" || rm -f "$server"
+    fi
+  fi
+  if [[ -f "$server" ]]; then
+    cp "$server" "$mnt/llama-server" && c_ok "staged the AI server binary onto the stick."
+  else
+    c_info "no prebuilt AI server binary yet — the target builds it on first online run."
+  fi
   sync; umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true
 }
 stage_ai

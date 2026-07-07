@@ -57,9 +57,11 @@ fully-offline install already has the model — no network needed on the target.
 - Skip it (write only the ISO, smaller/faster): pass `-NoModel` on Windows
   (`... -File .\Create-FoundationUSB.ps1 -NoModel`) or set `FOUNDATION_NO_MODEL=1`
   on Linux/macOS. macOS staging isn't wired yet — those installs fetch online.
-- A prebuilt `bitnet.cpp` `llama-server` binary dropped next to the creator
-  script (named `llama-server`) is staged too, so even the inference server
-  doesn't need building on the target. Otherwise the target builds it online.
+- The inference server binary is staged too, so the target needs **no building
+  at all** — a fully-offline install gets a working AI. The creator fetches the
+  prebuilt `bitnet.cpp` `llama-server` (built by CI, attached to the release as
+  `foundation-ai-llama-server-x86_64`) automatically; dropping your own
+  `llama-server` next to the creator script overrides it.
 
 ## Alternatives
 

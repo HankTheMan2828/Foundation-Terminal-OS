@@ -428,10 +428,32 @@ if (-not $skipModel) {
     Format-Volume -Partition $part -FileSystem FAT32 -NewFileSystemLabel 'FOUNDATIONAI' -Confirm:$false | Out-Null
     $dl = "$($part.DriveLetter):"
     Copy-Item $modelPath (Join-Path $dl 'model.gguf') -Force
-    # A prebuilt bitnet.cpp llama-server (if you dropped one next to this script)
-    # rides along too; otherwise the target builds it on first online run.
+    # The bitnet.cpp llama-server binary rides along too, so the target needs no
+    # building at all. Prefer one dropped next to this script; else fetch the
+    # prebuilt CI binary (foundation-ai-llama-server-x86_64) from the release.
     $serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
-    if (Test-Path $serverPath) { Copy-Item $serverPath (Join-Path $dl 'llama-server') -Force }
+    if (-not (Test-Path $serverPath)) {
+      $srvUrl = $env:FOUNDATION_AI_SERVER_URL
+      if (-not $srvUrl) {
+        try {
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
+          $srvUrl = ($rels | ForEach-Object { $_.assets } |
+                     Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' } |
+                     Select-Object -First 1).browser_download_url
+        } catch { $srvUrl = $null }
+      }
+      if ($srvUrl) {
+        Say 'Downloading the AI server binary...'
+        try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $serverPath } catch {}
+      }
+    }
+    if (Test-Path $serverPath) {
+      Copy-Item $serverPath (Join-Path $dl 'llama-server') -Force
+      Good 'Staged the AI server binary onto the stick.'
+    } else {
+      Say 'No prebuilt AI server binary yet - the target will build it on first online run.'
+    }
     Good 'Staged the AI model onto the stick (partition FOUNDATIONAI).'
   } catch {
     Bad "Could not stage the AI model onto the stick: $($_.Exception.Message)"
