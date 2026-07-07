@@ -244,7 +244,7 @@ class FrankClient:
 
     def negotiate(self, plea: str) -> dict | None:
         """Submit a plea against a NEGOTIABLE lockout. Frank decides and can
-        refuse — this is a request, not a command (docs/FRANK-AI-GUARDIAN.md §4).
+        refuse — this is a request, not a command (docs/FRANK-LOCAL-AI.md §4).
 
         Returns {"outcome", "removed", "remaining", "msg"} or None if Frank is
         unreachable. The wire protocol is line-oriented, so the plea is collapsed

@@ -1,5 +1,5 @@
 """Root-only config for the local sensor + negotiable lockouts parses correctly
-and keeps safe defaults (docs/FRANK-AI-GUARDIAN.md)."""
+and keeps safe defaults (docs/FRANK-LOCAL-AI.md)."""
 from frankd import config
 
 
@@ -16,7 +16,7 @@ def test_sift_and_negotiation_sections_parse(tmp_path):
         '[sift]\n'
         'backend = "local"\n'
         'base_url = "http://127.0.0.1:9000/v1/chat/completions"\n'
-        'model = "granite-guardian-3b"\n'
+        'model = "bitnet-b1.58-2B-4T"\n'
         'confidence_threshold = 0.7\n'
         '[negotiation]\n'
         'enabled = false\n'
@@ -27,7 +27,7 @@ def test_sift_and_negotiation_sections_parse(tmp_path):
     )
     cfg = config.load(p)
     assert cfg.sift.backend == "local"
-    assert cfg.sift.model == "granite-guardian-3b"
+    assert cfg.sift.model == "bitnet-b1.58-2B-4T"
     assert cfg.sift.confidence_threshold == 0.7
     assert cfg.negotiation.enabled is False
     assert cfg.negotiation.max_attempts == 5

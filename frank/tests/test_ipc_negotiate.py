@@ -1,4 +1,4 @@
-"""The `negotiate` IPC verb (docs/FRANK-AI-GUARDIAN.md §4).
+"""The `negotiate` IPC verb (docs/FRANK-LOCAL-AI.md §4).
 
 `_handle` is exercised directly so this runs on platforms without AF_UNIX
 (the socket-level tests in test_ipc.py don't). The point: negotiate is routed to

@@ -15,7 +15,7 @@
 # types in the Hub too, not just a shell that this OS doesn't even have. The
 # patterns here are specific enough (tool names, exact destructive forms) that
 # extending them to activity text is low-false-positive; broader/nuanced
-# harm-to-system judgement is left to the periodic Guardian sift.
+# harm-to-system judgement is left to the periodic local-model sift.
 #
 # Tier -> action (via enforcement.py, adjusted by sensitivity §5):
 #   observe   recorded (frank-only) but NEVER warns or locks out

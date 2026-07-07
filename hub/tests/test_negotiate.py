@@ -1,4 +1,4 @@
-"""Hub-side negotiation client (docs/FRANK-AI-GUARDIAN.md §4).
+"""Hub-side negotiation client (docs/FRANK-LOCAL-AI.md §4).
 
 The Hub can only ASK; Frank decides. These check the wire parse and that a plea
 with spaces survives the line-oriented protocol.

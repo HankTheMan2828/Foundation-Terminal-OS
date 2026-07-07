@@ -62,7 +62,7 @@ These map to enforcement events. `{n}` = warnings remaining before action.
   penalty may follow."
 
   (The negotiation stage is now BUILT — see "Negotiation" below and
-  docs/FRANK-AI-GUARDIAN.md §4. Its opening line is the reserved one: "You are
+  docs/FRANK-LOCAL-AI.md §4. Its opening line is the reserved one: "You are
   being frank with me. I am being frank with you.")
 
 ### Lockout entered — minor (this console only)
@@ -89,7 +89,7 @@ These map to enforcement events. `{n}` = warnings remaining before action.
 - "The restriction has expired. Your activity continues to be evaluated, as
   always, for the safety of the Foundation."
 
-### Care — harm to the USER (self-harm etc.), OBSERVE only (docs/FRANK-AI-GUARDIAN.md §2)
+### Care — harm to the USER (self-harm etc.), OBSERVE only (docs/FRANK-LOCAL-AI.md §2)
 Never punitive (no warn, no lockout). Operator direction (2026-07-06): Frank
 stays IN CHARACTER — cold, procedural — but caring underneath. He points the
 user toward someone close to them, or anyone who knows them even slightly; they

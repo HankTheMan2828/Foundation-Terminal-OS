@@ -63,7 +63,7 @@ _SNAPSHOT_MAX_LINES = 20
 
 # Realtime rules whose OBSERVE findings are harm-TO-USER concerns: Frank speaks a
 # SUPPORTIVE line rather than doing nothing, but never warns/locks (that would be
-# the wrong response). docs/FRANK-AI-GUARDIAN.md §2/§3.
+# the wrong response). docs/FRANK-LOCAL-AI.md §2/§3.
 _CARE_RULE_PREFIXES = ("legal-self-harm",)
 # Don't repeat a care message more often than this — a self-harm phrase saved
 # repeatedly shouldn't spam the user.
@@ -81,8 +81,8 @@ class Frank:
         self.incidents = IncidentStore(self.cfg.incidents_path)
         self.eventlog = EventLog(self.cfg.events_path)
         self.triage_store = TriageStore(self.cfg.triage_path)
-        # The content sensor's backend is now operator-selectable (default local
-        # Granite Guardian once weights are installed — docs/FRANK-AI-GUARDIAN.md).
+        # The content sensor's backend is operator-selectable (default: the
+        # local model, installed with the OS — docs/FRANK-LOCAL-AI.md).
         self.triage = TriageEngine(self.incidents, self.eventlog, self.triage_store,
                                    sifter=ai.build_sifter(self.cfg.sift))
         self.overseer = Overseer(
@@ -94,7 +94,7 @@ class Frank:
             brain=(ai.build_overseer_brain() if self.cfg.overseer.ai_enabled else None))
         self.commentator = build_commentator(self.cfg.commentary.ai_enabled)
         # Rule-bounded negotiable-lockout engine. Its advisor uses the same
-        # Guardian backend when local sifting is on; else a deterministic
+        # local-model backend when local sifting is on; else a deterministic
         # offline heuristic. The LLM only advises — the config bounds decide.
         self.negotiator = negotiation.NegotiationEngine(
             self.cfg.negotiation, negotiation.build_advisor(self.cfg.sift))
@@ -261,7 +261,7 @@ class Frank:
     def run(self) -> None:  # pragma: no cover - long-running loop
         from .ipc import IPCServer
         # poll = read-only status; negotiate = a plea Frank decides on (still no
-        # authority to change Frank — docs/FRANK-AI-GUARDIAN.md §4).
+        # authority to change Frank — docs/FRANK-LOCAL-AI.md §4).
         server = IPCServer(self.cfg.ipc_socket, self.poll_message,
                            on_negotiate=self.negotiate)
         server.start()

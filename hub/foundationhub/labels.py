@@ -182,7 +182,7 @@ EDITOR_SAVE_FAILED = "SAVE FAILED: {err}"
 EDITOR_RENAME_PROMPT = "RENAME TO"
 EDITOR_RENAME_EXISTS = "A RECORD BY THAT NAME EXISTS"
 
-# ── Frank negotiation (docs/FRANK-AI-GUARDIAN.md §4) ─────────────────────────
+# ── Frank negotiation (docs/FRANK-LOCAL-AI.md §4) ─────────────────────────
 NEGOTIATE_TITLE = "REVIEW"
 NEGOTIATE_SUBTITLE = "this restriction is open to negotiation"
 NEGOTIATE_INTRO = ("You are being frank with me. I am being frank with you. "

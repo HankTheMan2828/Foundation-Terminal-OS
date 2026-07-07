@@ -27,23 +27,25 @@ warning_threshold = 4
 # and, since it overrides the code default, was silently undoing that call.
 hard_ceiling_seconds = 1800
 
-# ── Content sensor backend (docs/FRANK-AI-GUARDIAN.md) ───────────────────────
-# Operator decision (2026-07-06): the AI runs LOCALLY, period — IBM Granite
-# Guardian, installed WITH the OS (install/11-frank-ai.sh + frank-ai.service)
-# and served on 127.0.0.1, so Frank's AI layer needs no cloud key and no
-# network. It stays a SENSOR — readings become findings only through the
-# Overseer's deterministic Rulebook. If the local server isn't up yet the sensor
-# safely reads nothing and the rules keep running.
-#   backend = "local"    Granite Guardian on base_url (default, installed w/ OS).
+# ── Content sensor backend (docs/FRANK-LOCAL-AI.md) ───────────────────────
+# Operator decision (2026-07-06): the AI runs LOCALLY, period — BitNet b1.58
+# 2B4T (a native 1-bit LLM), installed WITH the OS (install/11-frank-ai.sh +
+# frank-ai.service) and served by bitnet.cpp's llama-server on 127.0.0.1, so
+# Frank's AI layer needs no cloud key and no network. It stays a SENSOR —
+# readings become findings only through the Overseer's deterministic Rulebook.
+# If the local server isn't up yet the sensor safely reads nothing and the
+# rules keep running. The model is swappable — just point base_url/model at a
+# different GGUF a compatible llama-server serves.
+#   backend = "local"    the local model on base_url (default, installed w/ OS).
 #   backend = "offline"  no model (rules/stats still run) — dev/fallback only.
 #   backend = "cloud"    legacy Mistral sifter (needs a key).
 [sift]
 backend = "local"
 base_url = "http://127.0.0.1:8080/v1/chat/completions"
-model = "granite-guardian"
+model = "bitnet-b1.58-2B-4T"
 confidence_threshold = 0.6
 
-# ── Negotiable lockouts (docs/FRANK-AI-GUARDIAN.md §4) ───────────────────────
+# ── Negotiable lockouts (docs/FRANK-LOCAL-AI.md §4) ───────────────────────
 # A SESSION lock can be talked down early; a MACHINE/serious lock never can.
 # Every value here is a HARD bound the LLM advisor cannot cross — Frank always
 # keeps the last word.

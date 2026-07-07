@@ -1,4 +1,4 @@
-"""Enforcement-side negotiable-lockout primitives (docs/FRANK-AI-GUARDIAN.md §4).
+"""Enforcement-side negotiable-lockout primitives (docs/FRANK-LOCAL-AI.md §4).
 
 The floor clamp lives in the enforcer, next to the ceiling it already owns —
 these check the flag is set correctly on entry and that reduce_lockout can never

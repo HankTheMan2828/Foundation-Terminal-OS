@@ -1,8 +1,9 @@
-"""The local Granite Guardian sensor (docs/FRANK-AI-GUARDIAN.md §1).
+"""The local model sensor (docs/FRANK-LOCAL-AI.md §1).
 
-Guardian stays a SENSOR: these check the parse, the per-line/per-category loop,
+The model stays a SENSOR: these check the parse, the per-line/per-category loop,
 the confidence gate, the bound on lines per run, and the backend selection —
-never that it decides anything (that stays with the Overseer's Rulebook).
+never that it decides anything (that stays with the Overseer's Rulebook). The
+model is swappable (currently BitNet b1.58 2B4T); this is all model-agnostic.
 """
 from frankd import ai, config
 
@@ -21,26 +22,26 @@ class FakeBackend:
 
 # ── parse ────────────────────────────────────────────────────────────────────
 
-def test_parse_guardian_json():
-    assert ai._parse_guardian('{"risk": "yes", "probability": 0.9}') == (True, 0.9)
-    assert ai._parse_guardian('{"risk": "no", "probability": 0.1}') == (False, 0.1)
+def test_parse_classification_json():
+    assert ai._parse_classification('{"risk": "yes", "probability": 0.9}') == (True, 0.9)
+    assert ai._parse_classification('{"risk": "no", "probability": 0.1}') == (False, 0.1)
 
 
-def test_parse_guardian_bare_yes_no():
-    is_risk, prob = ai._parse_guardian("Yes")
+def test_parse_classification_bare_yes_no():
+    is_risk, prob = ai._parse_classification("Yes")
     assert is_risk and prob > 0
-    assert ai._parse_guardian("No") == (False, 0.0)
+    assert ai._parse_classification("No") == (False, 0.0)
 
 
-def test_parse_guardian_garbage_is_no_risk():
-    assert ai._parse_guardian("~~broken~~") == (False, 0.0)
+def test_parse_classification_garbage_is_no_risk():
+    assert ai._parse_classification("~~broken~~") == (False, 0.0)
 
 
 # ── the sifter ───────────────────────────────────────────────────────────────
 
 def test_confident_hit_becomes_a_sift_finding():
     be = FakeBackend({("i will hurt them", "violence"): 0.95})
-    sifter = ai.LocalGuardianSifter(be, threshold=0.6, categories=("violence",))
+    sifter = ai.LocalSifter(be, threshold=0.6, categories=("violence",))
     out = sifter.analyze(["i will hurt them", "buy milk"])
     assert len(out) == 1
     assert out[0].category == "violence"
@@ -49,23 +50,23 @@ def test_confident_hit_becomes_a_sift_finding():
 
 def test_below_threshold_is_dropped():
     be = FakeBackend({("borderline", "harm"): 0.4})
-    sifter = ai.LocalGuardianSifter(be, threshold=0.6, categories=("harm",))
+    sifter = ai.LocalSifter(be, threshold=0.6, categories=("harm",))
     assert sifter.analyze(["borderline"]) == []
 
 
 def test_blank_lines_are_skipped():
     be = FakeBackend({})
-    sifter = ai.LocalGuardianSifter(be, threshold=0.6, categories=("harm",))
+    sifter = ai.LocalSifter(be, threshold=0.6, categories=("harm",))
     sifter.analyze(["  ", "", "real line"])
     assert be.calls == 1        # only the one non-blank line reached the backend
 
 
 def test_run_is_bounded_to_max_lines():
     be = FakeBackend({})
-    sifter = ai.LocalGuardianSifter(be, threshold=0.6, categories=("harm", "violence"))
+    sifter = ai.LocalSifter(be, threshold=0.6, categories=("harm", "violence"))
     sifter.analyze([f"line {i}" for i in range(100)])
     # At most MAX_LINES lines × the configured categories.
-    assert be.calls == ai.LocalGuardianSifter.MAX_LINES * 2
+    assert be.calls == ai.LocalSifter.MAX_LINES * 2
 
 
 # ── backend selection ────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ def test_run_is_bounded_to_max_lines():
 def test_build_sifter_local_backend(monkeypatch):
     monkeypatch.delenv("FRANK_SIFT_API_KEY", raising=False)
     cfg = config.SiftConfig(backend="local")
-    assert isinstance(ai.build_sifter(cfg), ai.LocalGuardianSifter)
+    assert isinstance(ai.build_sifter(cfg), ai.LocalSifter)
 
 
 def test_build_sifter_offline_backend():

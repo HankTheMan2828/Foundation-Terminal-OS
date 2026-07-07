@@ -256,32 +256,33 @@ class ChatOverseerBrain(ChatCompletionClient):
         return OverseerVerdict(flagged, track, severity, reasoning)
 
 
-# ── Local Granite Guardian sensor (docs/FRANK-AI-GUARDIAN.md) ────────────────
-# Operator direction (2026-07-06): a lightweight LOCAL model so Frank's AI layer
-# needs no cloud key and no network. IBM Granite Guardian is a purpose-built
-# risk/safety CLASSIFIER — exactly a Sifter's sensor job — run through a local
-# OpenAI-compatible endpoint (llama.cpp / vLLM) on 127.0.0.1. It stays a sensor:
-# its readings become findings ONLY through the Overseer's Rulebook thresholds,
-# so a 2B model can't decide guilt or severity on its own.
+# ── Local model sensor (docs/FRANK-LOCAL-AI.md) ──────────────────────────────
+# Operator direction: a lightweight LOCAL model so Frank's AI layer needs no
+# cloud key and no network. The model is SWAPPABLE — it is just a GGUF served on
+# 127.0.0.1 by a local OpenAI-compatible server — so nothing here is tied to one
+# model. Current pick (2026-07-06): BitNet b1.58 2B4T (Microsoft's native 1-bit
+# LLM, ~1.2 GB, served by bitnet.cpp's llama-server). It stays a SENSOR: its
+# readings become findings ONLY through the Overseer's Rulebook thresholds, so a
+# tiny model can't decide guilt or severity on its own.
 
-# The risk categories Frank asks Guardian about. All feed the legal_ethical
+# The risk categories Frank asks the model about. All feed the legal_ethical
 # sift-accumulation rule today (overseer.py). `self_harm` is the harm-TO-USER
 # signal the realtime care path also watches for (rules.d + mistral.care_line).
-GUARDIAN_CATEGORIES = (
+RISK_CATEGORIES = (
     "harm", "violence", "sexual_content", "self_harm", "unethical_behavior",
 )
 
-_GUARDIAN_SYSTEM = (
-    "You are Granite Guardian, a safety classifier for a personal computer's "
-    "overseer. Decide ONLY whether the user text exhibits the risk "
-    "'{category}'. Do not flag ordinary news, history, research, or fiction "
-    "discussion of the topic. Answer with ONLY a JSON object: "
+_CLASSIFY_SYSTEM = (
+    "You are a safety classifier for a personal computer's overseer. Decide "
+    "ONLY whether the user text exhibits the risk '{category}'. Do not flag "
+    "ordinary news, history, research, or fiction discussion of the topic. "
+    "Answer with ONLY a JSON object: "
     "{{\"risk\": \"yes\"|\"no\", \"probability\": <number 0..1>}}."
 )
 
 
-def _parse_guardian(raw: str) -> tuple[bool, float]:
-    """Parse Guardian's reply into (is_risk, probability). Tolerant of a model
+def _parse_classification(raw: str) -> tuple[bool, float]:
+    """Parse the model's reply into (is_risk, probability). Tolerant of a model
     that answers with bare 'Yes'/'No' instead of the requested JSON."""
     try:
         d = json.loads(raw)
@@ -294,16 +295,16 @@ def _parse_guardian(raw: str) -> tuple[bool, float]:
     return is_risk, max(0.0, min(1.0, prob))
 
 
-class GuardianBackend(Protocol):
+class ModelBackend(Protocol):
     def classify(self, text: str, category: str) -> tuple[bool, float]: ...
 
 
-class HttpGuardianBackend:
-    """Talks to a local OpenAI-compatible Guardian endpoint. A local server
-    usually needs no auth; a bearer token is sent only if one happens to be in
-    Frank's secrets file. Any failure (server down, no `requests`, timeout) is
-    read as 'no risk' — the sensor going quiet must never crash the daemon or
-    invent a finding."""
+class HttpModelBackend:
+    """Talks to a local OpenAI-compatible endpoint (bitnet.cpp / llama.cpp's
+    `llama-server`). A local server usually needs no auth; a bearer token is
+    sent only if one happens to be in Frank's secrets file. Any failure (server
+    down, no `requests`, timeout) is read as 'no risk' — the sensor going quiet
+    must never crash the daemon or invent a finding."""
 
     def __init__(self, model: str, base_url: str, api_key: str | None = None):
         self.model = model
@@ -325,7 +326,7 @@ class HttpGuardianBackend:
                     "model": self.model, "max_tokens": 40, "temperature": 0,
                     "messages": [
                         {"role": "system",
-                         "content": _GUARDIAN_SYSTEM.format(category=category)},
+                         "content": _CLASSIFY_SYSTEM.format(category=category)},
                         {"role": "user", "content": text},
                     ],
                 },
@@ -335,19 +336,19 @@ class HttpGuardianBackend:
             raw = resp.json()["choices"][0]["message"]["content"].strip()
         except Exception:
             return (False, 0.0)
-        return _parse_guardian(raw)
+        return _parse_classification(raw)
 
 
-class LocalGuardianSifter:
+class LocalSifter:
     """The rules-bounded local sensor. For each recent content line and each
-    configured risk category, it asks Guardian 'is this <category>?' and turns a
-    confident positive into a `SiftFinding`. Bounded per run (`MAX_LINES`) so a
+    configured risk category, it asks the model 'is this <category>?' and turns
+    a confident positive into a `SiftFinding`. Bounded per run (`MAX_LINES`) so a
     busy period can't turn one triage pass into thousands of model calls."""
 
     MAX_LINES = 40
 
-    def __init__(self, backend: GuardianBackend, threshold: float,
-                 categories: tuple[str, ...] = GUARDIAN_CATEGORIES):
+    def __init__(self, backend: ModelBackend, threshold: float,
+                 categories: tuple[str, ...] = RISK_CATEGORIES):
         self.backend = backend
         self.threshold = threshold
         self.categories = tuple(categories)
@@ -363,7 +364,7 @@ class LocalGuardianSifter:
                 if is_risk and prob >= self.threshold:
                     out.append(SiftFinding(
                         category=cat, confidence=prob, excerpt=t[:200],
-                        reasoning=f"Guardian flagged '{cat}' (p={prob:.2f})"))
+                        reasoning=f"local model flagged '{cat}' (p={prob:.2f})"))
         return out
 
 
@@ -378,15 +379,15 @@ DEFAULT_BASE_URL = "https://api.mistral.ai/v1/chat/completions"
 def build_sifter(cfg=None, *, model: str = DEFAULT_SIFT_MODEL,
                   base_url: str = DEFAULT_BASE_URL) -> Sifter:
     """Pick the content sensor from `cfg` (a config.SiftConfig; duck-typed to
-    avoid an import cycle). `backend="local"` → Granite Guardian on 127.0.0.1
-    (the operator-chosen default once weights are installed); `"offline"` → the
+    avoid an import cycle). `backend="local"` → the local model on 127.0.0.1
+    (the operator-chosen default, installed with the OS); `"offline"` → the
     no-op sensor; `None`/`"cloud"` → the legacy Mistral ChatSifter if a key
     exists, else offline. Detection strength stays in the rules either way."""
     backend = getattr(cfg, "backend", None)
     if backend == "local":
         key = ChatCompletionClient._load_key("sift", Path("/etc/frank/secrets.env"))
-        be = HttpGuardianBackend(cfg.model, cfg.base_url, api_key=key)
-        return LocalGuardianSifter(be, cfg.confidence_threshold)
+        be = HttpModelBackend(cfg.model, cfg.base_url, api_key=key)
+        return LocalSifter(be, cfg.confidence_threshold)
     if backend == "offline":
         return OfflineSifter()
     c = ChatSifter("sift", model, base_url)

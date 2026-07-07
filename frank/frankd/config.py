@@ -111,13 +111,14 @@ class OverseerConfig:
 @dataclass
 class SiftConfig:
     """The content sensor's backend (frankd/ai.py). Operator direction
-    (2026-07-06): a lightweight LOCAL model (IBM Granite Guardian) so Frank's
-    AI layer needs no cloud key and no network — see docs/FRANK-AI-GUARDIAN.md.
+    (2026-07-06): a lightweight LOCAL model so Frank's AI layer needs no cloud
+    key and no network — see docs/FRANK-LOCAL-AI.md. The model is swappable;
+    current pick is BitNet b1.58 2B4T (a native 1-bit LLM served by bitnet.cpp).
 
     backend:
       "offline" — no model; the sensor reads nothing (rules/stats still run).
-      "local"   — a local OpenAI-compatible Guardian endpoint (llama.cpp/vLLM)
-                  on 127.0.0.1. The default once weights are installed.
+      "local"   — a local OpenAI-compatible endpoint (bitnet.cpp / llama.cpp's
+                  llama-server) on 127.0.0.1. The default, installed with the OS.
       "cloud"   — the original Mistral ChatSifter (needs a key).
 
     Everything else about the pipeline is unchanged: the sifter is a SENSOR;
@@ -130,8 +131,8 @@ class SiftConfig:
     keep running — same posture as offline."""
     backend: str = "local"
     base_url: str = "http://127.0.0.1:8080/v1/chat/completions"
-    model: str = "granite-guardian"
-    # A Guardian "risk = yes" below this probability is ignored as noise. The
+    model: str = "bitnet-b1.58-2B-4T"
+    # A "risk = yes" below this probability is ignored as noise. The
     # Overseer's own sift_confidence_threshold then applies a SECOND gate before
     # anything accumulates toward a verdict — deliberately two independent gates.
     confidence_threshold: float = 0.6
@@ -139,7 +140,7 @@ class SiftConfig:
 
 @dataclass
 class NegotiationConfig:
-    """Negotiable lockouts (docs/FRANK-AI-GUARDIAN.md §4). A SESSION lock can be
+    """Negotiable lockouts (docs/FRANK-LOCAL-AI.md §4). A SESSION lock can be
     talked down early; a MACHINE/serious lock never can. Every value here is a
     HARD bound the LLM advisor cannot cross — the model only advises a stance;
     these numbers decide the actual outcome, so a small model can't be talked

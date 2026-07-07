@@ -154,12 +154,12 @@ from `lockout.state`, so rebooting cannot escape them. The operator cannot read
 the state file, signal the enforcer, or reach a shell — the only escape is
 physical/USB, which the spec places out of scope.
 
-**Negotiable lockouts** (`negotiation.py`, docs/FRANK-AI-GUARDIAN.md §4): a
+**Negotiable lockouts** (`negotiation.py`, docs/FRANK-LOCAL-AI.md §4): a
 **session** lock may be talked down early; a **machine**/serious lock never can
 (Frank's side always wins). The user submits a plea over the new `negotiate` IPC
 verb — still authority-free: it can change no config/threshold/verdict, and Frank
 decides. Deterministic gates (must be negotiable, attempts remaining, a minimum
-fraction served) run first and an LLM *advisor* (local Guardian, or an offline
+fraction served) run first and an LLM *advisor* (the local model, or an offline
 heuristic) only advises a stance; `Enforcer.reduce_lockout` then shortens the
 timer within a hard floor it can never cross — the same place that owns the
 ceiling. Frank can always refuse; the user can never force release.
@@ -184,10 +184,11 @@ different power, never sharing a credential or a code path:
   (`FRANK_SIFT_API_KEY` / `FRANK_OVERSEER_API_KEY`), so spend is attributable
   per tier the same way the operator already wanted commentary spend
   attributable. The Sifter backend is operator-selectable (`[sift] backend`):
-  the default direction is a **lightweight LOCAL model — IBM Granite Guardian**
-  on 127.0.0.1 (`ai.LocalGuardianSifter`), so Frank's detection AI needs no
-  cloud key and no network at all. It stays a sensor either way — see
-  [`docs/FRANK-AI-GUARDIAN.md`](FRANK-AI-GUARDIAN.md).
+  the default is a **lightweight LOCAL model — BitNet b1.58 2B4T** served by
+  bitnet.cpp on 127.0.0.1 (`ai.LocalSifter`), so Frank's detection AI needs no
+  cloud key and no network at all. The model is swappable by config. It stays a
+  sensor either way — see
+  [`docs/FRANK-LOCAL-AI.md`](FRANK-LOCAL-AI.md).
 - **AI Chat** (`hub/foundationhub/aichat.py`): called by the Hub (user `operator`) only
   when the user opens the AI Chat screen and sends a message. Uses a *separate*
   key file the operator can read. This assistant has no access to Frank's data

@@ -68,7 +68,7 @@ class Lockout:
     end: float
     ceiling_end: float          # start + hard ceiling; end may never exceed this
     trigger_severity: Severity
-    # Negotiation (docs/FRANK-AI-GUARDIAN.md §4). Only SESSION locks are
+    # Negotiation (docs/FRANK-LOCAL-AI.md §4). Only SESSION locks are
     # negotiable; MACHINE/serious locks never are — Frank's side always wins.
     negotiable: bool = False
     orig_end: float = 0.0       # the end at entry, for computing served/floor fractions
@@ -171,7 +171,7 @@ class Enforcer:
             lk.scope = Scope.MACHINE
             lk.trigger_severity = Severity.SERIOUS
 
-    # ── negotiation (docs/FRANK-AI-GUARDIAN.md §4) ───────────────────────────
+    # ── negotiation (docs/FRANK-LOCAL-AI.md §4) ───────────────────────────
     def reduce_lockout(self, now: float, seconds: float, floor_end: float) -> float:
         """Shorten the active lockout by up to `seconds`, but NEVER below
         `floor_end` (and never below `now`). Returns the seconds actually

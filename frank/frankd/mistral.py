@@ -63,7 +63,7 @@ _LINES: dict[str, list[str]] = {
 
 # Lines for the harm-TO-USER care path (self-harm and related OBSERVE findings).
 # NOT punitive — a lockout in a bad moment is the wrong response
-# (docs/FRANK-AI-GUARDIAN.md §2). Operator direction (2026-07-06): keep Frank IN
+# (docs/FRANK-LOCAL-AI.md §2). Operator direction (2026-07-06): keep Frank IN
 # CHARACTER — cold and procedural — but caring underneath: point the user toward
 # someone close to them, or anyone who knows them even slightly. They just need
 # to talk to a person. The rules/model decide WHEN one is shown, never the words.
@@ -76,7 +76,7 @@ _CARE_LINES: list[str] = [
     "correct course.",
 ]
 
-# Negotiation dialogue (docs/FRANK-AI-GUARDIAN.md §4). Keyed by outcome. The
+# Negotiation dialogue (docs/FRANK-LOCAL-AI.md §4). Keyed by outcome. The
 # reserved line from FRANK-VOICE.md opens a negotiation; Frank stays procedural.
 _NEGOTIATION_LINES: dict[str, list[str]] = {
     "ineligible": [
@@ -99,7 +99,7 @@ _NEGOTIATION_LINES: dict[str, list[str]] = {
 
 def care_line() -> str:
     """A supportive baked line for the harm-to-user care path. Rule/model gate
-    the WHEN; this is always the WORDS (docs/FRANK-AI-GUARDIAN.md §3)."""
+    the WHEN; this is always the WORDS (docs/FRANK-LOCAL-AI.md §3)."""
     return random.choice(_CARE_LINES)
 
 

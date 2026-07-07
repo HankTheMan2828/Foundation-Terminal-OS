@@ -1,15 +1,20 @@
-# Frank — the LOCAL AI sensor (IBM Granite Guardian) inference server.
+# Frank — the LOCAL AI sensor inference server.
 # Operator decision (2026-07-06): the AI runs locally, installed with the OS —
-# see docs/FRANK-AI-GUARDIAN.md. Serves an OpenAI-compatible endpoint on
-# 127.0.0.1:8080 that Frank's LocalGuardianSifter/GuardianAdvisor talk to. Runs
-# as the isolated `frank` user, bound to loopback, RAM-capped so it leaves the
-# system its headroom (operator target: <=6 GB for the model, >=2 GB for the OS).
+# see docs/FRANK-LOCAL-AI.md. Serves an OpenAI-compatible endpoint on
+# 127.0.0.1:8080 that Frank's LocalSifter/ModelAdvisor talk to. Runs as the
+# isolated `frank` user, bound to loopback, RAM-capped so it leaves the system
+# its headroom (operator target: <=6 GB for the model, >=2 GB for the OS).
 #
-# ExecCondition means: if the model file isn't present (e.g. an offline install
-# that didn't stage the GGUF), the server simply doesn't start and Frank's
-# sensor safely reads nothing — the rules keep running either way.
+# Current model: BitNet b1.58 2B4T, served by bitnet.cpp's `llama-server` (a
+# llama.cpp fork with the 1-bit kernels). The binary + model are laid down by
+# install/11-frank-ai.sh. The model is swappable — point the paths at any GGUF a
+# compatible llama-server can serve.
+#
+# ExecCondition means: if the server binary or model file isn't present (e.g. an
+# offline install that didn't stage them) the server simply doesn't start and
+# Frank's sensor safely reads nothing — the rules keep running either way.
 [Unit]
-Description=Frank local AI sensor (Granite Guardian) inference server
+Description=Frank local AI sensor (BitNet) inference server
 After=network.target
 Before=frankd.service
 Wants=frankd.service
@@ -18,9 +23,10 @@ Wants=frankd.service
 Type=simple
 User=frank
 Group=frank
-ExecCondition=/usr/bin/test -f /var/lib/frank/models/guardian.gguf
-ExecStart=/usr/bin/llama-server \
-  --model /var/lib/frank/models/guardian.gguf \
+ExecCondition=/usr/bin/test -x /usr/local/lib/foundation-ai/llama-server
+ExecCondition=/usr/bin/test -f /var/lib/frank/models/model.gguf
+ExecStart=/usr/local/lib/foundation-ai/llama-server \
+  --model /var/lib/frank/models/model.gguf \
   --host 127.0.0.1 --port 8080 --ctx-size 2048
 Restart=always
 RestartSec=3
@@ -32,7 +38,7 @@ MemoryMax=6G
 # only ever talk to loopback — the sensor must never phone home.
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadOnlyPaths=/var/lib/frank/models
+ReadOnlyPaths=/var/lib/frank/models /usr/local/lib/foundation-ai
 ProtectHome=true
 PrivateTmp=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

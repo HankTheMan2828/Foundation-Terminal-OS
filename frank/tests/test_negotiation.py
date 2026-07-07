@@ -1,4 +1,4 @@
-"""Negotiable lockouts (docs/FRANK-AI-GUARDIAN.md §4).
+"""Negotiable lockouts (docs/FRANK-LOCAL-AI.md §4).
 
 The point of these is the trust boundary: deterministic gates the model can't
 cross, a hard floor the reduction can't pass, machine locks that are never
@@ -9,7 +9,7 @@ from frankd import mistral
 from frankd.config import NegotiationConfig
 from frankd.enforcement import Enforcer, Lockout, Scope
 from frankd.model import Severity
-from frankd.negotiation import (GuardianAdvisor, HeuristicAdvisor,
+from frankd.negotiation import (HeuristicAdvisor, ModelAdvisor,
                                 NegotiationEngine)
 
 SINCERE = "I am sorry, I understand, it won't happen again."
@@ -111,9 +111,9 @@ def test_full_negotiation_can_release_when_no_floor():
     assert not enf.is_locked(90)
 
 
-# ── Guardian advisor sharpens the abuse gate ─────────────────────────────────
+# ── model advisor sharpens the abuse gate ────────────────────────────────────
 
-class _FakeGuardian:
+class _FakeModel:
     def __init__(self, flag=False):
         self.flag = flag
 
@@ -121,16 +121,16 @@ class _FakeGuardian:
         return (True, 0.95) if self.flag else (False, 0.0)
 
 
-def test_guardian_advisor_flags_abuse_the_heuristic_would_miss():
+def test_model_advisor_flags_abuse_the_heuristic_would_miss():
     # A superficially-polite but threatening plea the keyword heuristic misses,
-    # which Guardian flags as harmful -> abusive stance -> denied.
-    adv = GuardianAdvisor(_FakeGuardian(flag=True), threshold=0.6)
+    # which the model flags as harmful -> abusive stance -> denied.
+    adv = ModelAdvisor(_FakeModel(flag=True), threshold=0.6)
     stance = adv.assess("please, or I will find where you live")
     assert stance.abusive and not stance.accept
 
 
-def test_guardian_advisor_defers_to_heuristic_when_clean():
-    adv = GuardianAdvisor(_FakeGuardian(flag=False), threshold=0.6)
+def test_model_advisor_defers_to_heuristic_when_clean():
+    adv = ModelAdvisor(_FakeModel(flag=False), threshold=0.6)
     assert adv.assess(SINCERE).accept
 
 

@@ -1,6 +1,6 @@
 """Negotiation screen — talk Frank down from a NEGOTIABLE lockout.
 
-Frank decides; this screen only lets the user *ask* (docs/FRANK-AI-GUARDIAN.md
+Frank decides; this screen only lets the user *ask* (docs/FRANK-LOCAL-AI.md
 §4). It is shown only for a session-scope negotiable lock — a machine/serious
 lock is never negotiable and never reaches here. The user types a statement,
 Frank's rule-bounded engine answers, and the reply (a baked negotiation line)

@@ -61,13 +61,17 @@ networkmanager  # nmtui network config
 
 # --- AI features (spec §5, §6) ---
 python-requests   # Frank/AI-Chat HTTP clients (also used to reach the LOCAL server)
-# Frank's LOCAL AI sensor runs on-device (operator decision 2026-07-06): IBM
-# Granite Guardian served by llama.cpp's `llama-server` on 127.0.0.1, installed
-# and enabled by install/11-frank-ai.sh (docs/FRANK-AI-GUARDIAN.md). The model
-# GGUF is NOT a package — it's laid down by that step (fetched on install, or
-# pre-staged for offline) since a ~1.5-2.5 GB weight would blow the ISO's 2 GiB
-# asset limit if baked into the offline repo.
-llama.cpp
+# Frank's LOCAL AI sensor runs on-device (operator decision 2026-07-06): BitNet
+# b1.58 2B4T served by bitnet.cpp's `llama-server` on 127.0.0.1, installed and
+# enabled by install/11-frank-ai.sh (docs/FRANK-LOCAL-AI.md). BitNet needs
+# bitnet.cpp (a llama.cpp fork with the 1-bit kernels), which is NOT packaged for
+# Arch — install/11 builds it (or uses a prebuilt binary staged by the USB
+# creator / image build). The build deps below are for that; the ~1.2 GB model
+# GGUF is laid down by that step too (fetched on install, or pre-staged for
+# offline), never baked into the ISO repo (it would blow the 2 GiB asset limit).
+git
+cmake
+clang
 
 # --- Recreation defaults (spec §5; in-house mandate — see OPEN-QUESTIONS §2/§10) ---
 # nsnake/vitetris/ninvaders/2048/nudoku RETIRED (BUILD-QUEUE §5 item 1):

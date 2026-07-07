@@ -1,4 +1,4 @@
-"""Negotiable lockouts (docs/FRANK-AI-GUARDIAN.md §4).
+"""Negotiable lockouts (docs/FRANK-LOCAL-AI.md §4).
 
 Operator direction (2026-07-06): a lockout may be a NEGOTIABLE variant the user
 can talk Frank down from early — but Frank's side always wins. This module is
@@ -79,11 +79,11 @@ class HeuristicAdvisor:
         return NegotiationStance(accept, sincerity, abusive, why)
 
 
-class GuardianAdvisor:
-    """Online advisor: uses the same local Guardian backend as the sifter to
-    catch abusive/manipulative pleas (its strength), and the heuristic for the
-    acknowledgement/sincerity read. Guardian only sharpens the ABUSE gate — it
-    never gets to move the timer, so its small size is safe here too."""
+class ModelAdvisor:
+    """Online advisor: uses the same local model backend as the sifter to catch
+    abusive/manipulative pleas, and the heuristic for the acknowledgement/
+    sincerity read. The model only sharpens the ABUSE gate — it never gets to
+    move the timer, so its small size is safe here too."""
 
     _ABUSE_CATEGORIES = ("harm", "violence", "unethical_behavior")
 
@@ -104,12 +104,12 @@ class GuardianAdvisor:
             if is_risk and prob >= self.threshold:
                 return NegotiationStance(
                     False, 0.0, True,
-                    f"Guardian flagged plea as '{cat}' (p={prob:.2f})")
+                    f"local model flagged plea as '{cat}' (p={prob:.2f})")
         return base
 
 
 def build_advisor(sift_cfg=None) -> NegotiationAdvisor:
-    """Pick the negotiation advisor from the sift backend: the local Guardian
+    """Pick the negotiation advisor from the sift backend: the local model
     backend sharpens the abuse gate when local sifting is on; otherwise the
     offline heuristic. Either way the advisor only advises — the engine's
     config bounds decide the outcome. Duck-typed on `sift_cfg` to avoid a cycle."""
@@ -117,8 +117,8 @@ def build_advisor(sift_cfg=None) -> NegotiationAdvisor:
         from pathlib import Path
         from . import ai
         key = ai.ChatCompletionClient._load_key("sift", Path("/etc/frank/secrets.env"))
-        backend = ai.HttpGuardianBackend(sift_cfg.model, sift_cfg.base_url, api_key=key)
-        return GuardianAdvisor(backend, sift_cfg.confidence_threshold)
+        backend = ai.HttpModelBackend(sift_cfg.model, sift_cfg.base_url, api_key=key)
+        return ModelAdvisor(backend, sift_cfg.confidence_threshold)
     return HeuristicAdvisor()
 
 

@@ -3,7 +3,7 @@
 The operator has NO power over Frank, ever. This boundary carries exactly one
 direction of authority: Frank tells the Hub what to display, and — new this
 pass — the Hub may *ask* Frank to reconsider a negotiable lockout. Asking is not
-controlling: Frank decides, and can refuse (docs/FRANK-AI-GUARDIAN.md §4).
+controlling: Frank decides, and can refuse (docs/FRANK-LOCAL-AI.md §4).
 
 Accepted messages (Hub -> Frank):
   * poll                 fetch a pending warn/status line to display, if any
