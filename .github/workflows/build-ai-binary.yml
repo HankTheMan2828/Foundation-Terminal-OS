@@ -56,6 +56,13 @@ jobs:
           set -e
           git clone --depth 1 --recursive https://github.com/microsoft/BitNet bitnet
           cd bitnet
+          # Upstream const-correctness bug: src/ggml-bitnet-mad.cpp:811 inits a
+          # non-const int8_t* from a const pointer, which newer clang rejects as
+          # an error (its sibling function ~line 906 already uses const). Patch
+          # it — the ^whitespace anchor means it can only match the non-const
+          # line, never the already-const one, and it's a no-op if fixed upstream.
+          sed -i -E 's/^( +)int8_t \* y_col = y \+ col \* by;/\1const int8_t * y_col = y + col * by;/' \
+            src/ggml-bitnet-mad.cpp
           pip3 install --break-system-packages -r requirements.txt \
             || pip3 install -r requirements.txt || true
           # Pin the same 2B4T weight the OS ships — the i2_s kernels are generated
