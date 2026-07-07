@@ -1,0 +1,83 @@
+# Builds Frank's LOCAL AI server binary — bitnet.cpp's `llama-server` for BitNet
+# b1.58 2B4T (i2_s) — and attaches it to a release as
+# foundation-ai-llama-server-x86_64. The USB creator stages it beside the model,
+# so a fully-offline install has a working AI with zero on-target building
+# (docs/FRANK-LOCAL-AI.md).
+#
+# Separate from build-iso.yml on purpose: bitnet.cpp's build is finicky, so this
+# is independently re-runnable via the "Run workflow" button (workflow_dispatch)
+# — pick a release tag to attach to — without rebuilding the (slow) ISO.
+#
+# Built on ubuntu (older glibc) so the binary also runs on the Arch target
+# (newer glibc, forward-compatible). NOTE: bitnet.cpp REQUIRES clang for its
+# 1-bit kernels — building with gcc fails at compile (CC/CXX below).
+name: build-ai-binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the binary to (blank = latest TerminalOS-v*)"
+        required: false
+  push:
+    tags: ["TerminalOS-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  bitnet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the target release tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            latest=$(curl -fsSL "https://api.github.com/repos/${{ github.repository }}/releases" \
+              | jq -r '[.[] | .tag_name | select(startswith("TerminalOS-v"))][0]')
+            echo "tag=$latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake build-essential git python3 python3-pip jq
+          pip3 install --break-system-packages huggingface_hub || pip3 install huggingface_hub
+
+      - name: Build bitnet.cpp llama-server (BitNet b1.58 2B4T, i2_s)
+        env:
+          CC: clang            # bitnet.cpp's 1-bit kernels need clang, not gcc
+          CXX: clang++
+        run: |
+          set -e
+          git clone --depth 1 --recursive https://github.com/microsoft/BitNet bitnet
+          cd bitnet
+          pip3 install --break-system-packages -r requirements.txt \
+            || pip3 install -r requirements.txt || true
+          # Pin the same 2B4T weight the OS ships — the i2_s kernels are generated
+          # for this model's dimensions.
+          python3 -c "from huggingface_hub import snapshot_download; \
+            snapshot_download('microsoft/BitNet-b1.58-2B-4T-gguf', local_dir='models/BitNet-b1.58-2B-4T')"
+          # On any failure, surface the compile log so the run is diagnosable.
+          python3 setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s || {
+            echo '=== logs/compile.log ==='; cat logs/compile.log 2>/dev/null || true; exit 1; }
+          test -x build/bin/llama-server
+          install -m 0755 build/bin/llama-server \
+            "$GITHUB_WORKSPACE/foundation-ai-llama-server-x86_64"
+
+      - name: Checksum
+        run: |
+          sha256sum foundation-ai-llama-server-x86_64 \
+            > foundation-ai-llama-server-x86_64.sha256
+
+      - name: Attach binary to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            foundation-ai-llama-server-x86_64
+            foundation-ai-llama-server-x86_64.sha256
