@@ -90,6 +90,15 @@ def _provision_system_user(username: str, tier: Tier) -> None:
     # Fixed per-tier allotment (docs/USERS.md). Block quota only; soft=hard —
     # "a set amount of storage, no more no less".
     blocks = TIERS[tier].quota_bytes // 1024
+    if shutil.which("setquota") is None:
+        # quota-tools isn't on the image yet (TODO(hardware) — also needs a
+        # quota-enabled /home). Absent binary makes subprocess.run raise
+        # FileNotFoundError, which is NOT a CalledProcessError, so it would
+        # escape cmd_create and crash a registration whose account is already
+        # written. Report and skip, same as the docstring's non-fatal contract.
+        print("warning: quota not applied (setquota not installed)",
+              file=sys.stderr)
+        return
     res = subprocess.run(
         ["setquota", "-u", username, str(blocks), str(blocks), "0", "0", "/home"],
         capture_output=True, text=True)
