@@ -176,7 +176,13 @@ class FrankConfig:
     sift: SiftConfig = field(default_factory=SiftConfig)
     negotiation: NegotiationConfig = field(default_factory=NegotiationConfig)
     commentary: CommentaryConfig = field(default_factory=CommentaryConfig)
-    ledger_path: Path = Path("/var/lib/frank/ledger.timestamps")
+    # The visible ledger is the ONE Frank output the operator is meant to read
+    # (timestamps only, spec §6). It therefore lives under /run/frank (0755,
+    # operator-traversable) beside login.locks — NOT in /var/lib/frank, which is
+    # 0700 frank-only and would make the ledger unreadable to the operator's Hub.
+    # Tradeoff: /run is tmpfs, so it clears on reboot as well as the daily reset;
+    # the persistent forensic record is incidents.db (frank-only), not this.
+    ledger_path: Path = Path("/run/frank/ledger.timestamps")
     incidents_path: Path = Path("/var/lib/frank/incidents.db")
     events_path: Path = Path("/var/lib/frank/events.log")
     triage_path: Path = Path("/var/lib/frank/triage.jsonl")

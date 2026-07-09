@@ -28,6 +28,16 @@ class TimestampLedger:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.touch(exist_ok=True)
+        # The ledger is the one Frank output the operator is MEANT to read
+        # (timestamps only, §6). Make the file world-readable so the Hub — which
+        # runs as the operator, not frank — can actually display it. This leaks
+        # nothing: it is timestamps and nothing else; the detail store
+        # (incidents.db) stays 0600 frank-only. Best-effort: a chmod failure
+        # (e.g. off-target dev on a filesystem without POSIX modes) is harmless.
+        try:
+            self.path.chmod(0o644)
+        except OSError:
+            pass
 
     def record(self, ts: float | None = None) -> str:
         """Append a single timestamp for a logged action. Returns the line."""

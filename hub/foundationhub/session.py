@@ -23,8 +23,10 @@ FRANK_SOCK = os.environ.get("FRANK_HUB_SOCK", "/run/frank/hub.sock")
 # where the journal can't be read. No finding detail — status tag + traceback.
 FRANK_HEALTH = Path(os.environ.get("FRANK_HEALTH", "/run/frank/frankd.health"))
 # Ledger: timestamps ONLY (spec §6). The Hub can read this; it can NOT read
-# Frank's detail store, which is frank:frank 0600 and never exposed.
-LEDGER_PATH = os.environ.get("FRANK_LEDGER", "/var/lib/frank/ledger.timestamps")
+# Frank's detail store, which is frank:frank 0600 and never exposed. It lives in
+# /run/frank (0755, operator-traversable) — NOT /var/lib/frank (0700 frank-only),
+# where the operator's Hub couldn't reach it and the ledger always looked empty.
+LEDGER_PATH = os.environ.get("FRANK_LEDGER", "/run/frank/ledger.timestamps")
 # Frank's public login-lock summary: usernames + expiry timestamps only, so
 # the login screen can refuse a locked-out account. No detail, same philosophy
 # as the timestamp ledger (docs/USERS.md).

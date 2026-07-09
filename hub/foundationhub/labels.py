@@ -52,10 +52,19 @@ STATUS = "SYSTEM STATUS"        # now a read-only readout reached from inside SE
 LOGS = "LOGS"
 POWER = "POWER"
 
-# Assistant (AI Chat) is built but hidden from the Hub for now (feedback #8):
-# the screen code stays, it's just off the menu. Re-add ASSISTANT to
-# screens/__init__.build_home to bring it back.
+# Assistant (AI Chat) — an on-demand, on-device general assistant (spec §5).
+# It talks to the SAME local model server Frank uses, but is a separate trust
+# domain with no access to Frank's data/verdicts (see aiclient.py). Back on the
+# Hub menu (2026-07-09) now that it actually talks to the local model.
 ASSISTANT = "ASSISTANT"
+ASSISTANT_SUBTITLE = "on-device AI — local model, separate from the overseer"
+ASSISTANT_INTRO = "On-device assistant. Type a message and press Enter."
+ASSISTANT_PROMPT = "You"
+ASSISTANT_OFFLINE = (
+    "The local AI model is not reachable. It is served on 127.0.0.1:8080 by "
+    "frank-ai.service; on a fresh or offline install the model may not be "
+    "staged yet (docs/FRANK-LOCAL-AI.md). Everything else in the Hub works.")
+ASSISTANT_HINT = "type   ↵ send   Esc back"
 
 # ── Programs (order: Notes · Notes Search · Files · Media · Monitor) ──────────
 NOTES = "NOTES"                 # the single notes home (feedback #8)

@@ -15,6 +15,7 @@ from __future__ import annotations
 from .. import labels
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
+from .aichat import AIChatScreen
 from .files import FileManagerScreen
 from .monitor import MonitorScreen
 from .notes import NotesScreen, NotesSearchScreen
@@ -22,6 +23,9 @@ from .notes import NotesScreen, NotesSearchScreen
 
 def screen():
     items = [
+        # On-device AI assistant (spec §5) — local model, separate from Frank.
+        MenuItem(labels.ASSISTANT, lambda a: AIChatScreen(),
+                 hint="on-device AI"),
         # Notes leads (feedback #8): the single notes home (Work + Personal),
         # with its own search program right beside it.
         MenuItem(labels.NOTES, lambda a: NotesScreen(), hint="in-house"),

@@ -49,9 +49,18 @@ class IPCServer:
             self.path.unlink()
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.bind(str(self.path))
-        # Group-restricted: the operator's group may connect to RECEIVE warnings.
-        # Connecting confers no authority to change anything (see _handle).
-        os.chmod(self.path, 0o660)
+        # World-connectable (0666) ON PURPOSE. The socket is owned frank:frank,
+        # and the operator is deliberately NOT in group `frank` (group frank can
+        # read /etc/frank config — that would break isolation). A 0660 socket was
+        # therefore unreachable by the operator's Hub, so it could never receive
+        # warnings and System Status always showed Frank "not functioning" even
+        # when the daemon was perfectly healthy. Opening the socket is safe: the
+        # ONLY messages accepted are `poll` (read-only display) and `negotiate`
+        # (a plea Frank decides on, bounded, attributed to the active-user file).
+        # Neither can tune, disable, or influence Frank — connecting confers no
+        # authority whatsoever (see _handle). Isolation lives in the config/state
+        # file modes and the absence of any mutating command, not in this bit.
+        os.chmod(self.path, 0o666)
         self._sock.listen(8)
         self._sock.settimeout(0.5)
         self._thread = threading.Thread(target=self._serve, daemon=True)

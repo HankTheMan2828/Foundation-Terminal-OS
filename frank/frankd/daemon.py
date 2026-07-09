@@ -165,7 +165,12 @@ class Frank:
     def _handle_finding(self, finding, now: float) -> None:
         reaction = self.enforcers.process(finding, now)
         # Every logged action gets a timestamp in the visible ledger (§6).
-        self.ledger.record(now)
+        # ACTIVITY actions are already stamped as they arrive in tick(), so a
+        # flagged one isn't double-stamped here; this covers findings from the
+        # other sources (shell/network/process/overseer) so a flagged event
+        # still lands on the ledger even though it wasn't a Hub action.
+        if finding.event.source is not Source.ACTIVITY:
+            self.ledger.record(now)
         commentary = ""
         # Commentary only on user-facing reactions (flagged events), never on
         # silent observations — keeps AI cost down (spec §6).
@@ -228,6 +233,15 @@ class Frank:
         for event in sources.collect(self._src_state):
             if event.source in _LOGGABLE_SOURCES:
                 self.eventlog.record(event)   # the "base logs" triage/overseer sift
+            # The visible ledger (§6) shows the operator WHEN things happened —
+            # nothing else. Every user ACTION gets a timestamp: the Hub's
+            # per-action feed (programs opened, notes/screens/chat) is the whole
+            # of "everything the user does" on this OS, since the TUI is the
+            # shell. Without this the ledger only ever showed FLAGGED events
+            # (recorded in _handle_finding), so on a normal day it looked dead.
+            # Process/network ticks are machine noise, not user actions — excluded.
+            if event.source is Source.ACTIVITY:
+                self.ledger.record(event.ts)
             for finding in self.engine.classify(event):
                 self._handle_finding(finding, now)
         self._maybe_run_triage(now)
