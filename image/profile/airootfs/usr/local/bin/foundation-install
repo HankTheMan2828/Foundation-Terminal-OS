@@ -184,9 +184,15 @@ do_update() {
         "$REPO/profiles/$profile/packages.txt")
   fi
   if [[ -f "$PKGREPO/foundation.db" ]]; then
-    mkdir -p "$MNT/run/foundation-pkgs"
-    mount --bind "$PKGREPO" "$MNT/run/foundation-pkgs"
-    cat > "$MNT/tmp/foundation-update-pacman.conf" <<'EOF'
+    # arch-chroot mounts a fresh tmpfs over the target's /tmp and bind-mounts
+    # the host's /run over the target's /run, so anything staged there before
+    # the chroot is invisible inside it (that shadowing is what made pacman
+    # report "/tmp/foundation-update-pacman.conf could not be read"). Stage the
+    # repo bind and the pacman config under /var, which arch-chroot leaves
+    # alone, so pacman can actually read both from inside the chroot.
+    mkdir -p "$MNT/var/cache/foundation-pkgs"
+    mount --bind "$PKGREPO" "$MNT/var/cache/foundation-pkgs"
+    cat > "$MNT/var/tmp/foundation-update-pacman.conf" <<'EOF'
 [options]
 Architecture = x86_64
 # The ISO's embedded mirror, bind-mounted into the target for the upgrade;
@@ -196,15 +202,15 @@ SigLevel = Never
 DisableSandbox
 
 [foundation]
-Server = file:///run/foundation-pkgs
+Server = file:///var/cache/foundation-pkgs
 EOF
     # One transaction: upgrade everything installed AND pull in packages this
     # release newly added to packages.txt.
     arch-chroot "$MNT" pacman -Syu --needed --noconfirm \
-      --config /tmp/foundation-update-pacman.conf "${pkgs[@]}"
-    umount "$MNT/run/foundation-pkgs"
-    rmdir "$MNT/run/foundation-pkgs" 2>/dev/null || true
-    rm -f "$MNT/tmp/foundation-update-pacman.conf"
+      --config /var/tmp/foundation-update-pacman.conf "${pkgs[@]}"
+    umount "$MNT/var/cache/foundation-pkgs"
+    rmdir "$MNT/var/cache/foundation-pkgs" 2>/dev/null || true
+    rm -f "$MNT/var/tmp/foundation-update-pacman.conf"
   else
     c_warn "no embedded package repo on this ISO — skipping package upgrade"
     c_warn "(OS payload still refreshes; packages stay as they are)"
