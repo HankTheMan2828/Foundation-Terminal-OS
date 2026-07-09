@@ -1,26 +1,36 @@
 """Notes — the operator's writing space (spec §5, BUILD-QUEUE §1, feedback #8).
 
-One home, reached from Programs, split by *purpose* into two sections on a
-single page — **Work** first, **Personal** last. Each section has:
+One home, reached from Programs. The old stacked two-section page was mush —
+`create new note` and the dated feature both looked like notes and nobody could
+tell where their notes actually were. This is the reworked layout (operator
+whiteboard, 2026-07-09):
 
-  * plain notes, named on creation (the `--- create new note ---` row), and
-  * one dated feature: Work gets timestamped **Dated Entries** (several per
-    day); Personal gets the one-page-per-day **Dated Journal**.
+  * a **WORK | PERSONAL** tab at the top — one switch, one section shown at a
+    time (`Tab` or `←/→` flips between them);
+  * a single numbered **AVAILABLE NOTES** list for the current section, each row
+    showing when the note was last edited (time · day · full date);
+  * a one-line **command area** you drive by typing, then `↵`:
+        <number>   open that note
+        n          create a new (named) note
+        j          open/create today's Journal page for this section
+        x 2-4      delete notes 2 through 4   (also `x 2 5 7`) — asks to confirm
+        q / Esc    leave Notes
 
 Each section is its own folder under the account's data dir (`work/`,
 `personal/`), so the File Manager — rooted at the same dir — shows them as two
-clean folders (feedback #8). Everything opens in the one in-house editor
-(`foundationhub.editor`); rename lives in the editor, delete in the File
-Manager. Search is a separate program (`NotesSearchScreen`).
+clean folders. Journal pages live in each section's `journal/` subfolder (one
+page per day) but still appear inline in the numbered list. Everything opens in
+the one in-house editor (`foundationhub.editor`); rename lives in the editor.
 
-NOT exempt from Frank — the spec dropped the exempt/private zone (§5, §9).
-These are ordinary `.md` files under the operator's data dir; Frank's
-filesystem watcher sees them like anything else.
+NOT exempt from Frank — these are ordinary `.md` files under the operator's data
+dir; Frank's filesystem watcher sees them like anything else.
 """
 from __future__ import annotations
 
+import curses
 import datetime as _dt
 import os
+import re
 from pathlib import Path
 
 from .. import labels, notesdb, session, theme
@@ -42,253 +52,266 @@ def user_dir() -> Path:
     return DATA
 
 
-def _open_note(path: Path, *, title: str, create_text: str = "",
-                title_for=None) -> EditorScreen:
-    return EditorScreen(path, title=title, create_text=create_text,
-                        title_for=title_for)
+# ── helpers shared by the screen ─────────────────────────────────────────────
+def _stamp(path: Path) -> str:
+    """The last-edited stamp shown on each row: `12:39  Tuesday  07/08/2026`
+    (time · day · full date, per the whiteboard). Empty if the file is gone."""
+    try:
+        dt = _dt.datetime.fromtimestamp(path.stat().st_mtime)
+    except OSError:
+        return ""
+    return dt.strftime("%H:%M  %A  %m/%d/%Y")
 
 
-def _today_screen(section: str) -> EditorScreen:
-    """Today's journal page for a section. The dated header is seeded in the
-    buffer only — the file appears on disk when the operator saves, not before."""
-    today = _dt.date.today().isoformat()
-    path = notesdb.journal_dir(user_dir(), section) / f"{today}.md"
-    return _open_note(path, title=f"{labels.NOTE_JOURNAL} — {today}",
-                      create_text=f"# {today}\n\n",
-                      title_for=lambda p: f"{labels.NOTE_JOURNAL} — {p.stem}")
+def _title_of(path: Path) -> str:
+    """Editor header for an opened note: journal pages keep a JOURNAL prefix so
+    a dated stem doesn't read as a random note; plain notes use their name."""
+    if notesdb.is_journal(path):
+        return f"{labels.NOTE_JOURNAL} — {path.stem}"
+    return path.stem
 
 
-def _new_dated_entry(section: str) -> EditorScreen:
-    """A fresh dated entry (feedback #7), timestamped to the minute — unlike the
-    journal's one-file-per-day, several can exist for the same day. Writes into
-    the section's `dated/` subfolder."""
-    now = _dt.datetime.now()
-    stamp = now.strftime("%Y-%m-%d-%H%M")   # sortable filename, unaffected by display format
-    header = (f"{now.strftime('%A')} - {now.strftime('%m/%d/%Y')} - "
-              f"{int(now.strftime('%I'))}:{now.strftime('%M')} - "
-              f"{now.strftime('%p').lower()}")
-    path = notesdb.dated_dir(user_dir(), section) / f"{stamp}.md"
-    return _open_note(path, title=f"{labels.NOTES_DATED} — {header}",
-                      create_text=f"# {header}\n\n",
-                      title_for=lambda p: f"{labels.NOTES_DATED} — {p.stem}")
+def _title_for(path: Path):
+    """Recompute the header after an in-editor rename, mirroring `_title_of`."""
+    if notesdb.is_journal(path):
+        return f"{labels.NOTE_JOURNAL} — {path.stem}"
+    return path.stem
 
 
-class _ListScreen(Screen):
-    """Shared shape for the journal/dated browsers: a menu rebuilt from disk
-    on every draw (draws only happen per keypress; a listdir is cheap and the
-    list can never go stale after an editor pops)."""
-
-    def __init__(self):
-        self.menu = Menu([])
-        self._names: tuple[str, ...] | None = None
-
-    def _paths(self) -> list[Path]:  # override
-        return []
-
-    def _items(self, paths: list[Path]) -> list[MenuItem]:  # override
-        return []
-
-    def _refresh(self) -> None:
-        paths = self._paths()
-        names = tuple(p.name for p in paths)
-        if names != self._names:
-            self._names = names
-            index = self.menu.index
-            self.menu = Menu(self._items(paths))
-            self.menu.index = min(index, max(0, len(self.menu.items) - 1))
-
-    def draw(self, win, top, left):
-        self._refresh()
-        self.menu.draw(win, top, left)
-
-    def handle_key(self, key, app):
-        self._refresh()
-        result = self.menu.handle_key(key, app)
-        if result is not None:
-            return result
-        if key in KEYS_BACK:
-            return POP
-        return None
+def _open_note(path: Path, *, create_text: str = "") -> EditorScreen:
+    return EditorScreen(path, title=_title_of(path), create_text=create_text,
+                        title_for=_title_for)
 
 
-class JournalScreen(_ListScreen):
-    """Personal DATED JOURNAL: one page per day. Today's page on top; if it
-    already exists, selecting it says so and opens it rather than pretending
-    it's new (feedback #8). Past pages follow, newest first."""
-
-    title = labels.NOTE_JOURNAL
-    subtitle = labels.NOTE_JOURNAL_SUBTITLE
-
-    def __init__(self, section: str = notesdb.SECTION_PERSONAL):
-        super().__init__()
-        self.section = section
-
-    def _paths(self) -> list[Path]:
-        return notesdb.list_journal(user_dir(), self.section)
-
-    def _items(self, paths: list[Path]) -> list[MenuItem]:
-        today = _dt.date.today().isoformat()
-        items = [MenuItem(labels.NOTE_TODAY, self._open_today, hint=today)]
-        past = [p for p in paths if p.stem != today]
-        if past:
-            items.append(MenuItem("", enabled=False))
-        for p in past:
-            items.append(MenuItem(
-                p.stem,
-                lambda a, p=p: _open_note(
-                    p, title=f"{labels.NOTE_JOURNAL} — {p.stem}",
-                    title_for=lambda pp: f"{labels.NOTE_JOURNAL} — {pp.stem}"),
-                hint=" ".join(f"#{t}" for t in notesdb.note_tags(p)[:4])))
-        return items
-
-    def _open_today(self, app):
-        today = _dt.date.today().isoformat()
-        path = notesdb.journal_dir(user_dir(), self.section) / f"{today}.md"
-        if path.exists():
-            app.status_message = labels.NOTE_TODAY_EXISTS
-        return _today_screen(self.section)
+def _add(win, y: int, x: int, text: str, attr: int) -> None:
+    """addstr that swallows the edge-of-window curses error, like ui.py does."""
+    try:
+        win.addstr(y, x, text, attr)
+    except curses.error:
+        pass
 
 
-class DatedAreaScreen(_ListScreen):
-    """Work DATED ENTRIES (feedback #7): timestamped to the minute, so several
-    entries can exist for the same day — unlike `JournalScreen`, which is one
-    file per day. Reads/writes the section's `dated/` subfolder."""
-
-    title = labels.NOTES_DATED
-    subtitle = labels.NOTES_DATED_SUBTITLE
-
-    def __init__(self, section: str = notesdb.SECTION_WORK):
-        super().__init__()
-        self.section = section
-
-    def _paths(self) -> list[Path]:
-        return notesdb.list_dated(user_dir(), self.section)
-
-    def _items(self, paths: list[Path]) -> list[MenuItem]:
-        items = [MenuItem(labels.NOTES_DATED_NEW,
-                          lambda a: _new_dated_entry(self.section))]
-        if not paths:
-            items.append(MenuItem(labels.NOTES_DATED_EMPTY, enabled=False))
-        else:
-            items.append(MenuItem("", enabled=False))
-        for p in paths:
-            items.append(MenuItem(
-                p.stem,
-                lambda a, p=p: _open_note(
-                    p, title=f"{labels.NOTES_DATED} — {p.stem}",
-                    title_for=lambda pp: f"{labels.NOTES_DATED} — {pp.stem}"),
-                hint=" ".join(f"#{t}" for t in notesdb.note_tags(p)[:4])))
-        return items
+def _parse_indices(spec: str) -> list[int]:
+    """Turn a delete spec (`2-4`, `2 5 7`, `2-4,6`) into a list of 1-based note
+    numbers. Ranges expand inclusively; junk tokens are ignored, never fatal."""
+    out: list[int] = []
+    for tok in re.split(r"[\s,]+", spec.strip()):
+        if not tok:
+            continue
+        if "-" in tok:
+            lo_s, _, hi_s = tok.partition("-")
+            if lo_s.isdigit() and hi_s.isdigit():
+                lo, hi = int(lo_s), int(hi_s)
+                if lo > hi:
+                    lo, hi = hi, lo
+                out.extend(range(lo, hi + 1))
+        elif tok.isdigit():
+            out.append(int(tok))
+    return out
 
 
 class NotesScreen(Screen):
-    """The one notes home (feedback #8): a single page with two purpose
-    sections — Work first, Personal last, set apart by a blank gap. Each
-    section pins `--- create new note ---` and its dated feature above the
-    section's plain notes. `create new note` asks for a NAME, then drops into
-    the editor (the file lands on SAVE, like every other note)."""
+    """The one notes home: a WORK | PERSONAL tab over a single numbered list,
+    driven by a typed command line (open by number, `n` new, `j` journal,
+    `x` delete, `q`/Esc quit). See the module docstring for the full grammar."""
 
     title = labels.NOTES
     subtitle = labels.NOTES_SUBTITLE
 
-    _LIST, _NEW = range(2)
+    _LIST, _NEW, _CONFIRM = range(3)
 
     def __init__(self):
         notesdb.migrate_legacy(user_dir())
-        self.menu = Menu([])
-        self._sig: tuple | None = None
+        self.section = notesdb.SECTION_WORK
+        self.paths: list[Path] = []       # current section, as last drawn
         self.mode = self._LIST
-        self.edit = LineEdit(limit=48)
+        self.cmd = LineEdit(limit=32)     # the command line (LIST mode)
+        self.edit = LineEdit(limit=48)    # the new-note name (NEW mode)
+        self.pending: list[Path] = []     # notes awaiting a delete confirm
         self.message = ""
-        self._new_section = notesdb.SECTION_WORK
+        self._scroll = 0                  # first visible row when the list overflows
 
-    # ── item building ─────────────────────────────────────────────────────────
-    def _section_rows(self, section: str, header: str,
-                       dated_row: MenuItem) -> list[MenuItem]:
-        rows = [
-            MenuItem(f"— {header} —", enabled=False),
-            MenuItem("", enabled=False),
-            MenuItem(labels.NOTES_NEW,
-                     lambda a, s=section: self._begin_new(s)),
-            dated_row,
-        ]
-        paths = notesdb.list_notes(user_dir(), section)
-        if not paths:
-            rows.append(MenuItem(labels.NOTES_EMPTY, enabled=False))
-        for p in paths:
-            rows.append(MenuItem(
-                p.stem,
-                lambda a, p=p: _open_note(p, title=p.stem),
-                hint=" ".join(f"#{t}" for t in notesdb.note_tags(p)[:4])))
-        return rows
-
-    def _build(self) -> list[MenuItem]:
-        work_dated = MenuItem(labels.NOTES_DATED,
-                              lambda a: DatedAreaScreen(notesdb.SECTION_WORK),
-                              hint="timestamped, several per day")
-        personal_journal = MenuItem(labels.NOTE_JOURNAL,
-                                    lambda a: JournalScreen(notesdb.SECTION_PERSONAL),
-                                    hint="one page per day")
-        items = self._section_rows(notesdb.SECTION_WORK, labels.NOTES_WORK,
-                                    work_dated)
-        # Blank gap between the Work and Personal sections (operator ask).
-        items.append(MenuItem("", enabled=False))
-        items.append(MenuItem("", enabled=False))
-        items += self._section_rows(notesdb.SECTION_PERSONAL, labels.NOTES_PERSONAL,
-                                    personal_journal)
-        return items
-
-    def _signature(self) -> tuple:
-        return (tuple(p.name for p in notesdb.list_notes(user_dir(),
-                                                         notesdb.SECTION_WORK)),
-                tuple(p.name for p in notesdb.list_notes(user_dir(),
-                                                         notesdb.SECTION_PERSONAL)))
-
+    # ── data ────────────────────────────────────────────────────────────────
     def _refresh(self) -> None:
-        sig = self._signature()
-        if sig != self._sig:
-            self._sig = sig
-            index = self.menu.index
-            self.menu = Menu(self._build())
-            self.menu.set_index(index)
+        """Rebuild the visible list from disk. Cheap (a scandir), and drawing
+        only happens per keypress, so the numbers can never go stale."""
+        self.paths = notesdb.list_all(user_dir(), self.section)
+
+    def _toggle_section(self) -> None:
+        self.section = (notesdb.SECTION_PERSONAL
+                        if self.section == notesdb.SECTION_WORK
+                        else notesdb.SECTION_WORK)
+        self._scroll = 0
+        self.message = ""
+        self.cmd = LineEdit(limit=32)
 
     # ── drawing ───────────────────────────────────────────────────────────────
     def draw(self, win, top, left):
         self._refresh()
-        self.menu.draw(win, top, left)
         h, w = win.getmaxyx()
-        row = h - 4
+        width = max(0, w - 2 * left)
+        cmd_row = h - 3
+        msg_row = h - 4
+        self._draw_tabs(win, top, left, width)
+        _add(win, top + 2, left, labels.NOTES_AVAILABLE,
+             theme.attr(theme.PAIR_AMBER, bold=True))
+        self._draw_list(win, top + 3, left, width, msg_row - 2)
+        self._draw_prompt(win, msg_row, cmd_row, left, width)
+
+    def _draw_tabs(self, win, top, left, width):
+        x = left
+        for idx, (sec, lbl) in enumerate(
+                ((notesdb.SECTION_WORK, labels.NOTES_WORK),
+                 (notesdb.SECTION_PERSONAL, labels.NOTES_PERSONAL))):
+            if idx:
+                _add(win, top, x, "  |  ", theme.attr(theme.PAIR_DIM, dim=True))
+                x += 5
+            if sec == self.section:
+                _add(win, top, x, f"[ {lbl} ]",
+                     theme.attr(theme.PAIR_HILITE, bold=True))
+            else:
+                _add(win, top, x, f"  {lbl}  ",
+                     theme.attr(theme.PAIR_DIM, dim=True))
+            x += len(lbl) + 4
+        hint = labels.NOTES_TAB_HINT
+        _add(win, top, left + max(0, width - len(hint)), hint,
+             theme.attr(theme.PAIR_DIM, dim=True))
+
+    def _draw_list(self, win, y0, left, width, y_bottom):
+        if not self.paths:
+            _add(win, y0, left, labels.NOTES_EMPTY,
+                 theme.attr(theme.PAIR_DIM, dim=True))
+            return
+        rows = max(1, y_bottom - y0 + 1)
+        self._scroll = max(0, min(self._scroll, len(self.paths) - rows))
+        if self._scroll < 0:
+            self._scroll = 0
+        visible = self.paths[self._scroll: self._scroll + rows]
+        for i, p in enumerate(visible):
+            n = self._scroll + i + 1
+            title = p.stem
+            if notesdb.is_journal(p):
+                title = f"{title}  {labels.NOTE_JOURNAL_TAG}"
+            head = f"[{n:>2}] {title}"
+            stamp = _stamp(p)
+            gap = max(2, width - len(head) - len(stamp))
+            line = (head + " " * gap + stamp)[:width]
+            _add(win, y0 + i, left, line, theme.attr(theme.PAIR_NORMAL))
+
+    def _draw_prompt(self, win, msg_row, cmd_row, left, width):
         if self.mode == self._NEW:
-            win.addstr(row, left,
-                       f"{labels.NOTES_NAME_PROMPT} {self.edit.display()}"
-                       [: w - left - 2],
-                       theme.attr(theme.PAIR_ACCENT, bold=True))
-        elif self.message:
-            win.addstr(row, left, self.message[: w - left - 2],
-                       theme.attr(theme.PAIR_WARN, bold=True))
+            _add(win, cmd_row, left,
+                 f"{labels.NOTES_NAME_PROMPT} {self.edit.display()}"[:width],
+                 theme.attr(theme.PAIR_ACCENT, bold=True))
+            return
+        if self.mode == self._CONFIRM:
+            names = ", ".join(f"[{self.paths.index(p) + 1}] {p.stem}"
+                              for p in self.pending if p in self.paths)
+            _add(win, msg_row, left, f"delete: {names}"[:width],
+                 theme.attr(theme.PAIR_WARN))
+            _add(win, cmd_row, left,
+                 labels.NOTES_DELETE_CONFIRM.format(n=len(self.pending)),
+                 theme.attr(theme.PAIR_WARN, bold=True))
+            return
+        if self.message:
+            _add(win, msg_row, left, self.message[:width],
+                 theme.attr(theme.PAIR_WARN, bold=True))
+        _add(win, cmd_row, left,
+             f"{labels.NOTES_CMD_PROMPT} {self.cmd.display()}"[:width],
+             theme.attr(theme.PAIR_ACCENT, bold=True))
 
     def status_text(self):
         if self.mode == self._NEW:
+            return labels.REG_HINT
+        if self.mode == self._CONFIRM:
             return labels.REG_HINT
         return labels.NOTES_HINT
 
     # ── input ─────────────────────────────────────────────────────────────────
     def handle_key(self, key, app):
         self.message = ""
+        if self.mode == self._CONFIRM:
+            return self._handle_confirm(key)
         if self.mode == self._NEW:
             return self._handle_name(key)
-        self._refresh()
-        result = self.menu.handle_key(key, app)
-        if result is not None:
-            return result
-        if key in KEYS_BACK:
+        # LIST mode — the command line, plus live tab/scroll keys.
+        if key == ord("\t") or key in (curses.KEY_LEFT, curses.KEY_RIGHT):
+            self._toggle_section()
+            return None
+        if key == curses.KEY_UP:
+            self._scroll = max(0, self._scroll - 1)
+            return None
+        if key == curses.KEY_DOWN:
+            self._scroll += 1     # clamped against the list length on next draw
+            return None
+        result = self.cmd.handle(key)
+        if result == "cancel":    # Esc — leave Notes (whiteboard: same as q)
             return POP
+        if result == "submit":
+            return self._run_command()
         return None
 
-    def _begin_new(self, section: str):
-        self._new_section = section
-        self.mode = self._NEW
-        self.edit = LineEdit(limit=48)
+    def _run_command(self):
+        raw = self.cmd.value.strip()
+        self.cmd = LineEdit(limit=32)
+        if not raw:
+            return None
+        low = raw.lower()
+        if low in ("q", "quit"):
+            return POP
+        if low in ("n", "new"):
+            self.mode = self._NEW
+            self.edit = LineEdit(limit=48)
+            return None
+        if low in ("j", "journal"):
+            return self._open_journal()
+        if low[0] == "x":
+            return self._begin_delete(raw[1:])
+        if low.isdigit():
+            return self._open_number(int(low))
+        self.message = labels.NOTES_UNKNOWN
+        return None
+
+    def _open_number(self, n: int):
+        if 1 <= n <= len(self.paths):
+            return _open_note(self.paths[n - 1])
+        self.message = labels.NOTES_NO_SUCH.format(n=n)
+        return None
+
+    def _open_journal(self):
+        today = _dt.date.today().isoformat()
+        path = notesdb.journal_path(user_dir(), self.section, today)
+        if path.exists():
+            return _open_note(path)
+        return _open_note(path, create_text=f"# {today}\n\n")
+
+    def _begin_delete(self, spec: str):
+        wanted: list[Path] = []
+        for n in _parse_indices(spec):
+            if 1 <= n <= len(self.paths):
+                p = self.paths[n - 1]
+                if p not in wanted:
+                    wanted.append(p)
+        if not wanted:
+            self.message = labels.NOTES_DELETE_NONE
+            return None
+        self.pending = wanted
+        self.mode = self._CONFIRM
+        return None
+
+    def _handle_confirm(self, key):
+        if key in (ord("y"), ord("Y")):
+            count = 0
+            for p in self.pending:
+                try:
+                    p.unlink()
+                    count += 1
+                except OSError:
+                    pass
+            self.message = labels.NOTES_DELETED.format(n=count)
+        # Anything else (n / Esc / Backspace / stray key) cancels — the safe default.
+        self.pending = []
+        self.mode = self._LIST
         return None
 
     def _handle_name(self, key):
@@ -302,12 +325,12 @@ class NotesScreen(Screen):
         self.mode = self._LIST
         if not name:
             return None
-        target = notesdb.note_path(user_dir(), self._new_section, name)
+        target = notesdb.note_path(user_dir(), self.section, name)
         if target.exists():
             # Name collides with an existing note: open it rather than dead-end.
-            return _open_note(target, title=target.stem)
+            return _open_note(target)
         # New note: the seeded header lives in the buffer; SAVE creates the file.
-        return _open_note(target, title=name, create_text=f"# {name}\n\n")
+        return _open_note(target, create_text=f"# {name}\n\n")
 
 
 class NotesSearchScreen(Screen):
@@ -389,7 +412,7 @@ class NotesSearchScreen(Screen):
         self.searched = True
         self.menu = Menu([
             MenuItem(hit.path.stem,
-                     lambda a, h=hit: _open_note(h.path, title=h.path.stem),
+                     lambda a, h=hit: _open_note(h.path),
                      hint=(f"[{hit.section}] {hit.snippet}")[:40])
             for hit in self.hits])
         if self.hits:

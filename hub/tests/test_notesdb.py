@@ -4,7 +4,8 @@ from pathlib import Path
 
 from foundationhub import notesdb
 from foundationhub.notesdb import (SECTION_PERSONAL, SECTION_WORK, SECTIONS,
-                                   extract_tags, list_dated, list_journal,
+                                   extract_tags, is_journal, journal_path,
+                                   list_all, list_dated, list_journal,
                                    list_notes, migrate_legacy, note_path,
                                    parse_query, search, slugify)
 
@@ -140,6 +141,47 @@ def test_listing_missing_dirs_is_empty(tmp_path):
     assert list_notes(tmp_path, SECTION_WORK) == []
     assert list_journal(tmp_path, SECTION_PERSONAL) == []
     assert list_dated(tmp_path, SECTION_WORK) == []
+    assert list_all(tmp_path, SECTION_WORK) == []
+
+
+# ── unified list (the reworked Notes screen) ─────────────────────────────────
+
+def test_journal_path_lands_in_section_journal_dir(tmp_path):
+    assert journal_path(tmp_path, SECTION_PERSONAL, "2026-07-09") \
+        == tmp_path / SECTION_PERSONAL / "journal" / "2026-07-09.md"
+
+
+def test_is_journal_distinguishes_journal_pages_from_plain_notes(tmp_path):
+    root = _make_tree(tmp_path)
+    (note,) = list_notes(root, SECTION_PERSONAL)          # diary.md
+    (page, _older) = list_journal(root, SECTION_PERSONAL)  # newest first
+    assert is_journal(page) is True
+    assert is_journal(note) is False
+
+
+def test_list_all_gathers_notes_and_journal_newest_first(tmp_path):
+    root = _make_tree(tmp_path)
+    # Personal has a plain note plus two journal pages — all three, most
+    # recently edited first (mtime order, which _make_tree writes ascending).
+    stems = [p.stem for p in list_all(root, SECTION_PERSONAL)]
+    assert set(stems) == {"diary", "2026-06-29", "2026-07-01"}
+    # every path is a real file under the section, journal pages included
+    assert all(p.is_file() for p in list_all(root, SECTION_PERSONAL))
+
+
+def test_list_all_orders_by_mtime_newest_first(tmp_path):
+    import os
+    import time
+    root = notesdb.section_dir(tmp_path, SECTION_WORK)
+    root.mkdir(parents=True)
+    old = root / "old.md"
+    new = root / "new.md"
+    old.write_text("x", encoding="utf-8")
+    new.write_text("y", encoding="utf-8")
+    now = time.time()
+    os.utime(old, (now - 100, now - 100))
+    os.utime(new, (now, now))
+    assert [p.stem for p in list_all(tmp_path, SECTION_WORK)] == ["new", "old"]
 
 
 def test_search_work_only_by_default_excludes_personal(tmp_path):

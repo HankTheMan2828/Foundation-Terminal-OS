@@ -105,30 +105,31 @@ STATUS_NOT_FUNCTIONING = "NOT FUNCTIONING"
 LOG_SYSTEM = "SYSTEM RECORDS"           # journald/kernel/auth, raw
 LOG_OVERSEER = "OVERSEER LEDGER"        # Frank's ledger — timestamps only (§6)
 
-# ── Notes (feedback #8) — one home in Programs, two purpose sections ──────────
-# Work first, Personal last; each has plain named notes plus one dated feature
-# (Work: timestamped Dated Entries; Personal: one-page-per-day Journal). Notes
-# are named on creation; rename lives in the editor, delete in the File Manager.
-NOTES_SUBTITLE = "work + personal — pick a note or start a new one"
+# ── Notes — one home in Programs: a tabbed, command-driven note list ──────────
+# A single screen with a WORK | PERSONAL tab switch, one numbered "available
+# notes" list (each row shows when it was last edited), and a one-line command
+# area. Everything is a plain .md file; Work and Personal are two folders on
+# disk. Each section also has its own one-page-per-day Journal, reached with `j`.
+NOTES_SUBTITLE = "WORK | PERSONAL — a numbered list you drive by command"
 NOTES_WORK = "WORK"
 NOTES_PERSONAL = "PERSONAL"
-NOTES_NEW = "--- create new note ---"
-NOTES_NAME_PROMPT = "NAME?"
-NOTES_EMPTY = "(none yet — create one above)"
-NOTES_HINT = "↑↓/jk move   ↵ open   Esc/⌫ back"
+NOTES_AVAILABLE = "AVAILABLE NOTES"
+NOTES_TAB_HINT = "Tab / ←→ switch   ↑↓ scroll"
+NOTES_NAME_PROMPT = "NEW NOTE NAME:"
+NOTES_EMPTY = "(no notes yet — press  n  to create one)"
+NOTES_CMD_PROMPT = "command:"
+NOTES_HINT = "#=open   n=new note   j=journal   x #=delete   q/Esc=quit"
+NOTES_UNKNOWN = "UNKNOWN — # open · n new · j journal · x# delete · q quit"
+NOTES_NO_SUCH = "NO NOTE NUMBERED {n}"
+NOTES_DELETE_NONE = "NO VALID NOTE NUMBERS TO DELETE"
+NOTES_DELETE_CONFIRM = "DELETE {n} NOTE(S)?   y / N"
+NOTES_DELETED = "DELETED {n} NOTE(S)"
 
-# Personal journal — one page per day (reworked from the old Personal File).
-NOTE_JOURNAL = "DATED JOURNAL"
-NOTE_TODAY = "TODAY'S ENTRY"
-NOTE_TODAY_EXISTS = "TODAY'S NOTE ALREADY EXISTS — OPENING IT"
-NOTE_JOURNAL_SUBTITLE = "one page per day — the record keeps itself"
-
-# Work dated entries — timestamped, several per day (feedback #7 feature, reused).
-NOTES_DATED = "DATED ENTRIES"
-NOTES_DATED_NEW = "NEW ENTRY"
-NOTES_DATED_SUBTITLE = "timestamped — as many as you like, per day"
-NOTES_DATED_EMPTY = "(no entries yet — create one above)"
-NOTES_DATED_HINT = "↑↓/jk move   ↵ open   Esc/⌫ back"
+# Journal — one page per day, kept per section (a Work journal and a Personal
+# journal). `j` opens today's page, creating it on first save.
+NOTE_JOURNAL = "JOURNAL"
+NOTE_JOURNAL_TAG = "·journal"
+NOTE_JOURNAL_TODAY_EXISTS = "TODAY'S JOURNAL ALREADY EXISTS — OPENING IT"
 
 # Notes Search (separate program) — Work-only by default, opt into Personal.
 NOTES_SEARCH_SUBTITLE = "words match text, #tags match tags"

@@ -100,6 +100,17 @@ def note_path(user_dir: Path, section: str, name: str) -> Path:
     return section_dir(user_dir, section) / f"{slugify(name)}.md"
 
 
+def journal_path(user_dir: Path, section: str, date: str) -> Path:
+    """The one journal page for `date` (an ISO `YYYY-MM-DD`) in `section`."""
+    return journal_dir(user_dir, section) / f"{date}.md"
+
+
+def is_journal(path: Path) -> bool:
+    """True if `path` is a journal page (lives in a section's `journal/` dir),
+    as opposed to a plain named note. Lets the unified list tag journal rows."""
+    return path.parent.name == JOURNAL_SUBDIR
+
+
 # ── listing ───────────────────────────────────────────────────────────────────
 def _list_md(d: Path, *, newest_first: bool) -> list[Path]:
     if not d.is_dir():
@@ -120,6 +131,24 @@ def list_dated(user_dir: Path, section: str) -> list[Path]:
 def list_journal(user_dir: Path, section: str) -> list[Path]:
     """A section's journal pages, newest first (date-stamped names sort so)."""
     return _list_md(journal_dir(user_dir, section), newest_first=True)
+
+
+def list_all(user_dir: Path, section: str) -> list[Path]:
+    """Every openable note in a section — plain named notes plus journal pages
+    (and any legacy dated entries) — as one flat list, most-recently-edited
+    first. This is what the unified Notes screen numbers: the freshest work
+    floats to the top. Missing/unstattable files are skipped, never fatal."""
+    base = section_dir(user_dir, section)
+    if not base.is_dir():
+        return []
+    dated: list[tuple[float, Path]] = []
+    for p in base.rglob("*.md"):
+        try:
+            dated.append((p.stat().st_mtime, p))
+        except OSError:
+            continue
+    dated.sort(key=lambda t: t[0], reverse=True)
+    return [p for _, p in dated]
 
 
 def note_tags(path: Path) -> list[str]:
