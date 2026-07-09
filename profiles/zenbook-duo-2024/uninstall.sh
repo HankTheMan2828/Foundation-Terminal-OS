@@ -23,7 +23,7 @@ rm -f /usr/local/lib/foundationhub/duo-screen-toggle /usr/local/lib/foundationhu
 # Display stack was this profile's plugin — removing it drops the session
 # back to the generic kernel-VT path in foundationhub-session.
 rm -f /usr/local/lib/foundationhub/display-stack \
-      /etc/foundationhub/kitty.conf /etc/foundationhub/colors-green.conf
+      /etc/foundationhub/kitty.conf
 is_arch && udevadm control --reload-rules || true
 
 c_ok "zenbook-duo-2024 profile glue removed (generic core untouched)"

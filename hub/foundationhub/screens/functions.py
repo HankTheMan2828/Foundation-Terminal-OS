@@ -6,7 +6,7 @@ install/04, install/05). Off-device, calls return a clear status string.
 """
 from __future__ import annotations
 
-from .. import consolefont, labels, session, theme, updates as updates_backend
+from .. import consolefont, labels, session, updates as updates_backend
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
 from . import status, updates
@@ -36,21 +36,6 @@ def _power_screen():
     return MenuScreen(labels.FN_POWER_PROFILE, items)
 
 
-def _theme_screen():
-    def _pal(name):
-        def action(app):
-            theme.set_palette(name)
-            theme.init(app.stdscr)
-            app.status_message = f"palette → {name} (restart Hub to fully apply)"
-        return action
-    items = [
-        MenuItem("AMBER PHOSPHOR", _pal(theme.PALETTE_AMBER)),
-        MenuItem("GREEN PHOSPHOR", _pal(theme.PALETTE_GREEN)),
-        MenuItem("SOUND (mixer)", lambda a: Launch(["alsamixer"]), hint="alsamixer"),
-    ]
-    return MenuScreen(labels.FN_THEME, items)
-
-
 def _text_size_screen():
     """Console text size (feedback #1) — a VT-wide setfont face. Applies live
     and persists for next login."""
@@ -77,8 +62,7 @@ def screen():
                  _set_status(lambda: session.toggle_second_screen(False))),
         MenuItem(labels.FN_POWER_PROFILE, lambda a: _power_screen(),
                  status=session.get_power_profile_status),
-        MenuItem(labels.FN_THEME, lambda a: _theme_screen(),
-                 status=lambda: theme.get_palette().upper()),
+        MenuItem(labels.FN_SOUND, lambda a: Launch(["alsamixer"]), hint="alsamixer"),
         MenuItem(labels.FN_TEXT_SIZE, lambda a: _text_size_screen(),
                  status=consolefont.current_label),
         # Moved in from the old top-level Status entry (feedback #8): NETWORK is

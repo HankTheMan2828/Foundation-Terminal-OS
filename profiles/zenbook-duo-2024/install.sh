@@ -47,8 +47,6 @@ install -Dm0755 "$PROFILE_ROOT/hardware/display-stack" \
   /usr/local/lib/foundationhub/display-stack
 install -Dm0644 "$PROFILE_ROOT/system/etc/foundationhub/kitty.conf" \
   /etc/foundationhub/kitty.conf
-install -Dm0644 "$PROFILE_ROOT/system/etc/foundationhub/colors-green.conf" \
-  /etc/foundationhub/colors-green.conf
 if is_arch; then
   systemctl enable seatd.service 2>/dev/null || true
   # cage needs the operator on the seat; the group exists once seatd is in.

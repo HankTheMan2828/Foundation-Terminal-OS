@@ -22,8 +22,7 @@
 # The generic core never installs one.
 set -euo pipefail
 
-# CRT theme (spec §2). Amber default; Settings can switch.
-export FOUNDATIONHUB_THEME="${FOUNDATIONHUB_THEME:-amber}"
+# CRT theme (spec §2): one fixed look — base yellow on near-black.
 export FOUNDATIONHUB_ETC="${FOUNDATIONHUB_ETC:-/etc/foundationhub}"
 
 # Start the per-session ambient sound + event daemon if present (spec §8).
@@ -45,13 +44,10 @@ if [[ "${TERM:-}" == "linux" ]]; then
   _font="$(cat "$FOUNDATIONHUB_ETC/console-font" 2>/dev/null || true)"
   setfont "${_font:-ter-v32b}" 2>/dev/null || setfont ter-v16b 2>/dev/null || true
   # Retune the VT's 16-color palette (a kernel console feature: \e]PXRRGGBB)
-  # so the 8-color curses fallback in hub/foundationhub/theme.py lands on
-  # real phosphor hues instead of stock yellow/green.
-  if [[ "$FOUNDATIONHUB_THEME" == "green" ]]; then
-    printf '\033]P00a0a0a\033]P1ff5030\033]P233ff66\033]P333ff66\033]P77cff9c\033]P810361c'
-  else
-    printf '\033]P00a0a0a\033]P1ff5030\033]P2ffb000\033]P3ffb000\033]P7ffd060\033]P83a2a00'
-  fi
+  # so the 8-color curses body text in hub/foundationhub/theme.py (COLOR_YELLOW,
+  # console index 3, stock brown #aa5500) lands on the OS's base yellow — the
+  # same hue the installer/login screens use. Near-black bg for the CRT feel.
+  printf '\033]P00a0a0a\033]P1ff5030\033]P3ffff55\033]P85f5f2a'
   clear
 fi
 
