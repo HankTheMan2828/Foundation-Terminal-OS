@@ -41,9 +41,18 @@ PAIR_NORMAL, PAIR_DIM, PAIR_HILITE, PAIR_ACCENT, PAIR_WARN, PAIR_ALERT = range(1
 PAIR_AMBER, PAIR_BRIGHT, PAIR_COOL = 7, 8, 9
 
 
+def dress_console() -> None:
+    """Re-assert the VT phosphor palette (delegates to the Hub's theme when
+    present). ncurses clobbers the login shell's one-shot retune on color init,
+    so chess must re-apply it or its banner/accents render in stock hues."""
+    if _theme is not None and hasattr(_theme, "dress_console"):
+        _theme.dress_console()
+
+
 def init(stdscr) -> None:
     if _theme is not None:
         _theme.init(stdscr)
+        dress_console()
         return
     if not curses.has_colors():
         return

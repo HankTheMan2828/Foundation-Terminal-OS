@@ -10,6 +10,8 @@ color numbers; on mono terminals init() is a safe no-op.
 from __future__ import annotations
 
 import curses
+import os
+import sys
 
 # Semantic color-pair ids.
 PAIR_NORMAL = 1     # body text
@@ -62,6 +64,36 @@ def init(stdscr) -> None:
     curses.init_pair(PAIR_AMBER, amber, bg)
     curses.init_pair(PAIR_BRIGHT, bright, bg)
     curses.init_pair(PAIR_COOL, cool, bg)
+
+
+# The Linux VT 16-color palette retune (\e]PXRRGGBB), the source of the actual
+# phosphor RGBs the 8-color names above resolve to. This MUST stay byte-for-byte
+# in sync with system/usr/local/bin/foundationhub-session, which sets it once at
+# login. We re-assert it from the Hub too because that one-shot is fragile: the
+# retune is clobbered when ncurses initialises color at startup and again when a
+# child curses program (a game, ranger, btop) resets the console palette on exit
+# via endwin(). Symptom before this: the amber banner/nav and game accents only
+# appeared after returning from a game, once the console had been re-churned.
+#   P0 bg  P1 red  P3 yellow  P8 dim  |  P2/PA amber  P6/PE teal  P7/PF cream
+_VT_PALETTE = (
+    "\033]P00a0a0a\033]P1ff5030\033]P3ffff55\033]P85f5f2a"
+    "\033]P2f59f00\033]PAffb42e\033]P67fdfe0\033]PEa8ecec\033]P7fff0c0\033]PFfff6dc"
+)
+
+
+def dress_console() -> None:
+    """Re-assert the VT phosphor palette. No-op unless we're on the kernel text
+    console (TERM=linux) — the \\e]P sequences are a Linux-VT feature; on kitty
+    or a dev terminal the palette comes from that terminal's own config, so
+    emitting these there would just be stray bytes. Call at Hub startup (after
+    curses init) and after every external program returns."""
+    if os.environ.get("TERM") != "linux":
+        return
+    try:
+        sys.stdout.write(_VT_PALETTE)
+        sys.stdout.flush()
+    except (OSError, ValueError):
+        pass
 
 
 def attr(pair: int, *, bold: bool = False, dim: bool = False) -> int:

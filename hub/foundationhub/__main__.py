@@ -23,6 +23,10 @@ from .screens import build_home
 def _main(stdscr) -> None:
     curses.set_escdelay(25)  # default ~1000ms made Esc feel laggy vs. Backspace
     theme.init(stdscr)
+    # Re-assert the VT palette *after* ncurses has initialised color — the login
+    # shell's one-shot retune gets clobbered by that init, so the amber accents
+    # would otherwise be wrong until the console was re-churned by a game.
+    theme.dress_console()
     preset = os.environ.get("FOUNDATIONHUB_USER")
     if preset:
         from .accounts import Registry

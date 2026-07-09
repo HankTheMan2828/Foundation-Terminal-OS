@@ -140,6 +140,10 @@ class App:
             self.status_message = f"launch failed: {exc}"
         finally:
             curses.reset_prog_mode()
+            # A child curses program (a game, ranger…) resets the console palette
+            # on exit, so re-assert ours before we draw again — otherwise the
+            # amber banner/nav and game accents would drop back to stock hues.
+            theme.dress_console()
             self.stdscr.refresh()
 
     # -- main loop --
