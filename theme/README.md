@@ -10,7 +10,7 @@ On top of the base yellow sit a few **warm accent slots**, retuned the same way
 | Slot (idx / bright) | Color   | Used for |
 |---------------------|---------|----------|
 | base — 3            | `#ffff55` yellow | body text, frame |
-| amber — 2 / 10      | `#ffcf70` light amber | **top banner text + bottom nav line**; games' "dark" side |
+| amber — 2 / 10      | `#f59f00` amber | **top banner text + bottom nav line**; games' "dark" side |
 | cream — 7 / 15      | `#fff0c0` cream white | games: chess light pieces, hot 2048 tiles |
 | teal — 6 / 14       | `#7fdfe0` soft teal | games only: extra contrast (2048/tetris) |
 | red — 1             | `#ff5030` | Frank warnings / alerts |

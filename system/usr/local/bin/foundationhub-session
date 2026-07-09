@@ -52,9 +52,9 @@ if [[ "${TERM:-}" == "linux" ]]; then
   # contrast). Each color's bright twin (A=10, E=14, F=15) is retuned too so the
   # bold banner titles and bold game glyphs stay on-hue instead of jumping to a
   # stock bright color:
-  #   P2/PA amber #ffcf70/#ffdf98   P6/PE teal #7fdfe0/#a8ecec   P7/PF cream #fff0c0/#fff6dc
+  #   P2/PA amber #f59f00/#ffb42e   P6/PE teal #7fdfe0/#a8ecec   P7/PF cream #fff0c0/#fff6dc
   printf '\033]P00a0a0a\033]P1ff5030\033]P3ffff55\033]P85f5f2a'
-  printf '\033]P2ffcf70\033]PAffdf98\033]P67fdfe0\033]PEa8ecec\033]P7fff0c0\033]PFfff6dc'
+  printf '\033]P2f59f00\033]PAffb42e\033]P67fdfe0\033]PEa8ecec\033]P7fff0c0\033]PFfff6dc'
   clear
 fi
 
