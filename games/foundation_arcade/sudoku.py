@@ -159,9 +159,9 @@ def _draw_board(win, top: int, left: int, game: SudokuGame) -> None:
             elif conflict:
                 a = chrome.attr(chrome.PAIR_WARN, bold=True)
             elif given:
-                a = chrome.attr(chrome.PAIR_ACCENT, bold=True)
+                a = chrome.attr(chrome.PAIR_AMBER, bold=True)   # clue: amber
             else:
-                a = chrome.attr(chrome.PAIR_NORMAL)
+                a = chrome.attr(chrome.PAIR_NORMAL)              # entered: yellow
             gap_r = r // BOX
             gap_c = (c // BOX) * 2
             try:

@@ -222,7 +222,11 @@ def _draw_board(win, top: int, left: int, game: BlocksGame) -> None:
 
 
 def _cell(win, y: int, x: int, color_id: int) -> None:
-    pairs = (chrome.PAIR_NORMAL, chrome.PAIR_HILITE, chrome.PAIR_ACCENT, chrome.PAIR_WARN)
+    # Six visually distinct pairs for the seven tetrominoes (was four, two of
+    # which — NORMAL and ACCENT — collapsed to the same yellow after the palette
+    # unification, so pieces shared a color).
+    pairs = (chrome.PAIR_NORMAL, chrome.PAIR_AMBER, chrome.PAIR_COOL,
+             chrome.PAIR_BRIGHT, chrome.PAIR_WARN, chrome.PAIR_HILITE)
     a = chrome.attr(pairs[color_id % len(pairs)], bold=True)
     try:
         win.addstr(y, x, "[]", a)

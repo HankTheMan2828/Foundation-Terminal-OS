@@ -138,15 +138,30 @@ def run(win) -> int:
     return game.score
 
 
+# Value -> color tier, so a glance reads progress (every tile used to be the
+# same inverse yellow). Warm ramp: dim empty -> yellow -> amber -> teal -> cream
+# -> inverse "hot" for the big tiles.
+def _tile_attr(v: int) -> int:
+    if not v:
+        return chrome.attr(chrome.PAIR_DIM, dim=True)
+    if v <= 4:
+        return chrome.attr(chrome.PAIR_NORMAL)
+    if v <= 16:
+        return chrome.attr(chrome.PAIR_AMBER, bold=True)
+    if v <= 64:
+        return chrome.attr(chrome.PAIR_COOL, bold=True)
+    if v <= 256:
+        return chrome.attr(chrome.PAIR_BRIGHT, bold=True)
+    return chrome.attr(chrome.PAIR_HILITE, bold=True)   # 512+ : hot, inverse
+
+
 def _draw_board(win, top: int, left: int, game: Game2048) -> None:
     for r in range(game.size):
         for c in range(game.size):
             v = game.board[r][c]
             text = str(v) if v else "."
-            a = chrome.attr(chrome.PAIR_HILITE if v else chrome.PAIR_DIM,
-                            bold=bool(v), dim=not v)
             try:
-                win.addstr(top + r, left + c * 6, text.center(5), a)
+                win.addstr(top + r, left + c * 6, text.center(5), _tile_attr(v))
             except curses.error:
                 pass
 

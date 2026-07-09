@@ -305,9 +305,9 @@ def _draw_cell(win, y, x, board, sq, cursor, selected, targets, check_sq):
         elif is_target:                              # a capture the cursor offers
             a = chrome.attr(chrome.PAIR_WARN, bold=True)
         elif piece in B.WHITE_PIECES:
-            a = chrome.attr(chrome.PAIR_ACCENT, bold=True)
+            a = chrome.attr(chrome.PAIR_BRIGHT, bold=True)   # cream white
         else:
-            a = chrome.attr(chrome.PAIR_NORMAL)
+            a = chrome.attr(chrome.PAIR_AMBER, bold=True)    # amber = "dark" side
         text = f" {glyph} "
     else:
         if is_cursor:

@@ -47,7 +47,14 @@ if [[ "${TERM:-}" == "linux" ]]; then
   # so the 8-color curses body text in hub/foundationhub/theme.py (COLOR_YELLOW,
   # console index 3, stock brown #aa5500) lands on the OS's base yellow — the
   # same hue the installer/login screens use. Near-black bg for the CRT feel.
+  #   P0 bg #0a0a0a   P1 red #ff5030   P3 yellow #ffff55   P8 dim #5f5f2a
+  # Accent slots for theme.py's PAIR_AMBER/COOL/BRIGHT (banner+nav amber, game
+  # contrast). Each color's bright twin (A=10, E=14, F=15) is retuned too so the
+  # bold banner titles and bold game glyphs stay on-hue instead of jumping to a
+  # stock bright color:
+  #   P2/PA amber #ffcf70/#ffdf98   P6/PE teal #7fdfe0/#a8ecec   P7/PF cream #fff0c0/#fff6dc
   printf '\033]P00a0a0a\033]P1ff5030\033]P3ffff55\033]P85f5f2a'
+  printf '\033]P2ffcf70\033]PAffdf98\033]P67fdfe0\033]PEa8ecec\033]P7fff0c0\033]PFfff6dc'
   clear
 fi
 

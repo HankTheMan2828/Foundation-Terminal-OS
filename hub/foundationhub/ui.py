@@ -49,10 +49,12 @@ def draw_chrome(win, title: str, subtitle: str = "", *, scanlines: bool = True) 
     except curses.error:
         pass
 
-    # Title bar.
-    _center(win, 1, title, theme.attr(theme.PAIR_ACCENT, bold=True))
+    # Title bar. The banner text is light amber (the frame stays base yellow) so
+    # the header reads as its own band instead of the old bold-yellow that hit
+    # the VT's bright slot and looked like a brighter, clashing yellow.
+    _center(win, 1, title, theme.attr(theme.PAIR_AMBER, bold=True))
     if subtitle:
-        _center(win, 2, subtitle, theme.attr(theme.PAIR_DIM, dim=True))
+        _center(win, 2, subtitle, theme.attr(theme.PAIR_AMBER))
     try:
         win.hline(3, 1, curses.ACS_HLINE, w - 2)
     except curses.error:
@@ -63,10 +65,12 @@ def draw_chrome(win, title: str, subtitle: str = "", *, scanlines: bool = True) 
 def draw_statusbar(win, text: str, *, warn: bool = False) -> None:
     """Bottom status line. Frank's normal warnings surface here (spec §6)."""
     h, w = win.getmaxyx()
-    pair = theme.PAIR_WARN if warn else theme.PAIR_DIM
+    # Navigation hints ride the bottom line in light amber (matching the banner);
+    # Frank's warnings still override to red so they never blend in.
+    pair = theme.PAIR_WARN if warn else theme.PAIR_AMBER
     try:
         win.addstr(h - 2, 2, text[: w - 4].ljust(w - 4),
-                   theme.attr(pair, bold=warn, dim=not warn))
+                   theme.attr(pair, bold=warn))
     except curses.error:
         pass
 

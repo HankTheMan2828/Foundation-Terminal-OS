@@ -36,6 +36,9 @@ def _import_foundationhub():
 _theme, _ui = _import_foundationhub()
 
 PAIR_NORMAL, PAIR_DIM, PAIR_HILITE, PAIR_ACCENT, PAIR_WARN, PAIR_ALERT = range(1, 7)
+# Accent pairs (see foundationhub.theme): amber banner/nav, plus cream + teal for
+# game contrast. Ids match the Hub so `attr()` delegates cleanly when it's present.
+PAIR_AMBER, PAIR_BRIGHT, PAIR_COOL = 7, 8, 9
 
 
 def init(stdscr) -> None:
@@ -55,6 +58,9 @@ def init(stdscr) -> None:
     curses.init_pair(PAIR_ACCENT, curses.COLOR_YELLOW, curses.COLOR_BLACK)
     curses.init_pair(PAIR_WARN, curses.COLOR_RED, curses.COLOR_BLACK)
     curses.init_pair(PAIR_ALERT, curses.COLOR_WHITE, curses.COLOR_RED)
+    curses.init_pair(PAIR_AMBER, curses.COLOR_GREEN, curses.COLOR_BLACK)
+    curses.init_pair(PAIR_BRIGHT, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    curses.init_pair(PAIR_COOL, curses.COLOR_CYAN, curses.COLOR_BLACK)
 
 
 def attr(pair: int, *, bold: bool = False, dim: bool = False) -> int:
