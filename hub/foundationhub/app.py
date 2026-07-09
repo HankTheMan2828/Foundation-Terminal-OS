@@ -139,12 +139,14 @@ class App:
         except Exception as exc:  # keep the Hub alive no matter what a child does
             self.status_message = f"launch failed: {exc}"
         finally:
+            # Order matters. A child curses program resets the console palette on
+            # exit, and ncurses resuming color mode here re-emits the `oc`
+            # (orig_colors / \e]R "reset palette") capability on its first
+            # refresh — so the palette retune must be the LAST thing written, or
+            # that refresh wipes our amber straight back to stock green.
             curses.reset_prog_mode()
-            # A child curses program (a game, ranger…) resets the console palette
-            # on exit, so re-assert ours before we draw again — otherwise the
-            # amber banner/nav and game accents would drop back to stock hues.
-            theme.dress_console()
             self.stdscr.refresh()
+            theme.dress_console()
 
     # -- main loop --
     def run(self) -> None:
@@ -162,6 +164,13 @@ class App:
                                   warn=self._status_warn)
                 self.stdscr.noutrefresh()
             curses.doupdate()
+            # Self-heal the VT palette every frame, immediately AFTER the update
+            # that could have emitted `oc` (ncurses' palette reset). Cheap and
+            # idempotent — the same phosphor RGBs are already on screen — and it
+            # means no reset path (startup color-init, resume from a child) can
+            # leave the amber/accent slots stuck on stock hues. Mirrors the
+            # frame-by-frame background re-assert in ui.draw_chrome.
+            theme.dress_console()
             try:
                 key = self.stdscr.getch()
             except KeyboardInterrupt:

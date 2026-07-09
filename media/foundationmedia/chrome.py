@@ -2,7 +2,7 @@
 
 Foundation Media is a standalone program (hybrid model: media is a separate
 in-house program, not a Hub screen), but it shares the same terminal and the
-same operator, so it borrows the Hub's amber/green bezel instead of drawing
+same operator, so it borrows the Hub's phosphor bezel instead of drawing
 its own. `foundationhub` is optional: if it isn't importable (run from a bare
 checkout with no sibling `hub/` on the path), fall back to a minimal local
 bezel so the player still runs on its own. Mirrors games/*/chrome.py.

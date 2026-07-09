@@ -2,7 +2,7 @@
 
 Foundation Chess is a standalone program (Hybrid model: games are separate
 in-house programs, not Hub screens), but it shares the same terminal and the
-same operator, so it borrows the Hub's amber/green bezel instead of drawing its
+same operator, so it borrows the Hub's phosphor bezel instead of drawing its
 own. `foundationhub` is optional: if it isn't importable (run from a bare checkout with
 no sibling `hub/` on the path), fall back to a minimal local bezel so chess
 still runs on its own. Mirrors games/foundation_arcade/chrome.py.
