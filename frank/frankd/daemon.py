@@ -33,7 +33,9 @@ time-of-day driven; lockout duration is severity driven — kept distinct.
 from __future__ import annotations
 
 import time
+import traceback
 from collections import deque
+from pathlib import Path
 
 from . import ai, config, lockstate, negotiation, sources
 from .enforcement import DEFAULT_USER, ReactionKind, UserEnforcers
@@ -68,6 +70,28 @@ _CARE_RULE_PREFIXES = ("legal-self-harm",)
 # Don't repeat a care message more often than this — a self-harm phrase saved
 # repeatedly shouldn't spam the user.
 _CARE_COOLDOWN_SECONDS = 300
+
+# Operator-READABLE health breadcrumb. Spec §6 keeps Frank's *findings* private,
+# but whether the daemon is even alive — and why it died — must be diagnosable on
+# a no-shell locked kiosk. Written under /run/frank (0755 frank) at mode 0644 so
+# the Hub's System Status can read it and show the operator the real startup
+# error instead of a bare "non-functional". Carries NO finding detail — only a
+# status tag and, on failure, the traceback of what stopped Frank from running.
+_HEALTH_PATH = Path("/run/frank/frankd.health")
+
+
+def _write_health(status: str, detail: str = "") -> None:
+    """Record the daemon's liveness / last fatal error where the operator can
+    see it. Best-effort: a health write must never itself crash Frank."""
+    try:
+        _HEALTH_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _HEALTH_PATH.write_text(f"status={status}\nts={int(time.time())}\n{detail}")
+        try:
+            _HEALTH_PATH.chmod(0o644)
+        except OSError:
+            pass
+    except OSError:
+        pass
 
 
 class Frank:
@@ -265,16 +289,40 @@ class Frank:
         server = IPCServer(self.cfg.ipc_socket, self.poll_message,
                            on_negotiate=self.negotiate)
         server.start()
+        _write_health("running")
         try:
             while True:
-                self.tick()
+                try:
+                    self.tick()
+                except Exception:
+                    # One bad tick must not crash-loop the whole overseer (which
+                    # would take detection + enforcement down with it). Record why
+                    # and keep going — the rule engine is the primary, always-on
+                    # mechanism (spec §6) and should survive a transient collector
+                    # or store error.
+                    _write_health("tick-error", traceback.format_exc())
                 time.sleep(self.poll_interval)
         finally:
             server.stop()
 
 
 def main() -> int:  # pragma: no cover
-    Frank().run()
+    # Startup (import already succeeded to get here) must not fail invisibly: on
+    # a locked kiosk the operator can't read the journal, so capture any crash in
+    # the operator-readable health file before re-raising for systemd to log.
+    # Two phases, captured separately: construction, and run() (which binds the
+    # IPC socket and enters the loop) — a socket-bind failure is exactly the kind
+    # of run-time crash that leaves frankd "non-functional" with no clue why.
+    try:
+        frank = Frank()
+    except Exception:
+        _write_health("startup-error", traceback.format_exc())
+        raise
+    try:
+        frank.run()
+    except Exception:
+        _write_health("run-error", traceback.format_exc())
+        raise
     return 0
 
 

@@ -58,10 +58,39 @@ install -Dm0755 -o root -g root "$REPO_ROOT/system/usr/local/bin/frank-locker" /
 # frank-ledger.service (see profiles/zenbook-duo-2024/system/etc/systemd/system/).
 install_file "etc/systemd/system/frankd.service" "/etc/systemd/system/frankd.service" 0644
 install_file "etc/systemd/system/frank-enforcer.service" "/etc/systemd/system/frank-enforcer.service" 0644
-if is_arch; then
-  systemctl daemon-reload
+
+# Fail LOUD if the daemon can't even import/construct. A silent failure here is
+# exactly how a dead overseer shipped before (frankd non-functional on boot,
+# with no way to see why on a no-shell kiosk). This runs in the install chroot,
+# needs no running systemd, and catches import/config/construction errors now.
+if command -v python >/dev/null 2>&1; then
+  if python -c "from frankd import daemon; daemon.Frank()" 2>/tmp/frankd-selfcheck.log; then
+    c_ok "frankd self-check: imports and constructs cleanly"
+  else
+    c_warn "frankd self-check FAILED — the overseer would not start. Error:"
+    sed 's/^/    /' /tmp/frankd-selfcheck.log >&2 || true
+    c_warn "the OS will still install, but Frank is DOWN until this is fixed."
+  fi
+fi
+
+# Enable for boot. `systemctl enable --now` cannot reliably enable/start a unit
+# inside the installer chroot (no running manager) — and when it can't, it used
+# to be swallowed by `|| true`, leaving frankd un-enabled and silently absent on
+# first boot. So drop the wants-symlink BY HAND (works with or without a live
+# systemd), then best-effort enable/start on a live system.
+install -d /etc/systemd/system/multi-user.target.wants
+for u in frankd.service frank-enforcer.service; do
+  ln -sf "/etc/systemd/system/$u" "/etc/systemd/system/multi-user.target.wants/$u"
+done
+c_ok "frankd + frank-enforcer enabled for boot (wants-symlink)"
+if is_arch && systemctl daemon-reload 2>/dev/null; then
   systemctl enable --now frankd.service 2>/dev/null || true
   systemctl enable --now frank-enforcer.service 2>/dev/null || true
+  if systemctl is-active --quiet frankd.service 2>/dev/null; then
+    c_ok "frankd.service is active"
+  else
+    c_info "frankd enabled; not active in this context (normal inside an installer chroot)"
+  fi
 fi
 
 # --- verify isolation (spec §6 / docs/INSTALL.md §4) ---

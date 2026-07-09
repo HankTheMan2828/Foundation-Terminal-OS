@@ -18,6 +18,10 @@ from pathlib import Path
 HW_BIN = Path(os.environ.get("FOUNDATIONHUB_HW_BIN", "/usr/local/lib/foundationhub"))
 ETC = Path(os.environ.get("FOUNDATIONHUB_ETC", "/etc/foundationhub"))
 FRANK_SOCK = os.environ.get("FRANK_HUB_SOCK", "/run/frank/hub.sock")
+# Operator-readable liveness/last-error breadcrumb frankd writes (daemon.py
+# _write_health). Lets System Status show WHY Frank is down on a locked kiosk
+# where the journal can't be read. No finding detail — status tag + traceback.
+FRANK_HEALTH = Path(os.environ.get("FRANK_HEALTH", "/run/frank/frankd.health"))
 # Ledger: timestamps ONLY (spec §6). The Hub can read this; it can NOT read
 # Frank's detail store, which is frank:frank 0600 and never exposed.
 LEDGER_PATH = os.environ.get("FRANK_LEDGER", "/var/lib/frank/ledger.timestamps")
@@ -183,6 +187,29 @@ def check_audio() -> bool:
 def check_frank() -> bool:
     """Is frankd reachable over its IPC socket (spec §6)."""
     return FrankClient().is_alive()
+
+
+def frank_health() -> str:
+    """A short reason when Frank is down, for System Status to display on a
+    locked kiosk. '' means healthy/reachable; otherwise a one-line summary from
+    frankd's health breadcrumb (status tag + the last traceback line), or a
+    generic hint if the daemon never even wrote one (e.g. it can't start)."""
+    if FrankClient().is_alive():
+        return ""
+    try:
+        text = FRANK_HEALTH.read_text()
+    except OSError:
+        return "not running (no health file — daemon may not be starting)"
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    status = next((ln[len("status="):].strip()
+                   for ln in lines if ln.startswith("status=")), "down")
+    # The real error is the last traceback line (skip our status=/ts= header).
+    err = ""
+    for ln in reversed(lines):
+        if not ln.startswith(("status=", "ts=")):
+            err = ln.strip()
+            break
+    return f"{status}: {err}".rstrip(": ").strip()
 
 
 # ── Overseer ledger (visible: timestamps only — spec §6) ─────────────────────

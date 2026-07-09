@@ -73,6 +73,15 @@ class StatusScreen(Screen):
                 win.addstr(row, left, f"{label:<24}{state}",
                            theme.attr(pair, bold=not ok))
                 row += 1
+                # When Frank is down, show WHY right under the line — the only
+                # way to diagnose a dead overseer on a no-shell locked kiosk.
+                if check is session.check_frank and not ok:
+                    reason = session.frank_health()
+                    if reason:
+                        _, w = win.getmaxyx()
+                        win.addstr(row, left + 2, f"↳ {reason}"[: w - left - 4],
+                                   theme.attr(theme.PAIR_DIM, dim=True))
+                        row += 1
         except curses.error:
             pass
 
