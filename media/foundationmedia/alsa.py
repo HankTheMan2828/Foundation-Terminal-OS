@@ -93,7 +93,6 @@ class AlsaOutput:
         if lib is None:
             raise OutputError("libasound not available")
         self._lib = lib
-        self._channels = channels
         self._frame_bytes = pcm.S16_BYTES * channels
         device = os.environ.get("FOUNDATIONMEDIA_ALSA_DEVICE", "default")
         self._pcm = ctypes.c_void_p()

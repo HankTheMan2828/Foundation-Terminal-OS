@@ -9,7 +9,6 @@ import curses
 from typing import Callable, Optional
 
 from . import theme
-from . import labels
 
 # Vim + arrow navigation (spec §4).
 KEYS_UP = {curses.KEY_UP, ord("k")}

@@ -7,11 +7,9 @@
 """
 from __future__ import annotations
 
-import curses
-
 from .. import labels, session
 from ..app import MenuScreen, Screen, Launch, POP
-from ..ui import MenuItem, draw_chrome, draw_statusbar, KEYS_UP, KEYS_DOWN, KEYS_BACK
+from ..ui import MenuItem, KEYS_UP, KEYS_DOWN, KEYS_BACK
 from .. import theme
 
 

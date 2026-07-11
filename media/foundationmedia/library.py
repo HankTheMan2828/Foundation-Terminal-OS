@@ -79,10 +79,3 @@ def scan(root: Path) -> list[Track]:
                             needs_engine=path.suffix.lower() in ENGINE_EXTS))
     tracks.sort(key=lambda t: t.name.lower())
     return tracks
-
-
-def playable(tracks: list[Track], *, engine_available: bool) -> list[Track]:
-    """The subset of the library the current machine can actually decode."""
-    if engine_available:
-        return list(tracks)
-    return [t for t in tracks if not t.needs_engine]

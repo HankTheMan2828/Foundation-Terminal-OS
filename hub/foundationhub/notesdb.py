@@ -151,13 +151,6 @@ def list_all(user_dir: Path, section: str) -> list[Path]:
     return [p for _, p in dated]
 
 
-def note_tags(path: Path) -> list[str]:
-    try:
-        return extract_tags(path.read_text(encoding="utf-8"))
-    except OSError:
-        return []
-
-
 # ── search ────────────────────────────────────────────────────────────────────
 @dataclass
 class Hit:

@@ -142,10 +142,6 @@ class LineBankCommentator:
         return random.choice(_LINES[_situation(reaction)])
 
 
-# Historical name from when the bank was framed as a fallback rather than
-# the primary voice; kept so nothing that imported it breaks.
-OfflineCommentator = LineBankCommentator
-
 
 class MistralCommentator:
     """Calls Mistral for phrasing on flagged events only. Falls back on any error.

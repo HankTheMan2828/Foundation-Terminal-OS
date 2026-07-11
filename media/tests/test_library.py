@@ -32,14 +32,6 @@ def test_needs_engine_flag(tmp_path):
     assert by_ext[".mp3"].needs_engine
 
 
-def test_playable_without_engine(tmp_path):
-    _touch(tmp_path / "a.wav")
-    _touch(tmp_path / "b.ogg")
-    tracks = library.scan(tmp_path)
-    assert [t.name for t in library.playable(tracks, engine_available=False)] == ["a"]
-    assert len(library.playable(tracks, engine_available=True)) == 2
-
-
 def test_media_dir_is_per_user(tmp_path):
     d = library.media_dir(tmp_path, "henry")
     assert d == tmp_path / "users" / "henry" / "media"

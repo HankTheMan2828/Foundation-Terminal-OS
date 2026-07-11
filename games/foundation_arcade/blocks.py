@@ -64,10 +64,6 @@ class BlocksGame:
     def level(self) -> int:
         return 1 + self.lines_cleared // LINES_PER_LEVEL
 
-    @property
-    def next_type(self) -> str:
-        return self._next_type
-
     def _cells_at(self) -> list[tuple[int, int]]:
         pr, pc = self.pos
         return [(pr + r, pc + c) for r, c in _ROTATIONS[self.piece][self.rotation]]

@@ -20,7 +20,7 @@ offline with no sleeping.
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .config import EnforcementConfig
 from .model import Finding, Severity, Track

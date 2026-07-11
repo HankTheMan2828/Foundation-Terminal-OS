@@ -25,8 +25,6 @@ REPEAT_ON = "REPEAT"
 EMPTY_LIBRARY = "no media files — add audio to your media directory"
 EMPTY_QUEUE = "queue is empty — press A in the library to add tracks"
 NEEDS_ENGINE = "requires decode engine (ffmpeg) — not installed"
-NO_AUDIO_DEVICE = "audio output not available (off-target or no ALSA)"
-TRACK_ERROR = "cannot play this file"
 
 QUEUED = "queued"
 NOT_A_TERMINAL = "terminal too small — resize and retry"

@@ -6,7 +6,6 @@ from __future__ import annotations
 ARCADE_TITLE = "FOUNDATION ARCADE"
 ARCADE_TAGLINE = "five games, one cabinet"
 ARCADE_HINT_MENU = "UP/DOWN or W/S select · ENTER play · ESC/Q quit"
-ARCADE_HINT_GAME = "ESC/Q back to cabinet · P pause"
 
 GAME_SNAKE = "SNAKE"
 GAME_BLOCKS = "FALLING BLOCKS"
@@ -24,8 +23,6 @@ YOU_WIN = "CLEARED"
 PRESS_CONTINUE = "press any key to continue"
 
 SUDOKU_HINT = "arrows/hjkl move · 1-9 fill · 0/DEL clear · ESC/Q back"
-SUDOKU_CONFLICT = "conflict"
 SUDOKU_SOLVED = "SOLVED"
-SUDOKU_GIVEN = "given — can't edit"
 
 NOT_A_TERMINAL = "terminal too small — resize and retry"

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 from . import mistral
 from .config import NegotiationConfig
-from .enforcement import Enforcer, Scope
+from .enforcement import Enforcer
 
 
 @dataclass

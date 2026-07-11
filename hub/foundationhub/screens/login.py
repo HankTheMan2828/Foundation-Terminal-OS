@@ -21,7 +21,7 @@ from pathlib import Path
 from .. import fileops, labels, session, theme
 from ..accounts import (MAX_ACCOUNTS, Registry, RegistryError, Tier, TIERS,
                         GiB, MiB)
-from ..app import MenuScreen, Screen, POP
+from ..app import Screen, POP
 from ..ui import LineEdit, Menu, MenuItem, KEYS_BACK
 from . import build_home, power
 from .notes import DATA as _DATA
