@@ -60,10 +60,18 @@ ASSISTANT = "ASSISTANT"
 ASSISTANT_SUBTITLE = "on-device AI — local model, separate from the overseer"
 ASSISTANT_INTRO = "On-device assistant. Type a message and press Enter."
 ASSISTANT_PROMPT = "You"
+# Shown while the model is generating — keeps the screen from looking frozen
+# during the (bounded) HTTP wait.
+ASSISTANT_THINKING = "… thinking"
+# Offline / failure notices. Short enough for a 80-col CRT line; detail lives
+# in docs/FRANK-LOCAL-AI.md and INSTALL.md §2.
 ASSISTANT_OFFLINE = (
-    "The local AI model is not reachable. It is served on 127.0.0.1:8080 by "
-    "frank-ai.service; on a fresh or offline install the model may not be "
-    "staged yet (docs/FRANK-LOCAL-AI.md). Everything else in the Hub works.")
+    "Local model not reachable (frank-ai.service on 127.0.0.1:8080). "
+    "Stage the model, or set MISTRAL_API_KEY in /etc/foundationhub/aichat.env.")
+ASSISTANT_ERROR_HTTP = (
+    "Model server answered with an error. Check frank-ai.service / model name.")
+ASSISTANT_ERROR_EMPTY = "Model returned an empty reply. Try again."
+ASSISTANT_ERROR_BAD = "Model reply was unreadable. Try again."
 ASSISTANT_HINT = "type   ↵ send   Esc back"
 
 # ── Programs (order: Notes · Notes Search · Files · Media · Monitor) ──────────

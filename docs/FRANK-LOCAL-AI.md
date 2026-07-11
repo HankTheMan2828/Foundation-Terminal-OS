@@ -141,12 +141,19 @@ sidecar**:
   (`FOUNDATIONAI2` magic + `model_offset`/`model_size`/`server_offset`/
   `server_size`) then the model then the binary. **No partition, no filesystem** —
   nothing for Windows to refuse. Same contract in `Create-FoundationUSB.ps1`
-  (raw FileStream) and `create-foundation-usb.sh` (dd).
-- **The installer reads it raw.** `foundation-install` `dd`s the header off the
-  live device (from `detect_live_disk`) at `STAGE_OFFSET`, and if the magic is
-  present, `dd`s the model + binary into the embedded repo's `vendor/models/` and
-  `vendor/bitnet/` — where `install/11-frank-ai.sh` looks first. So a
-  **fully-offline install gets a working AI with zero on-target building**.
+  (raw FileStream) and `create-foundation-usb.sh` (dd). Both pieces are required
+  to stage: model-only is refused (offline target cannot build the server).
+  Creators also check GGUF magic before writing.
+- **The installer reads it raw onto the TARGET disk.** `foundation-install`
+  `dd`s the header off the live device (from `detect_live_disk`) at
+  `STAGE_OFFSET`, and if the magic is present, `dd`s the model + binary into
+  **`$MNT/opt/terminal-os/vendor/{models,bitnet}/`** (the installed root — not
+  the live overlay's RAM-backed `/opt/terminal-os`, which would OOM a ~1.2 GB
+  write). Size + GGUF/ELF magic are verified. `install/11-frank-ai.sh` then
+  copies those into `/var/lib/frank/models/model.gguf` and
+  `/usr/local/lib/foundation-ai/llama-server`, enables `frank-ai.service`.
+  UPDATE mode re-runs the same stage so a stick with AI can repair an idle
+  install. Fully offline → working AI, zero on-target building.
 - **Fallback:** if nothing is staged (e.g. `-NoModel`), the service's
   `ExecCondition`s keep it idle and the sensor safely no-ops — the rules keep
   running. (The on-target build/fetch path in `install/11` exists but never fires

@@ -272,18 +272,35 @@ if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
         try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $serverPath } catch {}
       }
     }
+    # Offline install needs BOTH the GGUF and the prebuilt llama-server — model
+    # alone leaves frank-ai.service idle (no on-target build without network).
     if (-not (Test-Path $modelPath)) {
       Bad 'AI model download failed - writing the OS only (AI can be added later).'
+    } elseif (-not (Test-Path $serverPath)) {
+      Bad 'AI server binary missing (foundation-ai-llama-server from the release).'
+      Bad 'Without it the offline install has no local AI. Writing the OS only.'
     } elseif ($IsoSize -ge $STAGE_OFFSET) {
       Bad 'ISO is larger than the 2 GiB staging offset - writing the OS only.'
     } else {
-      $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
-      if (Test-Path $serverPath) { $need += (Get-Item $serverPath).Length + 512 }
-      if ($target.Size -lt $need) {
-        Bad ("Stick too small to also stage the AI ({0:N1} GB) - writing the OS only." -f ($target.Size / 1GB))
+      # Quick GGUF magic check so we don't stage a truncated HTML error page.
+      $fs = [IO.File]::OpenRead($modelPath)
+      try {
+        $mag = New-Object byte[] 4
+        [void]$fs.Read($mag, 0, 4)
+      } finally { $fs.Close() }
+      $magStr = [Text.Encoding]::ASCII.GetString($mag)
+      if ($magStr -ne 'GGUF') {
+        Bad "Downloaded model is not a GGUF file (magic='$magStr') - writing the OS only."
+        Remove-Item -Force $modelPath -ErrorAction SilentlyContinue
       } else {
-        $stageAI = $true
-        Good 'AI ready - it will be staged onto the stick after the OS is written.'
+        $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
+        $need += (Get-Item $serverPath).Length + 512
+        if ($target.Size -lt $need) {
+          Bad ("Stick too small to also stage the AI ({0:N1} GB) - writing the OS only." -f ($target.Size / 1GB))
+        } else {
+          $stageAI = $true
+          Good ("AI ready - model {0:N0} MB + server will stage after the OS is written." -f ((Get-Item $modelPath).Length / 1MB))
+        }
       }
     }
   } catch {

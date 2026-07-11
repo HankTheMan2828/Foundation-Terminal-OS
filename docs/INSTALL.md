@@ -97,24 +97,37 @@ to this one profile — the generic core has no such requirement.
 
 ## 2. Configuring API keys (spec §6, AI Chat §5)
 
-Nothing secret is committed. Two **separate** keys (see ARCHITECTURE.md — the
-two Mistral integrations are isolated):
+Nothing secret is committed. Two **separate** credential surfaces (see
+ARCHITECTURE.md — the integrations are isolated trust domains):
 
 - **Frank's key** — `/etc/frank/secrets.env`, owner `root:frank`, mode `0640`.
-  The operator account cannot read this.
+  The operator account cannot read this. Only needed if you turn on cloud
+  sift/overseer/commentary (`backend = "cloud"` or `ai_enabled`); the default
+  local BitNet sensor needs no key.
   ```sh
   sudo install -o root -g frank -m 0640 /dev/null /etc/frank/secrets.env
   echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/frank/secrets.env >/dev/null
   ```
-- **AI Chat's key** — `/etc/foundationhub/aichat.env`, readable by the operator.
+- **AI Chat's config** — `/etc/foundationhub/aichat.env`, readable by the
+  operator. The Assistant talks first to the **local** model on
+  `127.0.0.1:8080` (`frank-ai.service`, same server Frank's sensor uses). A
+  key is optional: if the local server is down and `MISTRAL_API_KEY` is set
+  here, chat falls back to Mistral's cloud endpoint.
   ```sh
   sudo install -o root -g operator -m 0640 /dev/null /etc/foundationhub/aichat.env
+  # optional cloud fallback when frank-ai.service isn't staged:
   echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/foundationhub/aichat.env >/dev/null
+  # optional technician override of URL/model (defaults are the local BitNet):
+  # FOUNDATIONHUB_AI_URL=http://127.0.0.1:8080/v1/chat/completions
+  # FOUNDATIONHUB_AI_MODEL=bitnet-b1.58-2B-4T
   ```
 
-**With no keys set (current default):** the rule engine runs fully offline,
-Frank speaks with the built-in fallback lines, and AI Chat shows a clear "no key
-configured" screen. Everything else works.
+**With no model staged and no key (current default on a bare install):** the
+rule engine runs fully offline, Frank speaks with the built-in fallback lines,
+and AI Chat shows a clear offline notice. Everything else works. To make chat
+live on-device, stage the BitNet binary + GGUF so `frank-ai.service` starts
+(docs/FRANK-LOCAL-AI.md), or put a Mistral key in `aichat.env` for the cloud
+fallback.
 
 ## 3. Making foundationhub the login shell (spec §4)
 

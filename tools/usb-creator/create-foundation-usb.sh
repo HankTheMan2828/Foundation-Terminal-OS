@@ -172,6 +172,19 @@ stage_ai() {
   msize=$(stat -c %s "$model" 2>/dev/null || stat -f %z "$model")
   [[ -f "$server" ]] && ssize=$(stat -c %s "$server" 2>/dev/null || stat -f %z "$server")
   if (( ISO_BYTES >= STAGE_OFFSET )); then c_warn "ISO exceeds the 2 GiB staging offset — writing OS only."; return 0; fi
+  # GGUF magic — refuse to stage a truncated download / HTML error page.
+  local magic
+  magic="$(dd if="$model" bs=1 count=4 2>/dev/null || true)"
+  if [[ "$magic" != "GGUF" ]]; then
+    c_warn "model is not a GGUF file (magic='$magic') — writing OS only."
+    return 0
+  fi
+  # Offline install needs BOTH pieces; model alone leaves frank-ai.service idle.
+  if (( ssize <= 0 )); then
+    c_warn "no prebuilt AI server binary (foundation-ai-llama-server from the release)."
+    c_warn "without it the offline install has no local AI — writing OS only."
+    return 0
+  fi
   local model_off=$(( STAGE_OFFSET + STAGE_HDR ))
   # round the model up to a 1 MiB boundary so the server write stays aligned
   local srv_off=$(( model_off + ( (msize + STAGE_HDR - 1) / STAGE_HDR ) * STAGE_HDR ))
@@ -187,12 +200,8 @@ server_size=$ssize
     | dd of="$WRITE_DEV" bs="$BS" seek=$(( STAGE_OFFSET / 1048576 )) count=1 conv=notrunc 2>/dev/null
   dd if="$model" of="$WRITE_DEV" bs="$BS" seek=$(( model_off / 1048576 )) conv=notrunc 2>/dev/null \
     && c_ok "staged the AI model onto the stick ($msize bytes)."
-  if (( ssize > 0 )); then
-    dd if="$server" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
-      && c_ok "staged the AI server binary onto the stick ($ssize bytes)."
-  else
-    c_info "no prebuilt AI server binary — the target builds it only if it ever gets online."
-  fi
+  dd if="$server" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
+    && c_ok "staged the AI server binary onto the stick ($ssize bytes)."
   sync
 }
 stage_ai

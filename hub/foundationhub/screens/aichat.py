@@ -22,6 +22,15 @@ from ..app import POP, Screen
 from ..ui import LineEdit
 
 
+# Map client error codes → operator-facing labels.
+_ERROR_LABELS = {
+    "offline": labels.ASSISTANT_OFFLINE,
+    "http": labels.ASSISTANT_ERROR_HTTP,
+    "empty": labels.ASSISTANT_ERROR_EMPTY,
+    "bad_response": labels.ASSISTANT_ERROR_BAD,
+}
+
+
 class AIChatScreen(Screen):
     title = labels.ASSISTANT
     subtitle = labels.ASSISTANT_SUBTITLE
@@ -33,10 +42,15 @@ class AIChatScreen(Screen):
         # list sent to the model (system prompt is added by the client).
         self.transcript: list[tuple[str, str]] = [("", labels.ASSISTANT_INTRO)]
         self.history: list[dict] = []
+        self._busy = False
 
-    def _send(self) -> None:
+    def _error_notice(self) -> str:
+        code = getattr(self.client, "last_error", None) or "offline"
+        return _ERROR_LABELS.get(code, labels.ASSISTANT_OFFLINE)
+
+    def _send(self, app=None) -> None:
         text = self.edit.value.strip()
-        if not text:
+        if not text or self._busy:
             return
         self.edit = LineEdit(limit=200)
         self.transcript.append((labels.ASSISTANT_PROMPT, text))
@@ -45,12 +59,29 @@ class AIChatScreen(Screen):
         # content review see chat just as it sees notes.
         activity.record("chat", text)
         self.history.append({"role": "user", "content": text})
+
+        # Paint a "thinking" line so the CRT doesn't look frozen during the
+        # (bounded) model wait. Force a redraw if we have the App handle.
+        self._busy = True
+        self.transcript.append(("", labels.ASSISTANT_THINKING))
+        if app is not None:
+            try:
+                self.render(app.stdscr)
+                curses.doupdate()
+            except curses.error:
+                pass
+
         reply = self.client.chat(self.history)
+        # Drop the thinking line either way.
+        if self.transcript and self.transcript[-1][1] == labels.ASSISTANT_THINKING:
+            self.transcript.pop()
+        self._busy = False
+
         if reply is None:
             # Leave the failed turn out of history so a retry isn't poisoned by a
-            # half-exchange; show the offline notice instead.
+            # half-exchange; show the offline/error notice instead.
             self.history.pop()
-            self.transcript.append(("", labels.ASSISTANT_OFFLINE))
+            self.transcript.append(("", self._error_notice()))
             return
         self.history.append({"role": "assistant", "content": reply})
         self.transcript.append((labels.ASSISTANT, reply))
@@ -74,27 +105,44 @@ class AIChatScreen(Screen):
         return out
 
     def draw(self, win, top: int, left: int) -> None:
+        """Render transcript + input line ABOVE the status bar.
+
+        Critical layout note: `Screen.render` draws the status bar at row
+        `h - 2` *after* this method. The old code put the input prompt on that
+        same row, so every frame the status bar wiped what the user was typing
+        — the chat looked dead even when the model was fine. Input lives on
+        `h - 3`; the body ends one row above that.
+        """
         h, w = win.getmaxyx()
         width = max(1, w - left - 2)
-        # Reserve the last two rows for the input prompt + a spacer.
-        body_rows = max(1, h - top - 3)
+        # Rows: chrome … body … prompt (h-3) … status (h-2) … border (h-1).
+        prompt_row = max(top, h - 3)
+        body_rows = max(1, prompt_row - top)
         lines = self._wrapped_lines(width)
         view = lines[-body_rows:]
         for i, line in enumerate(view):
             try:
-                win.addstr(top + i, left, line[:width], theme.attr(theme.PAIR_NORMAL))
+                win.addstr(top + i, left, line[:width],
+                           theme.attr(theme.PAIR_NORMAL))
             except curses.error:
                 pass
         prompt = f"{labels.ASSISTANT_PROMPT}: {self.edit.display()}"
         try:
-            win.addstr(h - 2, left, prompt[:width], theme.attr(theme.PAIR_AMBER))
+            win.addstr(prompt_row, left, prompt[:width],
+                       theme.attr(theme.PAIR_AMBER))
         except curses.error:
             pass
 
     def status_text(self) -> str:
+        if self._busy:
+            return labels.ASSISTANT_THINKING
         return labels.ASSISTANT_HINT
 
     def handle_key(self, key, app):
+        # Ignore input while a reply is in flight — the HTTP call runs on the
+        # main thread and we already painted a thinking line.
+        if self._busy:
+            return None
         # LineEdit owns the keystrokes: printable chars type into the line,
         # Backspace edits it, Enter submits, Esc cancels. We must NOT treat the
         # generic KEYS_BACK set as "go back" here — it includes 'h', which is a
@@ -104,7 +152,7 @@ class AIChatScreen(Screen):
         if result == "cancel":
             return POP
         if result == "submit":
-            self._send()
+            self._send(app)
         return None
 
 

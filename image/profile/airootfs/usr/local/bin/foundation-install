@@ -88,6 +88,105 @@ detect_live_disk() {
   echo "$live_disk"
 }
 
+# ── Frank local AI: raw-offset sidecar on the USB → dest repo vendor/ ─────────
+# The USB creator wrote [FOUNDATIONAI2 header][model][server] as RAW bytes past
+# the ISO (STAGE_OFFSET = 2 GiB). Absolute offsets in the header are the contract
+# shared by Create-FoundationUSB.ps1, create-foundation-usb.sh, and this reader
+# (docs/FRANK-LOCAL-AI.md).
+#
+# CRITICAL: always write into the *target* tree ($MNT/opt/terminal-os/…), never
+# the live ISO's /opt/terminal-os. The live root is an overlay on tmpfs — dumping
+# a ~1.2 GB GGUF there can OOM the installer and then double-copy on cp -a.
+# install/11-frank-ai.sh reads dest/vendor/{models,bitnet}/ on the installed box.
+STAGE_OFFSET=2147483648   # 2 GiB — keep in sync with the USB creators
+stage_frank_ai() {
+  local disk_name="$1" dest="$2"
+  local disk="/dev/${disk_name}"
+  [[ -n "$disk_name" && -b "$disk" ]] || {
+    c_info "live USB device not found — Frank runs rule-based (AI idle)"; return 0; }
+  [[ -n "$dest" && -d "$dest" ]] || {
+    c_warn "AI stage dest missing ($dest) — skipping"; return 0; }
+
+  local hdr
+  # Header lives at the fixed offset; first 4 KiB always carries the text
+  # (Windows writer uses a 4 KiB header region; Linux uses 1 MiB — same start).
+  hdr="$(dd if="$disk" bs=4096 skip=$((STAGE_OFFSET / 4096)) count=1 2>/dev/null | tr -d '\000')"
+  if [[ "$hdr" != FOUNDATIONAI2* ]]; then
+    c_info "no staged AI payload on the USB — Frank runs rule-based (AI idle)"
+    return 0
+  fi
+
+  local mo ms so ss
+  mo="$(printf '%s\n' "$hdr" | sed -n 's/^model_offset=//p'  | head -1)"
+  ms="$(printf '%s\n' "$hdr" | sed -n 's/^model_size=//p'    | head -1)"
+  so="$(printf '%s\n' "$hdr" | sed -n 's/^server_offset=//p' | head -1)"
+  ss="$(printf '%s\n' "$hdr" | sed -n 's/^server_size=//p'   | head -1)"
+  [[ "$mo" =~ ^[0-9]+$ && "$ms" =~ ^[0-9]+$ && "$ms" -gt 0 ]] || {
+    c_warn "AI header unreadable — skipping"; return 0; }
+  # Sanity bounds: model must start past the header region, size under 4 GiB.
+  if (( mo < STAGE_OFFSET + 4096 || ms > 4294967296 )); then
+    c_warn "AI header offsets look wrong (mo=$mo ms=$ms) — refusing to stage"
+    return 0
+  fi
+
+  mkdir -p "$dest/vendor/models" "$dest/vendor/bitnet"
+  local model_out="$dest/vendor/models/model.gguf"
+  local server_out="$dest/vendor/bitnet/llama-server"
+
+  c_info "reading staged AI model from USB ($ms bytes)…"
+  if ! dd if="$disk" of="$model_out" bs=1M iflag=skip_bytes,count_bytes \
+        skip="$mo" count="$ms" status=none 2>/dev/null; then
+    c_warn "could not read the staged model — skipping"; rm -f "$model_out"; return 0
+  fi
+  # Exact size check (header is the source of truth; padding on the stick is ignored).
+  local got
+  got="$(stat -c %s "$model_out" 2>/dev/null || stat -f %z "$model_out" 2>/dev/null || echo 0)"
+  if [[ "$got" != "$ms" ]]; then
+    c_warn "staged model size mismatch (got $got, expected $ms) — discarding"
+    rm -f "$model_out"; return 0
+  fi
+  # GGUF magic ("GGUF") — catch a truncated/corrupt dd early.
+  local magic
+  magic="$(dd if="$model_out" bs=1 count=4 2>/dev/null || true)"
+  if [[ "$magic" != "GGUF" ]]; then
+    c_warn "staged model is not a GGUF file (bad magic) — discarding"
+    rm -f "$model_out"; return 0
+  fi
+  c_ok "staged AI model from USB ($ms bytes) → $model_out"
+
+  if [[ "$ss" =~ ^[0-9]+$ && "$ss" -gt 0 && "$so" =~ ^[0-9]+$ ]]; then
+    if dd if="$disk" of="$server_out" bs=1M iflag=skip_bytes,count_bytes \
+          skip="$so" count="$ss" status=none 2>/dev/null; then
+      got="$(stat -c %s "$server_out" 2>/dev/null || stat -f %z "$server_out" 2>/dev/null || echo 0)"
+      if [[ "$got" != "$ss" ]]; then
+        c_warn "staged server size mismatch (got $got, expected $ss) — discarding binary"
+        rm -f "$server_out"
+      else
+        # ELF magic — the prebuilt bitnet.cpp llama-server is a Linux ELF.
+        magic="$(dd if="$server_out" bs=1 count=4 2>/dev/null || true)"
+        if [[ "$magic" != $'\x7fELF' ]]; then
+          c_warn "staged server is not an ELF binary — discarding"
+          rm -f "$server_out"
+        else
+          chmod +x "$server_out"
+          c_ok "staged AI server from USB ($ss bytes) → $server_out"
+        fi
+      fi
+    else
+      c_warn "could not read the staged AI server binary"
+    fi
+  else
+    c_warn "USB has the model but no AI server binary — install/11 will leave"
+    c_warn "frank-ai.service idle offline (no on-target build without network)."
+  fi
+
+  if [[ -f "$model_out" && -x "$server_out" ]]; then
+    c_ok "AI payload ready for install/11-frank-ai.sh (local BitNet)"
+  elif [[ -f "$model_out" ]]; then
+    c_warn "partial AI payload (model only) — sensor stays idle until a server is present"
+  fi
+}
+
 # An existing install's root partition (mkfs labels it foundation-root), or
 # nothing. Probe-mounted read-only to confirm it is really ours.
 # HARDWARE BUG (first mini-PC update, 2026-07-04): stdout here IS the return
@@ -225,6 +324,12 @@ EOF
   find "$MNT$REPO" -type f \
     \( -name '*.sh' -o -path '*/hardware/*' -o -path '*/usr/local/bin/*' \) \
     -exec chmod +x {} +
+
+  # Stage AI onto the TARGET tree (same contract as a fresh install). If this
+  # USB has no sidecar, an earlier install's model under /var/lib/frank/models
+  # is left alone by install/11 (no-clobber when already present).
+  c_step "Frank local AI (staged model, if present)"
+  stage_frank_ai "$(detect_live_disk)" "$MNT$REPO"
 
   # ── re-run the install steps in no-clobber update mode ────────────────────
   c_step "Applying (install/run-all.sh, update mode)"
@@ -466,45 +571,6 @@ EOF
     c_warn "root account LOCKED — rescue requires booting this installer USB"
   fi
 
-  # ── 6b. stage Frank's local AI from the USB (raw-offset sidecar) ────────────
-  # The USB creator wrote [header][model][server] as RAW bytes past the ISO in
-  # the stick's free space — Windows can't add a 2nd partition to a removable ISO
-  # stick, so there's no filesystem to mount (docs/FRANK-LOCAL-AI.md). Read them
-  # off the raw live device into the embedded repo's vendor/ dirs, where
-  # install/11-frank-ai.sh looks first. The installed mini PCs have no network,
-  # so this staged copy is the ONLY way the AI reaches them.
-  c_step "Frank local AI (staged model, if present)"
-  stage_frank_ai() {
-    local disk="/dev/$1" off=2147483648       # STAGE_OFFSET (2 GiB), matches the creators
-    [[ -b "$disk" ]] || { c_info "live device not found — Frank runs rule-based (AI idle)"; return 0; }
-    local hdr
-    hdr="$(dd if="$disk" bs=4096 skip=$((off / 4096)) count=1 2>/dev/null | tr -d '\000')"
-    if [[ "$hdr" != FOUNDATIONAI2* ]]; then
-      c_info "no staged AI payload on the USB — Frank runs rule-based (AI idle)"; return 0
-    fi
-    local mo ms so ss
-    mo="$(printf '%s\n' "$hdr" | sed -n 's/^model_offset=//p'  | head -1)"
-    ms="$(printf '%s\n' "$hdr" | sed -n 's/^model_size=//p'    | head -1)"
-    so="$(printf '%s\n' "$hdr" | sed -n 's/^server_offset=//p' | head -1)"
-    ss="$(printf '%s\n' "$hdr" | sed -n 's/^server_size=//p'   | head -1)"
-    [[ "$mo" =~ ^[0-9]+$ && "$ms" =~ ^[0-9]+$ ]] || { c_warn "AI header unreadable — skipping"; return 0; }
-    mkdir -p "$REPO/vendor/models" "$REPO/vendor/bitnet"
-    if dd if="$disk" of="$REPO/vendor/models/model.gguf" bs=1M iflag=skip_bytes,count_bytes \
-          skip="$mo" count="$ms" 2>/dev/null; then
-      c_ok "staged AI model from USB ($ms bytes)"
-    else
-      c_warn "could not read the staged model — skipping"; return 0
-    fi
-    if [[ "$ss" =~ ^[0-9]+$ && "$ss" -gt 0 && "$so" =~ ^[0-9]+$ ]]; then
-      if dd if="$disk" of="$REPO/vendor/bitnet/llama-server" bs=1M iflag=skip_bytes,count_bytes \
-            skip="$so" count="$ss" 2>/dev/null; then
-        chmod +x "$REPO/vendor/bitnet/llama-server"
-        c_ok "staged AI server from USB ($ss bytes)"
-      fi
-    fi
-  }
-  stage_frank_ai "$live_disk"
-
   # ── 7. Foundation TerminalOS itself ─────────────────────────────────────────
   c_step "Installing Foundation TerminalOS (install/run-all.sh in the target)"
   mkdir -p "$MNT$REPO"
@@ -515,6 +581,14 @@ EOF
   find "$MNT$REPO" -type f \
     \( -name '*.sh' -o -path '*/hardware/*' -o -path '*/usr/local/bin/*' \) \
     -exec chmod +x {} +
+
+  # ── 7b. stage Frank's local AI from the USB onto the TARGET tree ───────────
+  # Must run AFTER the repo is on $MNT (disk), never into the live overlay's
+  # /opt/terminal-os (that would put ~1.2 GB on tmpfs and risk OOM). install/11
+  # then picks vendor/ up from $REPO_ROOT on the installed system.
+  c_step "Frank local AI (staged model, if present)"
+  stage_frank_ai "$live_disk" "$MNT$REPO"
+
   arch-chroot "$MNT" /usr/bin/env \
     FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1 \
     HARDWARE_PROFILE="$profile" \
