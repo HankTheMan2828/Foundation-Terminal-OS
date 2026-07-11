@@ -2,7 +2,16 @@
 import socket
 import time
 
+import pytest
+
 from frankd.ipc import IPCServer
+
+# The IPC socket is AF_UNIX; the OS target is Linux. Dev hosts without
+# AF_UNIX support in Python (Windows) can't exercise the live socket.
+needs_af_unix = pytest.mark.skipif(
+    not hasattr(socket, "AF_UNIX"),
+    reason="AF_UNIX sockets unavailable on this host (target OS is Linux)",
+)
 
 
 def _client(path, msg):
@@ -21,6 +30,7 @@ def _client(path, msg):
         return s.recv(256).decode().strip()
 
 
+@needs_af_unix
 def test_poll_is_allowed(tmp_path):
     srv = IPCServer(tmp_path / "hub.sock", on_poll=lambda: "warn msg=hi")
     srv.start()
@@ -30,6 +40,7 @@ def test_poll_is_allowed(tmp_path):
         srv.stop()
 
 
+@needs_af_unix
 def test_mutating_commands_are_refused(tmp_path):
     srv = IPCServer(tmp_path / "hub.sock", on_poll=lambda: "NONE")
     srv.start()
