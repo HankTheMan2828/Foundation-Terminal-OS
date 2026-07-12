@@ -11,19 +11,28 @@ baked into the installer image itself: the ISO embeds this repo plus an
 offline copy of every package the OS needs, so the target machine starts
 from bare metal and needs no network. The whole flow is:
 
-1. **Get the installer ISO.** Download it from the repo's GitHub Releases
-   page (CI builds it automatically — see `.github/workflows/build-iso.yml`),
-   or build it yourself with [`image/build-iso.sh`](../image/README.md).
-2. **Write it to a USB stick (4 GB+) on any ordinary PC.** Use the USB
-   creator in [`tools/usb-creator/`](../tools/usb-creator/README.md) —
-   on Windows that's double-clicking `FoundationUSBCreator.cmd`; on
-   macOS/Linux it's `sudo ./create-foundation-usb.sh`. (Rufus, Etcher,
-   Ventoy, or `dd` work too.)
-3. **Boot the target machine from the stick** (boot-menu key at power-on:
+1. **Write a USB stick (4 GB+) on any ordinary PC.** Use the USB creator in
+   [`tools/usb-creator/`](../tools/usb-creator/README.md) — on Windows,
+   double-click `FoundationUSBCreator.cmd`; on macOS/Linux,
+   `sudo ./create-foundation-usb.sh`. The creator finds or downloads the
+   latest release ISO itself (you do not need to pre-download it). Prefer a
+   **permanent staging folder** and leave `model.gguf` / the ISO there
+   between releases — wiping Downloads and re-fetching everything each time
+   is the slow path. Details and the update loop:
+   [`tools/usb-creator/README.md`](../tools/usb-creator/README.md)
+   (“Recommended workflow”). (Rufus, Etcher, Ventoy, or `dd` work for the
+   ISO alone, but they do not stage Frank's local AI.)
+2. **Boot the target machine from the stick** (boot-menu key at power-on:
    usually F12, F11, Esc, F2, or Del) and follow the on-screen installer:
-   profile choice, disk selection (the wipe is gated behind typing `ERASE`),
-   hostname, root password — then it installs everything offline and reboots
-   into the Home Hub.
+   profile choice, disk selection (fresh install wipe is gated behind typing
+   `ERASE`; an existing install offers **UPDATE** gated behind `UPDATE`),
+   hostname/root password on first install — then it installs offline and
+   reboots into the Home Hub.
+3. **Later updates:** same stick/creator for package/ISO changes; for
+   Hub/Frank/code-only releases with ethernet, prefer Settings → SYSTEM
+   UPDATE (small payload) — see [`UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md).
+   Rebuild the stick with `-NoModel` / `FOUNDATION_NO_MODEL=1` when the mini
+   PC already has Frank's AI and you only need a faster ISO write.
 
 The rest of this guide is the **manual path** for developers, and it's also
 precisely what the ISO's installer executes inside the target chroot
@@ -95,39 +104,40 @@ known-good version (target 6.8.12) from the Arch Linux Archive. Do not
 continue on a kernel where the second screen is broken. This gate is specific
 to this one profile — the generic core has no such requirement.
 
-## 2. Configuring API keys (spec §6, AI Chat §5)
+## 2. Local AI only — no cloud keys for the Assistant (spec §6, AI Chat §5)
 
-Nothing secret is committed. Two **separate** credential surfaces (see
-ARCHITECTURE.md — the integrations are isolated trust domains):
+The Hub Assistant is **local only**. It talks only to `frank-ai.service` on
+`127.0.0.1:8080` (same BitNet / `llama-server` stack Frank's sensor uses).
+There is **no** Mistral (or other) cloud fallback for chat — if the local
+server is down, the Assistant shows an offline notice and stays offline.
 
-- **Frank's key** — `/etc/frank/secrets.env`, owner `root:frank`, mode `0640`.
-  The operator account cannot read this. Only needed if you turn on cloud
-  sift/overseer/commentary (`backend = "cloud"` or `ai_enabled`); the default
-  local BitNet sensor needs no key.
+Nothing secret is required for the default path. Optional technician surfaces:
+
+- **Frank's key** (optional / legacy) — `/etc/frank/secrets.env`, owner
+  `root:frank`, mode `0640`. The operator account cannot read this. Only needed
+  if you deliberately turn on cloud sift/overseer/commentary
+  (`backend = "cloud"` or `ai_enabled`); the **shipped default** is local
+  BitNet and needs no key. Prefer leaving this empty.
   ```sh
   sudo install -o root -g frank -m 0640 /dev/null /etc/frank/secrets.env
-  echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/frank/secrets.env >/dev/null
+  # optional legacy only — not used by the Hub Assistant:
+  # echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/frank/secrets.env >/dev/null
   ```
 - **AI Chat's config** — `/etc/foundationhub/aichat.env`, readable by the
-  operator. The Assistant talks first to the **local** model on
-  `127.0.0.1:8080` (`frank-ai.service`, same server Frank's sensor uses). A
-  key is optional: if the local server is down and `MISTRAL_API_KEY` is set
-  here, chat falls back to Mistral's cloud endpoint.
+  operator. Defaults point at the local model; overrides stay on-box:
   ```sh
   sudo install -o root -g operator -m 0640 /dev/null /etc/foundationhub/aichat.env
-  # optional cloud fallback when frank-ai.service isn't staged:
-  echo 'MISTRAL_API_KEY=sk-...' | sudo tee /etc/foundationhub/aichat.env >/dev/null
   # optional technician override of URL/model (defaults are the local BitNet):
   # FOUNDATIONHUB_AI_URL=http://127.0.0.1:8080/v1/chat/completions
   # FOUNDATIONHUB_AI_MODEL=bitnet-b1.58-2B-4T
   ```
 
-**With no model staged and no key (current default on a bare install):** the
-rule engine runs fully offline, Frank speaks with the built-in fallback lines,
-and AI Chat shows a clear offline notice. Everything else works. To make chat
-live on-device, stage the BitNet binary + GGUF so `frank-ai.service` starts
-(docs/FRANK-LOCAL-AI.md), or put a Mistral key in `aichat.env` for the cloud
-fallback.
+**With no model staged (current default on a bare install):** the rule engine
+runs fully offline, Frank speaks with the built-in fallback lines, and AI Chat
+shows a clear offline notice. Everything else works. To make chat live
+on-device, stage **both** the BitNet `llama-server` binary and the GGUF so
+`frank-ai.service` can start (docs/FRANK-LOCAL-AI.md) — typically via the USB
+creator AI sidecar, then re-run `install/11-frank-ai.sh` or a full install.
 
 ## 3. Making foundationhub the login shell (spec §4)
 

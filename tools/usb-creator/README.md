@@ -9,35 +9,106 @@ pre-installed: the ISO it writes carries the whole OS, offline.
 Both creators are attached to every GitHub release next to the ISO, so an
 end user never needs this repo at all.
 
-## Windows (double-click)
+## Recommended workflow (repeat installs / updates)
+
+**Do not** delete Downloads and re-download everything each release. That
+path double-fetches the ISO (~1.5 GB) and often re-downloads the AI model
+(~1.2 GB). Use a permanent staging folder instead.
+
+### One-time setup (Windows)
+
+1. Create a permanent folder, e.g. `C:\Users\<you>\Foundation-USB-Cache\`.
+2. Put **`FoundationUSBCreator.cmd`** and **`Create-FoundationUSB.ps1`** in
+   that folder (from a release, or copy from this directory).
+3. Leave the folder alone between releases. After the first successful run it
+   will also hold:
+   - `foundation-terminalos-*.iso` — installer (refreshed when outdated)
+   - `model.gguf` — Frank AI weights (keep forever)
+   - `llama-server` — AI server binary (keep forever)
+
+### Every new version
+
+1. Plug in the USB stick.
+2. Double-click `FoundationUSBCreator.cmd` **from that cache folder**.
+3. The creator:
+   - reuses a local ISO if it matches the current GitHub release (SHA checked);
+   - downloads a **new** ISO only when yours is missing or stale;
+   - reuses `model.gguf` / `llama-server` once they exist (no re-download).
+4. On the mini PC: boot the stick → **UPDATE** → type `UPDATE`  
+   (use **INSTALL** / `ERASE` only for a full wipe).
+
+### Faster write when the mini PC already has Frank AI
+
+Skip re-staging the ~1.2 GB model onto the stick:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -NoModel
+```
+
+Use full staging (default, no `-NoModel`) for a **first install** or when the
+target has no working local AI yet.
+
+### Even faster: no USB (code-only updates)
+
+If the mini PC has ethernet and transport policy allows it
+(`usb+wired` is the default), use **Settings → SYSTEM UPDATE** instead.
+That applies the small `terminalos-payload-*.tar.gz` (~1 MB). Base package
+upgrades still need the USB path — see [`docs/UPDATE-SYSTEM.md`](../../docs/UPDATE-SYSTEM.md).
+
+### What not to do
+
+| Slow habit | Better |
+|---|---|
+| Delete all TerminalOS files from Downloads each time | Keep a permanent cache folder |
+| Manually download the ISO, then run the creator (it may download again) | Let the creator fetch/refresh the ISO |
+| Re-download the AI model every release | Keep `model.gguf` next to the scripts |
+| Full AI staging for every stick refresh | `-NoModel` once AI is already on the PC |
+| USB for every Hub/Frank code change | Settings → SYSTEM UPDATE when possible |
+
+---
+
+## Windows (double-click) — first-time / end user
 
 1. Download **`FoundationUSBCreator.cmd`** and **`Create-FoundationUSB.ps1`**
-   into the same folder (your Downloads folder is fine). Downloading the ISO
-   too is optional — the creator fetches the latest release itself if it
-   doesn't find one.
+   into the same folder (a permanent folder is better than Downloads — see
+   above). Downloading the ISO too is optional — the creator fetches the
+   latest release itself if it doesn't find one.
 2. Plug in the USB stick.
 3. Double-click `FoundationUSBCreator.cmd` and follow the prompts. It asks
    Windows for administrator rights (needed to write a raw disk), shows only
    USB sticks — internal drives are never offered — and requires typing
    `ERASE` before it touches anything.
 
+Point at a specific ISO (skip discovery):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -Iso C:\path\to\foundation-terminalos-....iso
+```
+
 ## macOS / Linux
 
 ```sh
 sudo ./create-foundation-usb.sh                # auto-finds/downloads the ISO
 sudo ./create-foundation-usb.sh path/to.iso    # or point it at one
+FOUNDATION_NO_MODEL=1 sudo ./create-foundation-usb.sh   # ISO only
 ```
 
 Same behavior: only removable/USB disks are offered, `ERASE` gate before the
-write.
+write. Keep `model.gguf` and `llama-server` next to the script so later runs
+do not re-download them.
 
 ## Then, on the target machine
 
 Plug the stick in, power on while tapping the boot-menu key (usually **F12,
 F11, Esc, F2, or Del** — it flashes on screen), pick the USB stick, and
-follow the on-screen installer. It partitions the disk (gated behind typing
-`ERASE` again), installs everything from packages embedded on the stick (no
-network needed), and reboots into the Home Hub.
+follow the on-screen installer:
+
+- **Existing install** → choose **UPDATE**, confirm with `UPDATE` (preserves
+  accounts, home data, and Frank state).
+- **Bare machine / wipe** → **INSTALL**, confirm with `ERASE`.
+
+It installs from packages embedded on the stick (no network needed) and
+reboots into the Home Hub.
 
 > ⚠️ The installed system is a locked-down, no-shell kiosk with an always-on
 > overseer (Frank). Don't point it at a machine you still need as a normal PC.
@@ -72,4 +143,6 @@ building on the target.
 ## Alternatives
 
 Any ISO flasher works on the same ISO: Rufus, balenaEtcher, Ventoy, or plain
-`dd` (see [`image/README.md`](../../image/README.md)).
+`dd` (see [`image/README.md`](../../image/README.md)). Note: third-party
+flashers do **not** stage Frank's local AI sidecar — use this creator when the
+target needs offline AI on first boot.

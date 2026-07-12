@@ -67,7 +67,7 @@ ASSISTANT_THINKING = "… thinking"
 # in docs/FRANK-LOCAL-AI.md and INSTALL.md §2.
 ASSISTANT_OFFLINE = (
     "Local model not reachable (frank-ai.service on 127.0.0.1:8080). "
-    "Stage the model, or set MISTRAL_API_KEY in /etc/foundationhub/aichat.env.")
+    "Stage llama-server + model.gguf (docs/FRANK-LOCAL-AI.md), then start the service.")
 ASSISTANT_ERROR_HTTP = (
     "Model server answered with an error. Check frank-ai.service / model name.")
 ASSISTANT_ERROR_EMPTY = "Model returned an empty reply. Try again."

@@ -11,17 +11,14 @@ chat turns to the model endpoint and reads the reply, exactly as any local app
 would. Frank's isolation is untouched; the operator gains no power over Frank by
 chatting with the model (the assistant can't even see Frank's socket).
 
-Dependency-free on purpose: uses stdlib urllib, so the Hub needs no `requests`.
-Everything degrades gracefully off-device — if the server isn't up (dev box, or
-an install that didn't stage the model), calls return None and the screen shows
-a clear offline notice instead of crashing.
+Local only (operator decision): no cloud provider, no API key, no network
+fallback. If frank-ai.service is not up (model/binary not staged), calls return
+None and the screen shows a clear offline notice instead of phoning home.
 
-Config (all optional, technician overrides):
-  env  FOUNDATIONHUB_AI_URL / FOUNDATIONHUB_AI_MODEL / MISTRAL_API_KEY
+Config (all optional, technician overrides — still loopback/local endpoints):
+  env  FOUNDATIONHUB_AI_URL / FOUNDATIONHUB_AI_MODEL
   file /etc/foundationhub/aichat.env  (same keys; assistant's own file, never
-       Frank's secrets). If a key is present and the local server is down, the
-       client falls back to Mistral's cloud endpoint so a key still does what
-       INSTALL.md §2 promises.
+       Frank's secrets).
 """
 from __future__ import annotations
 
@@ -35,11 +32,7 @@ from pathlib import Path
 # Local inference server (loopback, same one frank-ai.service serves).
 DEFAULT_LOCAL_URL = "http://127.0.0.1:8080/v1/chat/completions"
 DEFAULT_LOCAL_MODEL = "bitnet-b1.58-2B-4T"
-# Cloud fallback used only when a key is configured and local is unreachable.
-CLOUD_URL = "https://api.mistral.ai/v1/chat/completions"
-CLOUD_MODEL = "mistral-small-latest"
 
-KEY_ENV = "MISTRAL_API_KEY"
 URL_ENV = "FOUNDATIONHUB_AI_URL"
 MODEL_ENV = "FOUNDATIONHUB_AI_MODEL"
 KEY_FILE = Path(os.environ.get(
@@ -74,11 +67,11 @@ def _parse_env_file(path: Path) -> dict[str, str]:
     return out
 
 
-def _load_settings() -> tuple[str, str, str | None]:
-    """Resolve (url, model, api_key) from env vars + aichat.env.
+def _load_settings() -> tuple[str, str]:
+    """Resolve (url, model) from env vars + aichat.env.
 
     Precedence: process env wins over the file, so a technician can override
-    a baked-in aichat.env without editing it.
+    a baked-in aichat.env without editing it. No API keys — local only.
     """
     file_vals = _parse_env_file(KEY_FILE)
     url = (os.environ.get(URL_ENV)
@@ -87,10 +80,7 @@ def _load_settings() -> tuple[str, str, str | None]:
     model = (os.environ.get(MODEL_ENV)
              or file_vals.get(MODEL_ENV)
              or DEFAULT_LOCAL_MODEL)
-    key = (os.environ.get(KEY_ENV)
-           or file_vals.get(KEY_ENV)
-           or None)
-    return url, model, key
+    return url, model
 
 
 @dataclass
@@ -141,10 +131,11 @@ class AssistantClient:
 
     def __init__(self, url: str | None = None, model: str | None = None,
                  api_key: str | None = None):
-        file_url, file_model, file_key = _load_settings()
+        # api_key is accepted for older call sites but never used (local-only).
+        _ = api_key
+        file_url, file_model = _load_settings()
         self.url = url if url is not None else file_url
         self.model = model if model is not None else file_model
-        self.api_key = api_key if api_key is not None else file_key
         # Last failure reason, for the screen to surface (cleared on success).
         self.last_error: str | None = None
 
@@ -179,32 +170,21 @@ class AssistantClient:
         return result.text
 
     def complete(self, history: list[dict]) -> ChatResult:
-        """Like chat(), but returns a ChatResult with an explicit error code."""
+        """Like chat(), but returns a ChatResult with an explicit error code.
+
+        Local only: one POST to the configured (default loopback) endpoint.
+        No cloud fallback — if frank-ai.service is down, the operator stages
+        the binary + GGUF (docs/FRANK-LOCAL-AI.md).
+        """
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history]
-        result = self._post(self.url, self.model, messages, auth=bool(self.api_key))
+        result = self._post(self.url, self.model, messages)
         if result.ok:
             self.last_error = None
-            return result
-
-        # Local down + operator put a Mistral key in aichat.env: honour the
-        # INSTALL.md §2 cloud path so a key still makes the assistant useful
-        # when frank-ai.service isn't staged (dev box, offline install, etc.).
-        # Only fall back when the primary URL is still the local default —
-        # if the technician pointed the URL elsewhere, do not second-guess them.
-        using_local = self.url.rstrip("/") == DEFAULT_LOCAL_URL.rstrip("/")
-        if (using_local and self.api_key
-                and result.error in ("offline", "http", "empty", "bad_response")):
-            cloud = self._post(CLOUD_URL, CLOUD_MODEL, messages, auth=True)
-            if cloud.ok:
-                self.last_error = None
-                return cloud
-            result = cloud
-
-        self.last_error = result.error
+        else:
+            self.last_error = result.error
         return result
 
-    def _post(self, url: str, model: str, messages: list[dict], *,
-              auth: bool) -> ChatResult:
+    def _post(self, url: str, model: str, messages: list[dict]) -> ChatResult:
         payload = json.dumps({
             "model": model,
             "max_tokens": _MAX_TOKENS,
@@ -215,8 +195,6 @@ class AssistantClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        if auth and self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
         req = urllib.request.Request(url, data=payload, headers=headers,
                                      method="POST")
         try:
@@ -225,8 +203,8 @@ class AssistantClient:
             data = json.loads(raw)
         except urllib.error.HTTPError:
             # Server answered but rejected the request (wrong model name, bad
-            # payload, auth). Surface as http so the UI can distinguish it
-            # from a dead frank-ai.service.
+            # payload). Surface as http so the UI can distinguish it from a
+            # dead frank-ai.service.
             return ChatResult(error="http")
         except (urllib.error.URLError, TimeoutError, OSError):
             return ChatResult(error="offline")

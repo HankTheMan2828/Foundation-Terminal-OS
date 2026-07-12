@@ -152,29 +152,24 @@ def test_message_content_empty():
 def test_load_settings_from_env_file(tmp_path, monkeypatch):
     env = tmp_path / "aichat.env"
     env.write_text(
-        "MISTRAL_API_KEY=sk-test\n"
         "FOUNDATIONHUB_AI_URL=http://127.0.0.1:9999/v1/chat/completions\n"
         "FOUNDATIONHUB_AI_MODEL=custom-model\n"
     )
     monkeypatch.setenv("FOUNDATIONHUB_AICHAT_ENV", str(env))
-    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
     monkeypatch.delenv("FOUNDATIONHUB_AI_URL", raising=False)
     monkeypatch.delenv("FOUNDATIONHUB_AI_MODEL", raising=False)
     # Re-bind KEY_FILE from the env we just set.
     monkeypatch.setattr(aiclient, "KEY_FILE", Path(env))
-    url, model, key = aiclient._load_settings()
+    url, model = aiclient._load_settings()
     assert url.endswith(":9999/v1/chat/completions")
     assert model == "custom-model"
-    assert key == "sk-test"
 
 
 def test_complete_offline_returns_error(monkeypatch):
     client = aiclient.AssistantClient(
         url="http://127.0.0.1:1/v1/chat/completions",
         model="x",
-        api_key=None,
     )
-    # Force no cloud fallback.
     result = client.complete([{"role": "user", "content": "hi"}])
     assert not result.ok
     assert result.error == "offline"
@@ -194,7 +189,6 @@ def test_complete_success_parses_reply(monkeypatch):
     client = aiclient.AssistantClient(
         url="http://example.test/v1/chat/completions",
         model="x",
-        api_key=None,
     )
     with patch("urllib.request.urlopen", return_value=_Resp()):
         result = client.complete([{"role": "user", "content": "ping"}])
@@ -202,39 +196,22 @@ def test_complete_success_parses_reply(monkeypatch):
     assert result.text == "pong"
 
 
-def test_cloud_fallback_when_local_down_and_key_set(monkeypatch):
-    """INSTALL.md §2: a Mistral key should still make chat work if local is down."""
+def test_no_cloud_fallback_when_local_down(monkeypatch):
+    """Local-only: a dead frank-ai.service never phones home to Mistral."""
     calls = []
-
-    class _Offline:
-        def __enter__(self):
-            raise aiclient.urllib.error.URLError("down")
-        def __exit__(self, *a):
-            return False
-
-    class _Cloud:
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            return False
-        def read(self):
-            return json.dumps({
-                "choices": [{"message": {"content": "from cloud"}}]
-            }).encode()
 
     def fake_urlopen(req, timeout=None):
         calls.append(req.full_url)
-        if "127.0.0.1:8080" in req.full_url:
-            raise aiclient.urllib.error.URLError("connection refused")
-        return _Cloud()
+        raise aiclient.urllib.error.URLError("connection refused")
 
     client = aiclient.AssistantClient(
         url=aiclient.DEFAULT_LOCAL_URL,
         model=aiclient.DEFAULT_LOCAL_MODEL,
-        api_key="sk-test",
+        api_key="sk-would-be-ignored",
     )
     with patch("urllib.request.urlopen", side_effect=fake_urlopen):
         result = client.complete([{"role": "user", "content": "hi"}])
-    assert result.ok
-    assert result.text == "from cloud"
-    assert any("mistral.ai" in u for u in calls)
+    assert not result.ok
+    assert result.error == "offline"
+    assert calls == [aiclient.DEFAULT_LOCAL_URL]
+    assert not any("mistral.ai" in u for u in calls)
