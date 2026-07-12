@@ -132,12 +132,18 @@ Nothing secret is required for the default path. Optional technician surfaces:
   # FOUNDATIONHUB_AI_MODEL=bitnet-b1.58-2B-4T
   ```
 
-**With no model staged (current default on a bare install):** the rule engine
-runs fully offline, Frank speaks with the built-in fallback lines, and AI Chat
-shows a clear offline notice. Everything else works. To make chat live
-on-device, stage **both** the BitNet `llama-server` binary and the GGUF so
-`frank-ai.service` can start (docs/FRANK-LOCAL-AI.md) — typically via the USB
-creator AI sidecar, then re-run `install/11-frank-ai.sh` or a full install.
+**Full offline Assistant (fresh install):** write the USB with the default
+creator path (AI staging **required** — do not pass `-NoModel`). The installer
+copies model + `llama-server` onto the target and enables `frank-ai.service`.
+After reboot, Hub ASSISTANT talks only to `127.0.0.1:8080` (no cloud).
+
+**Updates:** USB UPDATE with a full-AI stick refreshes code and re-lays AI if
+needed; `-NoModel` is fine only when the machine already has working local AI.
+Network SYSTEM UPDATE refreshes code only and **preserves** on-disk AI.
+
+**If AI was never staged:** the rule engine still runs, Frank uses built-in
+lines, and AI Chat shows a clear offline notice. Fix by rewriting the USB
+without `-NoModel` and running UPDATE or INSTALL (docs/FRANK-LOCAL-AI.md).
 
 ## 3. Making foundationhub the login shell (spec §4)
 

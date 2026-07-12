@@ -120,7 +120,61 @@ c_warn "EVERYTHING on $DEV will be destroyed."
 read -rp "> type ERASE (all caps) to continue, anything else aborts: " confirm
 [[ "$confirm" == "ERASE" ]] || { c_info "aborted — nothing was touched"; exit 0; }
 
-# ── 3. write the image ───────────────────────────────────────────────────────
+# ── 3. prepare Frank's local AI (BEFORE writing — fail closed by default) ────
+# Default: AI staging REQUIRED so offline fresh installs get Hub ASSISTANT.
+# FOUNDATION_NO_MODEL=1: skip (faster refresh when target already has AI).
+MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf}"
+STAGE_OFFSET=2147483648    # 2 GiB — must match Create-FoundationUSB.ps1 + foundation-install
+STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
+AI_MODEL="$SCRIPT_DIR/model.gguf"
+AI_SERVER="$SCRIPT_DIR/llama-server"
+STAGE_AI=0
+
+fail_ai() {
+  c_warn "$*"
+  c_warn "Local AI is required for a full offline install (Hub ASSISTANT + Frank)."
+  c_warn "Fix the problem, or set FOUNDATION_NO_MODEL=1 only if the target already has AI."
+  exit 1
+}
+
+prepare_ai() {
+  if [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]]; then
+    c_info "FOUNDATION_NO_MODEL=1 — not staging the AI."
+    return 0
+  fi
+  if [[ ! -f "$AI_MODEL" ]]; then
+    c_info "downloading the AI model (~1.2 GB) to stage on the stick…"
+    curl -fL --progress-bar -o "$AI_MODEL" "$MODEL_URL" || fail_ai "model download failed"
+  fi
+  if [[ ! -f "$AI_SERVER" ]]; then
+    local surl="${FOUNDATION_AI_SERVER_URL:-}"
+    [[ -z "$surl" ]] && surl="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null \
+      | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' | grep -v '\.sha256' | head -1 | cut -d'"' -f4 || true)"
+    [[ -n "$surl" ]] || fail_ai "no foundation-ai-llama-server on any release (wait for build-ai-binary CI)"
+    c_info "downloading the AI server binary…"
+    curl -fL --progress-bar -o "$AI_SERVER" "$surl" || { rm -f "$AI_SERVER"; fail_ai "server binary download failed"; }
+  fi
+  (( ISO_BYTES < STAGE_OFFSET )) || fail_ai "ISO exceeds the 2 GiB staging offset"
+  local magic
+  magic="$(dd if="$AI_MODEL" bs=1 count=4 2>/dev/null || true)"
+  [[ "$magic" == "GGUF" ]] || fail_ai "model is not a GGUF file (magic='$magic')"
+  local msize ssize
+  msize=$(stat -c %s "$AI_MODEL" 2>/dev/null || stat -f %z "$AI_MODEL")
+  ssize=$(stat -c %s "$AI_SERVER" 2>/dev/null || stat -f %z "$AI_SERVER")
+  (( ssize > 0 )) || fail_ai "AI server binary missing or empty"
+  # Stick capacity check (best-effort; size may be under /sys).
+  local stick_bytes=""
+  stick_bytes="$(lsblk -bndo SIZE "$DEV" 2>/dev/null | head -1 || true)"
+  if [[ "$stick_bytes" =~ ^[0-9]+$ ]]; then
+    local need=$(( STAGE_OFFSET + STAGE_HDR + msize + ssize + 1048576 ))
+    (( stick_bytes >= need )) || fail_ai "stick too small to stage AI (need ~$((need / 1024 / 1024)) MB)"
+  fi
+  STAGE_AI=1
+  c_ok "AI ready to stage (model $((msize / 1024 / 1024)) MB + server)"
+}
+prepare_ai
+
+# ── 4. write the image ───────────────────────────────────────────────────────
 c_info "writing the installer (this takes a few minutes — do not unplug)…"
 if [[ "$OS" == "Darwin" ]]; then
   diskutil unmountDisk force "$DEV" >/dev/null
@@ -140,53 +194,15 @@ else
   sync
 fi
 
-# ── 4. stage Frank's local AI onto the stick (raw-offset sidecar) ────────────
-# The installed mini PCs have no network, so the model + server binary must ride
-# on the stick. Windows can't add a 2nd partition to a raw-ISO removable stick,
-# so for ONE cross-platform contract we don't partition: we write [1 MiB header]
-# [model][server] as raw bytes at a fixed offset PAST the ISO, and the OS
-# installer reads them off the raw device. Best-effort (writes the OS regardless);
-# skip with FOUNDATION_NO_MODEL=1. Contract shared with Create-FoundationUSB.ps1
-# + foundation-install (docs/FRANK-LOCAL-AI.md).
-MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf}"
-STAGE_OFFSET=2147483648    # 2 GiB — just past a sub-2 GB ISO (our size target),
-                           # leaves room for the ~1.2 GB AI on a 3.8 GB stick.
-                           # Was 3 GiB (assumed 8 GB+ sticks). MUST match
-                           # Create-FoundationUSB.ps1 + foundation-install's off=.
-                           # Contract: the ISO must stay under 2 GiB.
-STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
-stage_ai() {
-  [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]] && { c_info "FOUNDATION_NO_MODEL=1 — not staging the AI."; return 0; }
-  local model="$SCRIPT_DIR/model.gguf" server="$SCRIPT_DIR/llama-server"
-  if [[ ! -f "$model" ]]; then
-    c_info "downloading the AI model (~1.2 GB) to stage on the stick…"
-    curl -fL --progress-bar -o "$model" "$MODEL_URL" || { c_warn "model download failed — writing OS only."; return 0; }
-  fi
-  if [[ ! -f "$server" ]]; then
-    local surl="${FOUNDATION_AI_SERVER_URL:-}"
-    [[ -z "$surl" ]] && surl="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null \
-      | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' | grep -v '\.sha256' | head -1 | cut -d'"' -f4 || true)"
-    [[ -n "$surl" ]] && { c_info "downloading the AI server binary…"; curl -fL --progress-bar -o "$server" "$surl" || rm -f "$server"; }
-  fi
-  local msize ssize=0
-  msize=$(stat -c %s "$model" 2>/dev/null || stat -f %z "$model")
-  [[ -f "$server" ]] && ssize=$(stat -c %s "$server" 2>/dev/null || stat -f %z "$server")
-  if (( ISO_BYTES >= STAGE_OFFSET )); then c_warn "ISO exceeds the 2 GiB staging offset — writing OS only."; return 0; fi
-  # GGUF magic — refuse to stage a truncated download / HTML error page.
-  local magic
-  magic="$(dd if="$model" bs=1 count=4 2>/dev/null || true)"
-  if [[ "$magic" != "GGUF" ]]; then
-    c_warn "model is not a GGUF file (magic='$magic') — writing OS only."
-    return 0
-  fi
-  # Offline install needs BOTH pieces; model alone leaves frank-ai.service idle.
-  if (( ssize <= 0 )); then
-    c_warn "no prebuilt AI server binary (foundation-ai-llama-server from the release)."
-    c_warn "without it the offline install has no local AI — writing OS only."
-    return 0
-  fi
+# ── 5. stage Frank's local AI onto the stick (raw-offset sidecar) ────────────
+# Contract shared with Create-FoundationUSB.ps1 + foundation-install
+# (docs/FRANK-LOCAL-AI.md).
+write_ai_sidecar() {
+  (( STAGE_AI == 1 )) || return 0
+  local msize ssize
+  msize=$(stat -c %s "$AI_MODEL" 2>/dev/null || stat -f %z "$AI_MODEL")
+  ssize=$(stat -c %s "$AI_SERVER" 2>/dev/null || stat -f %z "$AI_SERVER")
   local model_off=$(( STAGE_OFFSET + STAGE_HDR ))
-  # round the model up to a 1 MiB boundary so the server write stays aligned
   local srv_off=$(( model_off + ( (msize + STAGE_HDR - 1) / STAGE_HDR ) * STAGE_HDR ))
   local hdr="FOUNDATIONAI2
 model_offset=$model_off
@@ -194,17 +210,17 @@ model_size=$msize
 server_offset=$srv_off
 server_size=$ssize
 "
-  local BS=1M; [[ "$OS" == "Darwin" ]] && BS=1m     # GNU dd uses 1M, BSD dd uses 1m
+  local BS=1M; [[ "$OS" == "Darwin" ]] && BS=1m
   c_info "staging the AI into the stick's free space (raw-offset, no partition)…"
   { printf '%s' "$hdr"; head -c $(( STAGE_HDR - ${#hdr} )) /dev/zero; } \
     | dd of="$WRITE_DEV" bs="$BS" seek=$(( STAGE_OFFSET / 1048576 )) count=1 conv=notrunc 2>/dev/null
-  dd if="$model" of="$WRITE_DEV" bs="$BS" seek=$(( model_off / 1048576 )) conv=notrunc 2>/dev/null \
+  dd if="$AI_MODEL" of="$WRITE_DEV" bs="$BS" seek=$(( model_off / 1048576 )) conv=notrunc 2>/dev/null \
     && c_ok "staged the AI model onto the stick ($msize bytes)."
-  dd if="$server" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
+  dd if="$AI_SERVER" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
     && c_ok "staged the AI server binary onto the stick ($ssize bytes)."
   sync
 }
-stage_ai
+write_ai_sidecar
 [[ "$OS" == "Darwin" ]] && { diskutil eject "$DEV" >/dev/null 2>&1 || true; }
 
 echo

@@ -21,8 +21,9 @@ param(
   # Path to the installer ISO. If omitted, the script looks next to itself,
   # then in the repo's image/out/, then offers to download the latest release.
   [string]$Iso,
-  # Skip staging Frank's local AI model onto the stick (the target then
-  # builds/fetches it on its first online run instead).
+  # Skip staging Frank's local AI (model + llama-server) onto the stick.
+  # Use only for faster stick refreshes when the target ALREADY has working
+  # local AI. Fresh installs need full staging (default) for offline Assistant.
   [switch]$NoModel
 )
 
@@ -231,9 +232,13 @@ if ($confirm -cne 'ERASE') {
 # ── 2b. prepare Frank's local AI to stage (downloaded on THIS online PC) ──────
 # The installed mini PCs have no network, so the model + server binary must ride
 # on the stick. We fetch them here (this PC is online) and stage them into the
-# stick's free space during the write below. Best-effort: any problem just writes
-# the OS (Frank still runs rule-based, AI idle). Skip with -NoModel.
+# stick's free space during the write below.
+#
+# Default: AI staging is REQUIRED so fresh offline installs get a working Hub
+# Assistant + Frank sensor. Fail before writing if prep fails. Skip only with
+# -NoModel (faster refreshes when the target already has local AI).
 $stageAI = $false
+$requireAI = -not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')
 # Raw-offset where the AI sidecar header is written (and where foundation-install
 # reads it back). MUST be defined before the size checks below — a use-before-def
 # left it $null, and `$IsoSize -ge $null` coerces to `-ge 0` (always true), so the
@@ -244,7 +249,16 @@ $stageAI = $false
 $STAGE_OFFSET = 2147483648   # 2 GiB
 $modelPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
 $serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
-if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
+function FailAi([string]$m) {
+  Bad $m
+  if ($requireAI) {
+    Bad 'Local AI is required for a full offline install (Hub ASSISTANT + Frank).'
+    Bad 'Fix the problem above, or pass -NoModel only if the target already has AI.'
+    Read-Host 'Press ENTER to close'
+    exit 1
+  }
+}
+if ($requireAI) {
   try {
     $ModelUrl = if ($env:FOUNDATION_MODEL_URL) { $env:FOUNDATION_MODEL_URL }
                 else { 'https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf' }
@@ -275,12 +289,11 @@ if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
     # Offline install needs BOTH the GGUF and the prebuilt llama-server — model
     # alone leaves frank-ai.service idle (no on-target build without network).
     if (-not (Test-Path $modelPath)) {
-      Bad 'AI model download failed - writing the OS only (AI can be added later).'
+      FailAi 'AI model download failed.'
     } elseif (-not (Test-Path $serverPath)) {
-      Bad 'AI server binary missing (foundation-ai-llama-server from the release).'
-      Bad 'Without it the offline install has no local AI. Writing the OS only.'
+      FailAi 'AI server binary missing (foundation-ai-llama-server from the release).'
     } elseif ($IsoSize -ge $STAGE_OFFSET) {
-      Bad 'ISO is larger than the 2 GiB staging offset - writing the OS only.'
+      FailAi 'ISO is larger than the 2 GiB staging offset — cannot stage AI past it.'
     } else {
       # Quick GGUF magic check so we don't stage a truncated HTML error page.
       $fs = [IO.File]::OpenRead($modelPath)
@@ -290,13 +303,13 @@ if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
       } finally { $fs.Close() }
       $magStr = [Text.Encoding]::ASCII.GetString($mag)
       if ($magStr -ne 'GGUF') {
-        Bad "Downloaded model is not a GGUF file (magic='$magStr') - writing the OS only."
         Remove-Item -Force $modelPath -ErrorAction SilentlyContinue
+        FailAi "Downloaded model is not a GGUF file (magic='$magStr')."
       } else {
         $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
         $need += (Get-Item $serverPath).Length + 512
         if ($target.Size -lt $need) {
-          Bad ("Stick too small to also stage the AI ({0:N1} GB) - writing the OS only." -f ($target.Size / 1GB))
+          FailAi ("Stick too small to stage the AI (need ~{0:N1} GB)." -f ($need / 1GB))
         } else {
           $stageAI = $true
           Good ("AI ready - model {0:N0} MB + server will stage after the OS is written." -f ((Get-Item $modelPath).Length / 1MB))
@@ -304,8 +317,13 @@ if (-not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')) {
       }
     }
   } catch {
-    Bad "Could not prepare the AI to stage: $($_.Exception.Message). Writing the OS only."
+    FailAi "Could not prepare the AI to stage: $($_.Exception.Message)"
   }
+  if (-not $stageAI) {
+    FailAi 'AI staging was not prepared (unexpected).'
+  }
+} else {
+  Say 'NoModel: skipping AI sidecar (target must already have local AI for Assistant).'
 }
 
 # ── 3. write the image ───────────────────────────────────────────────────────

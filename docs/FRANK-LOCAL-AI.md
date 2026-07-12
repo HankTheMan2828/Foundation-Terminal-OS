@@ -154,10 +154,16 @@ sidecar**:
   `/usr/local/lib/foundation-ai/llama-server`, enables `frank-ai.service`.
   UPDATE mode re-runs the same stage so a stick with AI can repair an idle
   install. Fully offline → working AI, zero on-target building.
-- **Fallback:** if nothing is staged (e.g. `-NoModel`), the service's
-  `ExecCondition`s keep it idle and the sensor safely no-ops — the rules keep
-  running. (The on-target build/fetch path in `install/11` exists but never fires
-  on a network-less mini PC.)
+- **Fallback:** if nothing is staged (e.g. intentional `-NoModel` update of a
+  machine that already has AI under `/var/lib/frank/models`), the service's
+  `ExecCondition`s keep it idle only when assets are still missing; otherwise
+  install/11 **keeps** the installed binary + GGUF. Rules always keep running.
+  Fresh offline installs need a stick written **with** AI staging (USB creator
+  default — fails closed if the model/server cannot be prepared).
+- **Updates:** USB UPDATE re-stages from the sidecar when present; if the stick
+  was `-NoModel`, recover `vendor/` from the previous `/opt/terminal-os` tree
+  and/or keep assets already on disk. Network `foundation-update` never ships
+  the GGUF (too large) — it preserves on-disk AI and only refreshes code.
 
 ## What is real vs. stubbed
 - Sifter/negotiation **logic, gates, math, wiring, IPC, Hub client + screen**,

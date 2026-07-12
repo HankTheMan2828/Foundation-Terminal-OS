@@ -129,12 +129,12 @@ building on the target.
   second partition on a removable stick that was raw-written with an ISO (both the
   Storage cmdlets and diskpart fail). Writing raw bytes past the ISO sidesteps
   that entirely and can't affect bootability.
-- This is **best-effort**: if the download can't complete or the stick is too
-  small, the stick still boots and installs fine — Frank just runs rule-based
-  (AI idle) until a model is provided.
-- Skip it (write only the ISO, smaller/faster): pass `-NoModel` on Windows
-  (`... -File .\Create-FoundationUSB.ps1 -NoModel`) or set `FOUNDATION_NO_MODEL=1`
-  on Linux/macOS.
+- **Required by default:** if the model or server binary cannot be prepared, the
+  creator **aborts before writing** so you never ship a "fresh install" stick
+  with a dead Assistant. Fix the download / stick size, then re-run.
+- Skip AI only when the target **already** has working local AI (faster refresh):
+  pass `-NoModel` on Windows (`... -File .\Create-FoundationUSB.ps1 -NoModel`)
+  or set `FOUNDATION_NO_MODEL=1` on Linux/macOS.
 - The server binary rides along too (the prebuilt `bitnet.cpp` `llama-server`,
   built by CI and attached to the release as `foundation-ai-llama-server-x86_64`),
   so the target needs **no building at all**. Dropping your own `llama-server`

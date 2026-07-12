@@ -36,8 +36,9 @@ install_file "etc/polkit-1/rules.d/50-foundationhub-account.rules" \
 # /run/foundationhub (active-user publication for Frank's per-user attribution).
 install_file "etc/tmpfiles.d/foundationhub.conf" "/etc/tmpfiles.d/foundationhub.conf" 0644
 systemd-tmpfiles --create /etc/tmpfiles.d/foundationhub.conf 2>/dev/null || true
-# AI Chat key file (operator-readable, separate from Frank's key). Empty by
-# default -> AI Chat runs in the clearly-labelled offline state (spec §5).
+# AI Chat config (operator-readable). Local model only — no cloud keys.
+# install/11-frank-ai.sh writes the commented defaults if still missing; here
+# we only ensure the path exists early so ownership is correct on first boot.
 if [[ ! -e /etc/foundationhub/aichat.env ]]; then
   install -o root -g "$OPERATOR" -m 0640 /dev/null /etc/foundationhub/aichat.env 2>/dev/null || \
   install -o root -g root -m 0640 /dev/null /etc/foundationhub/aichat.env

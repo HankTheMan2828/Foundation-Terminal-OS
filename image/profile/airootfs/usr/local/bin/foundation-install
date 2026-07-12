@@ -182,9 +182,50 @@ stage_frank_ai() {
 
   if [[ -f "$model_out" && -x "$server_out" ]]; then
     c_ok "AI payload ready for install/11-frank-ai.sh (local BitNet)"
+    return 0
   elif [[ -f "$model_out" ]]; then
     c_warn "partial AI payload (model only) — sensor stays idle until a server is present"
+    return 0
   fi
+  return 0
+}
+
+# On UPDATE: if this USB had no AI sidecar, re-use vendor/ from the previous
+# /opt/terminal-os tree so install/11 can still re-lay binary/model (or keep
+# them when already under /var/lib/frank). Network updates have no prev vendor
+# and rely on assets already on disk.
+recover_ai_vendor_from_prev() {
+  local dest="$1"
+  local prev="${dest}.prev"
+  [[ -d "$dest" && -d "$prev/vendor" ]] || return 0
+  if [[ ! -f "$dest/vendor/models/model.gguf" && -f "$prev/vendor/models/model.gguf" ]]; then
+    mkdir -p "$dest/vendor/models"
+    cp -a "$prev/vendor/models/model.gguf" "$dest/vendor/models/model.gguf"
+    c_ok "recovered staged model from previous OS payload"
+  fi
+  if [[ ! -x "$dest/vendor/bitnet/llama-server" && -f "$prev/vendor/bitnet/llama-server" ]]; then
+    mkdir -p "$dest/vendor/bitnet"
+    cp -a "$prev/vendor/bitnet/llama-server" "$dest/vendor/bitnet/llama-server"
+    chmod +x "$dest/vendor/bitnet/llama-server"
+    c_ok "recovered staged llama-server from previous OS payload"
+  fi
+}
+
+# Operator-facing readiness line after install/11 has run in the chroot.
+report_ai_readiness() {
+  local root="${1:-$MNT}"
+  local bin="$root/usr/local/lib/foundation-ai/llama-server"
+  local model="$root/var/lib/frank/models/model.gguf"
+  if [[ -x "$bin" && -f "$model" ]]; then
+    local magic
+    magic="$(dd if="$model" bs=1 count=4 2>/dev/null || true)"
+    if [[ "$magic" == "GGUF" ]]; then
+      c_ok "Local AI READY — Hub ASSISTANT + Frank sensor use 127.0.0.1:8080 after reboot"
+      return 0
+    fi
+  fi
+  c_warn "Local AI IDLE — Assistant will say the model is not reachable"
+  c_warn "Rewrite the USB without -NoModel (full AI staging), then UPDATE or INSTALL"
 }
 
 # An existing install's root partition (mkfs labels it foundation-root), or
@@ -326,10 +367,11 @@ EOF
     -exec chmod +x {} +
 
   # Stage AI onto the TARGET tree (same contract as a fresh install). If this
-  # USB has no sidecar, an earlier install's model under /var/lib/frank/models
-  # is left alone by install/11 (no-clobber when already present).
+  # USB has no sidecar, recover vendor/ from the previous payload and/or keep
+  # assets already under /var/lib/frank (install/11).
   c_step "Frank local AI (staged model, if present)"
   stage_frank_ai "$(detect_live_disk)" "$MNT$REPO"
+  recover_ai_vendor_from_prev "$MNT$REPO"
 
   # ── re-run the install steps in no-clobber update mode ────────────────────
   c_step "Applying (install/run-all.sh, update mode)"
@@ -349,6 +391,8 @@ EOF
     arch-chroot "$MNT" grub-install --target=i386-pc "$disk" 2>/dev/null || true
   fi
   arch-chroot "$MNT" grub-mkconfig -o /boot/grub/grub.cfg
+
+  report_ai_readiness "$MNT"
 
   # ── done ───────────────────────────────────────────────────────────────────
   cp "$LOG" "$MNT/var/log/foundation-update.log" 2>/dev/null || true
@@ -588,6 +632,12 @@ EOF
   # then picks vendor/ up from $REPO_ROOT on the installed system.
   c_step "Frank local AI (staged model, if present)"
   stage_frank_ai "$live_disk" "$MNT$REPO"
+  if [[ ! -f "$MNT$REPO/vendor/models/model.gguf" \
+     || ! -x "$MNT$REPO/vendor/bitnet/llama-server" ]]; then
+    c_warn "This USB has no complete AI payload (model + llama-server)."
+    c_warn "Fresh offline installs need a stick written WITHOUT -NoModel."
+    c_warn "Continuing — rules work; Hub ASSISTANT stays offline until AI is staged."
+  fi
 
   arch-chroot "$MNT" /usr/bin/env \
     FOUNDATION_ASSUME_YES=1 FOUNDATION_OFFLINE=1 \
@@ -609,6 +659,8 @@ EOF
   fi
   arch-chroot "$MNT" grub-mkconfig -o /boot/grub/grub.cfg
   c_ok "GRUB installed"
+
+  report_ai_readiness "$MNT"
 
   # ── done ────────────────────────────────────────────────────────────────────
   cp "$LOG" "$MNT/var/log/foundation-install.log" 2>/dev/null || true
