@@ -67,7 +67,7 @@ Working off-device today (no target machine required for the TUIs and tests):
   - **Programs:** Notes (tabbed journal/notes + search), File Manager
     (quota-scoped), Media, System Monitor, on-device **Assistant**
     (same local model stack as Frank, separate trust domain), **Web Access**
-    (DuckDuckGo — graphical browser when a display session exists, else w3m).
+    (DuckDuckGo via w3m in the terminal; q to quit).
   - **Recreation:** Arcade, Chess, Rogue (1981), High Scores.
   - **Settings:** System Status, **Network** (link status, WiFi radio, nmtui
     configure), system update, hardware functions where present.

@@ -83,7 +83,10 @@ PROG_MONITOR = "SYSTEM MONITOR"
 PROG_WEB = "WEB ACCESS"         # DuckDuckGo — needs network (Settings → NETWORK)
 
 # ── Web Access (Programs — DuckDuckGo when online) ───────────────────────────
-WEB_SUBTITLE = "DuckDuckGo — graphical when available, text browser otherwise"
+# Text browser in the Hub terminal (w3m). Graphical browsers are opt-in only
+# (FOUNDATIONHUB_WEB_GUI) — cage kiosks cannot hand keyboard focus to a second
+# Wayland client, so Firefox launches into a stuck surface.
+WEB_SUBTITLE = "DuckDuckGo — text browser (q quit · / search · Esc menu)"
 WEB_NO_BROWSER = "NO BROWSER AVAILABLE"
 WEB_OFFLINE = "NO NETWORK — SETTINGS → NETWORK"
 

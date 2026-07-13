@@ -10,9 +10,9 @@ FILE MANAGER and SYSTEM MONITOR are now native too (queue §2/§3) — ranger an
 btop are both retired. MEDIA now launches the in-house foundationmedia (§4) —
 still a Launch by design (hybrid model: media is a separate program).
 
-WEB ACCESS (post-v0.1.0): DuckDuckGo via a graphical browser when a display
-session exists, otherwise a text browser (w3m). Needs network — see Settings
-→ NETWORK for ethernet / WiFi.
+WEB ACCESS: DuckDuckGo via a text browser (w3m) in the Hub terminal — the
+only path that works under the cage kiosk. Graphical browsers are opt-in
+(FOUNDATIONHUB_WEB_GUI) and experimental. Needs network — Settings → NETWORK.
 """
 from __future__ import annotations
 
@@ -47,9 +47,9 @@ def screen():
         # Native Hub screen (in-house monitor) — btop retired, queue §3.
         MenuItem(labels.PROG_MONITOR, lambda a: MonitorScreen(),
                  hint="in-house"),
-        # Internet via DuckDuckGo (graphical when available, text otherwise).
+        # Internet via DuckDuckGo (text browser; q to quit back to Programs).
         MenuItem(labels.PROG_WEB, open_web_access,
-                 hint="DuckDuckGo",
+                 hint="w3m · q quit",
                  status=webaccess.status_hint),
     ]
     return MenuScreen(labels.PROGRAMS, items)

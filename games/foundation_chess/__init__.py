@@ -10,4 +10,4 @@ program must still run standalone if foundationhub isn't on the path.
 """
 from __future__ import annotations
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"

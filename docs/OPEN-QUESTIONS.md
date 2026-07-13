@@ -240,11 +240,13 @@ The operator's finalized vision, decided in one pass:
     `nmtui`. Ethernet: plug in, NetworkManager handles the rest. General
     connectivity (any online link) is enough for everyday use — *not* gated
     by the stricter system-update wireless policy.
-  - **Programs → WEB ACCESS:** opens **DuckDuckGo**. Prefers a graphical
-    browser when a display session exists (firefox/chromium…); falls back to
-    **w3m** (shipped in core) on the kernel VT / under kitty.
-  A later **retrieval terminal** (search-API archive: Kagi/Brave) remains a
-  possible evolution; WEB ACCESS is the real browser path for now.
+  - **Programs → WEB ACCESS:** opens **DuckDuckGo** via **w3m** (text) in
+    the Hub terminal — `q` quits back to Programs. Graphical browsers are
+    *not* default: cage is a single-app Wayland kiosk and a second GUI
+    browser freezes keyboard focus (hardware report after v0.1.1). GUI
+    remains experimental (`FOUNDATIONHUB_WEB_GUI`) only when no text browser
+    is installed.
+  A later multi-client display stack or retrieval terminal can revisit GUI.
 - ✅ **Multi-user login + tiers + per-user Frank** — see §6 and
   [`docs/USERS.md`](USERS.md).
 - ✅ Per-tier quota amounts (GUEST 64 MB / EMPLOYEE 5 GB / SENIOR 15 GB /

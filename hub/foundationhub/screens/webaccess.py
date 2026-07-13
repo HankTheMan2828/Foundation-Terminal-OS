@@ -1,8 +1,8 @@
 """Programs → WEB ACCESS — open DuckDuckGo when the machine is online.
 
 Thin Hub face over `foundationhub.webaccess`: checks connectivity, picks a
-graphical browser when a display session exists, otherwise a text browser,
-and hands the console to that process via Launch.
+text browser (w3m) that runs in the same terminal the Hub owns, and hands
+the console over via Launch. Quit the browser (q in w3m) to return.
 """
 from __future__ import annotations
 

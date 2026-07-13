@@ -12,8 +12,8 @@ cage              # Wayland kiosk compositor
 kitty             # graphical terminal the Hub runs in under cage
 wlr-randr         # eDP-1/eDP-2 topology control
 seatd             # seat management for cage
-# Graphical Web Access (Programs → WEB ACCESS prefers this over w3m when a
-# Wayland session is up). Homepage is DuckDuckGo. cage is a single-app kiosk
-# compositor — firefox may need a later display-stack tweak to focus reliably;
-# w3m remains the guaranteed fallback inside kitty/VT.
-firefox
+# Firefox is NOT installed for Web Access: cage is a single-app Wayland
+# kiosk, and launching a second GUI browser leaves a stuck surface with no
+# keyboard focus (operator report on v0.1.1). Programs → WEB ACCESS uses
+# w3m inside kitty. Re-add firefox only if the display stack becomes multi-
+# client and FOUNDATIONHUB_WEB_GUI is supported.
