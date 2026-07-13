@@ -30,18 +30,31 @@ LOGOUT = object()   # return to the users/login page without killing the process
 
 
 def _web_launch_status(log_path: str, returncode: int) -> str:
-    """Build a short status-bar line from foundationhub-web's diagnostic log."""
+    """Short status-bar line from foundationhub-web's diagnostic log.
+
+    Returns "" when there is nothing worth telling the operator: a clean exit
+    where the wrapper never fell back to a text browser. A clean exit that DID
+    fall back still reports — a silent w3m session reads as "the browser is
+    text-only" instead of "the GUI failed, and here's where the log is".
+    Earlier ERROR lines from attempts a later path recovered from are ignored
+    on a clean, non-fallback exit.
+    """
     last_err = ""
+    fell_back = False
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 s = line.strip()
-                if "ERROR:" in s or "FAIL" in s:
+                if "falling back" in s.lower() or "fallback:" in s.lower():
+                    fell_back = True
                     last_err = s
-                elif "falling back" in s.lower():
+                elif "ERROR:" in s or "FAIL" in s:
                     last_err = s
     except OSError:
         pass
+    clean = returncode in (0, None)
+    if clean and not fell_back:
+        return ""
     if last_err:
         # Strip leading timestamps so the bar stays readable on 80 cols.
         parts = last_err.split("ERROR:", 1)
@@ -185,12 +198,17 @@ class App:
             web_log = None
             base = os.path.basename(exe)
             if base == "foundationhub-web" or exe.endswith("foundationhub-web"):
-                runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-                web_log = os.path.join(runtime, "foundationhub-web.log")
+                # Persistent, so the evidence survives the reboot a stuck
+                # console forces. Keep in sync with the wrapper's default.
+                state = env.get("XDG_STATE_HOME") or os.path.join(
+                    os.path.expanduser("~"), ".local", "state")
+                web_log = os.path.join(state, "foundationhub-web.log")
                 env["FOUNDATIONHUB_WEB_LOG"] = web_log
             result = subprocess.run(launch.argv, env=env)
-            if result.returncode not in (0, None) and web_log:
-                self.status_message = _web_launch_status(web_log, result.returncode)
+            if web_log:
+                note = _web_launch_status(web_log, result.returncode)
+                if note:
+                    self.status_message = note
         except Exception as exc:  # keep the Hub alive no matter what a child does
             self.status_message = f"launch failed: {exc}"
         finally:

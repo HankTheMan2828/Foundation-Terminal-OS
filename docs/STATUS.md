@@ -1,9 +1,14 @@
 # Status — what's real vs. stubbed
 
 Honest tracking against the spec's build order (§11). **Stable line:
-`v0.1.x`** (first cut `v0.1.0`; current feature cut **`v0.1.5`** makes
-Web Access prefer Xorg+Firefox so the graphical browser actually stays up;
-w3m only after every GUI path fails) — see [`VERSIONING.md`](VERSIONING.md).
+`v0.1.x`** (first cut `v0.1.0`; current feature cut **`v0.1.6`** fixes the
+Web Access always-w3m regression: the v0.1.4 `seatd-launch` wrapper collided
+with the system seatd and killed every GUI attempt; failed attempts could
+also strand the VT in graphics mode so the console looked dead until a
+power-cycle. GUI paths now use the system seatd, the VT is force-reset to
+text mode around fallbacks/exit, the diagnostic log persists at
+`~/.local/state/foundationhub-web.log`, and a silent w3m fallback now
+reports itself in the Hub status bar) — see [`VERSIONING.md`](VERSIONING.md).
 The OS is
 software-complete for the intended console product: Hub, Frank, games, media,
 install/ISO, and updates are in-tree and unit-tested off-device. Rows still

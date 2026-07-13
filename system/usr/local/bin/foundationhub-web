@@ -16,6 +16,8 @@
 # Env:
 #   FOUNDATIONHUB_WEB_URL, FOUNDATIONHUB_WEB_LOG, FOUNDATIONHUB_WEB_NESTED,
 #   FOUNDATIONHUB_WEB_NO_FALLBACK=1
+# Diagnostics: ~/.local/state/foundationhub-web.log (persistent — survives
+# the reboot a stuck console forces, unlike the old /run/user location).
 set -u
 
 URL="${1:-${FOUNDATIONHUB_WEB_URL:-https://duckduckgo.com}}"
@@ -29,7 +31,15 @@ if [[ ! -d "${XDG_RUNTIME_DIR}" ]]; then
   chmod 700 "${XDG_RUNTIME_DIR}" 2>/dev/null || true
 fi
 
-LOG="${FOUNDATIONHUB_WEB_LOG:-${XDG_RUNTIME_DIR}/foundationhub-web.log}"
+# Log to PERSISTENT state, not /run/user: that's tmpfs, and the failure mode
+# being diagnosed forces the operator to reboot — which wiped the evidence
+# every time. Keep in sync with app.py launch() (it points the Hub here).
+STATE_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+LOG="${FOUNDATIONHUB_WEB_LOG:-${STATE_DIR}/foundationhub-web.log}"
+if ! ( : >>"$LOG" ) 2>/dev/null; then
+  LOG="${XDG_RUNTIME_DIR}/foundationhub-web.log"
+fi
 if ! ( : >>"$LOG" ) 2>/dev/null; then
   LOG="/tmp/foundationhub-web-$UID.log"
 fi
@@ -65,8 +75,34 @@ export MOZ_ACCELERATED="${MOZ_ACCELERATED:-0}"
 export MOZ_DISABLE_RDD_SANDBOX="${MOZ_DISABLE_RDD_SANDBOX:-1}"
 export MOZ_DISABLE_CONTENT_SANDBOX="${MOZ_DISABLE_CONTENT_SANDBOX:-1}"
 
+# A failed/killed Xorg or compositor can leave the VT in KD_GRAPHICS with a
+# raw keyboard — the console then LOOKS dead (black, no echo) even though the
+# Hub is still running, and the operator power-cycles (v0.1.5 hardware
+# report). Force the VT back to text mode before w3m and on every exit.
+# KDSETMODE=0x4B3A (KD_TEXT=0) · KDSKBMODE=0x4B45 (K_UNICODE=3).
+vt_reset() {
+  if have python3; then
+    python3 - <<'PY' 2>/dev/null || true
+import fcntl, os
+try:
+    fd = os.open("/dev/tty", os.O_RDWR)
+except OSError:
+    raise SystemExit(0)
+for req, arg in ((0x4B3A, 0), (0x4B45, 3)):
+    try:
+        fcntl.ioctl(fd, req, arg)
+    except OSError:
+        pass
+PY
+  fi
+  stty sane 2>/dev/null || true
+  # Full terminal reset (also clears any half-drawn graphics frame). The Hub
+  # re-applies its palette after every launch (theme.dress_console).
+  printf '\033c' >/dev/tty 2>/dev/null || true
+}
+
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/foundation-web.XXXXXX")"
-cleanup() { rm -rf "$WORKDIR" 2>/dev/null || true; }
+cleanup() { vt_reset; rm -rf "$WORKDIR" 2>/dev/null || true; }
 trap cleanup EXIT
 
 URLFILE="$WORKDIR/url.txt"
@@ -154,33 +190,50 @@ else
   echo "firefox-exit: clean mode=\$MODE" >>"\$LOG"
 fi
 
-# Tear down compositor / X so the Hub can reclaim the VT.
-if command -v swaymsg >/dev/null 2>&1; then
+# Tear down the compositor so the Hub can reclaim the VT. Only sway needs an
+# explicit exit (its exec'd child ending does not end the session). cage and
+# xinit both terminate on their own when this script (their client) exits —
+# the old killall of cage/Xorg yanked the server down mid-teardown and could
+# strand the VT in graphics mode (console looked dead until reboot).
+if [ -n "\${SWAYSOCK:-}" ] && command -v swaymsg >/dev/null 2>&1; then
   swaymsg exit 2>/dev/null || true
-fi
-if command -v killall >/dev/null 2>&1; then
-  killall -q cage Xorg X 2>/dev/null || true
 fi
 exit "\$rc"
 RUN
 chmod 700 "$RUNFF"
 export FIREFOX_BIN="${FIREFOX:-firefox}"
 
-# Run a compositor under dbus + optional seatd-launch.
-# seatd-launch gives a working seat when getty/logind hand-off is awkward.
+# Run a command under a session dbus (Firefox aborts without one on a raw VT).
+run_dbus() {
+  if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    "$@"
+  elif have dbus-run-session; then
+    dbus-run-session -- "$@"
+  else
+    "$@"
+  fi
+}
+
+# Run a Wayland compositor with a working seat + dbus.
+#
+# Seat policy (v0.1.6): install/04 enables the SYSTEM seatd.service and puts
+# the operator in group `seat` — libseat in sway/cage connects to it directly.
+# v0.1.4 wrapped every attempt in seatd-launch, but with the system daemon
+# already bound a second (user-level, non-root) seatd fails immediately and
+# took EVERY GUI path down with it → always w3m (v0.1.5 hardware report).
+# seatd-launch is now only a fallback for when no system seatd is running.
 run_gui() {
   local -a cmd=("$@")
-  if have seatd-launch; then
-    log "using seatd-launch"
+  if [[ -S /run/seatd.sock ]]; then
+    export SEATD_SOCK="${SEATD_SOCK:-/run/seatd.sock}"
+    log "using system seatd at ${SEATD_SOCK}"
+  elif have seatd-launch; then
+    log "no system seatd — using seatd-launch"
     cmd=(seatd-launch -- "${cmd[@]}")
-  fi
-  if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-    "${cmd[@]}"
-  elif have dbus-run-session; then
-    dbus-run-session -- "${cmd[@]}"
   else
-    "${cmd[@]}"
+    log "no seatd — relying on logind seat"
   fi
+  run_dbus "${cmd[@]}"
 }
 
 read_ffrc() {
@@ -346,8 +399,9 @@ EOF
   log "trying Xorg display=:$d vt=$vt bin=$XBIN"
   rm -f "$FFRC_FILE"
   # -keeptty: stay on this VT (Hub already suspended curses).
-  # seatd-launch helps DRM open on locked-down seats.
-  run_gui xinit "$xinitrc" -- "$XBIN" ":$d" "vt${vt}" \
+  # Plain dbus only — Xorg does not speak libseat, so the old seatd-launch
+  # wrapper added nothing but a way for the whole attempt to fail.
+  run_dbus xinit "$xinitrc" -- "$XBIN" ":$d" "vt${vt}" \
     -nolisten tcp -keeptty >>"$LOG" 2>&1
   local rc=$?
   local ffrc
@@ -375,6 +429,9 @@ fallback_w3m() {
     if have "$b"; then
       fail "all GUI paths failed — falling back to $b (see $LOG)"
       log "fallback: $b $target"
+      # The failed GUI attempts above may have left the VT in graphics/raw
+      # mode — w3m would render into an invisible console ("barely works").
+      vt_reset
       "$b" "$target"
       return $?
     fi

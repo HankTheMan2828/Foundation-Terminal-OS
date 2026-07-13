@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from foundationhub import webaccess
+from foundationhub.app import _web_launch_status
 
 
 def _which_map(present: set[str]):
@@ -143,3 +144,43 @@ class TestPlanLaunch:
             online=True,
             which=_which_map({"w3m"}),
         ) == "text browser · q quit"
+
+
+class TestWebLaunchStatus:
+    """Status-bar line built from the foundationhub-web diagnostic log."""
+
+    def test_clean_exit_no_log_is_silent(self, tmp_path):
+        assert _web_launch_status(str(tmp_path / "missing.log"), 0) == ""
+
+    def test_clean_exit_quiet_log_is_silent(self, tmp_path):
+        log = tmp_path / "web.log"
+        log.write_text("12:00:00 start url=x\n12:00:05 firefox-exit: clean\n")
+        assert _web_launch_status(str(log), 0) == ""
+
+    def test_clean_exit_recovered_error_is_silent(self, tmp_path):
+        # Xorg failed but a later path worked — stale ERROR must not surface.
+        log = tmp_path / "web.log"
+        log.write_text("12:00:00 ERROR: Xorg/xinit failed rc=1\n"
+                       "12:00:10 firefox-exit: clean mode=wayland\n")
+        assert _web_launch_status(str(log), 0) == ""
+
+    def test_clean_exit_with_fallback_reports(self, tmp_path):
+        # w3m exiting 0 must still tell the operator the GUI failed.
+        log = tmp_path / "web.log"
+        log.write_text(
+            "12:00:00 ERROR: all GUI paths failed — falling back to w3m\n"
+            "12:00:01 fallback: w3m https://html.duckduckgo.com/html/\n")
+        msg = _web_launch_status(str(log), 0)
+        assert msg != ""
+        assert "fallback" in msg.lower() or "falling back" in msg.lower()
+
+    def test_failed_exit_reports_last_error(self, tmp_path):
+        log = tmp_path / "web.log"
+        log.write_text("12:00:00 ERROR: firefox not installed — need package\n")
+        msg = _web_launch_status(str(log), 1)
+        assert "firefox not installed" in msg
+        assert "12:00:00" not in msg   # timestamp stripped for the 80-col bar
+
+    def test_failed_exit_without_log_reports_returncode(self, tmp_path):
+        msg = _web_launch_status(str(tmp_path / "missing.log"), 3)
+        assert "3" in msg
