@@ -4,22 +4,12 @@
 #
 #   sudo ./create-foundation-usb.sh                # auto-finds/downloads the ISO
 #   sudo ./create-foundation-usb.sh path/to.iso    # use a specific ISO
-#   FOUNDATION_NO_MODEL=1 sudo ./create-foundation-usb.sh   # ISO only / no AI
-#   FOUNDATION_FORCE_FULL=1 sudo ./create-foundation-usb.sh # always full wipe
-#
-# Stick-aware modes (probes before writing):
-#   full     — wipe-style rewrite of ISO + AI sidecar
-#   iso_only — rewrite ISO with conv=notrunc; leave AI past 2 GiB
-#   ai_only  — write AI sidecar only
-#   skip     — ISO (+ AI if required) already match
 #
 # Only removable/USB disks are ever offered — never the disk the running
-# system lives on — and writes are gated (ERASE / UPDATE / STAGE).
+# system lives on — and the write is gated behind typing ERASE in full.
 set -euo pipefail
 
 GITHUB_REPO="HankTheMan2828/Foundation-Terminal-OS"
-STAGE_OFFSET=2147483648    # 2 GiB — must match Create-FoundationUSB.ps1 + foundation-install
-STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
 
 c_info() { printf '\033[1;33m[*]\033[0m %s\n' "$*"; }
 c_ok()   { printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
@@ -34,9 +24,8 @@ banner() {
   └──────────────────────────────────────────────────────────────┘
 EOF
   printf '\033[0m'
-  echo "  This prepares a Foundation TerminalOS install USB."
-  echo "  It probes the stick first: full wipe only when needed;"
-  echo "  otherwise it updates just the ISO and/or AI sidecar."
+  echo "  This writes the Foundation TerminalOS installer onto a USB stick."
+  echo "  Everything currently on that stick will be erased."
   echo "  This computer itself is NOT touched — only the USB stick."
   echo
 }
@@ -126,163 +115,23 @@ while [[ -z "$DEV" ]]; do
   fi
 done
 
-# ── 3. probe stick ───────────────────────────────────────────────────────────
+echo
+c_warn "EVERYTHING on $DEV will be destroyed."
+read -rp "> type ERASE (all caps) to continue, anything else aborts: " confirm
+[[ "$confirm" == "ERASE" ]] || { c_info "aborted — nothing was touched"; exit 0; }
+
+# ── 3. prepare Frank's local AI (BEFORE writing — fail closed by default) ────
+# Default: AI staging REQUIRED so offline fresh installs get Hub ASSISTANT.
+# FOUNDATION_NO_MODEL=1: skip (faster refresh when target already has AI).
 MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf}"
+STAGE_OFFSET=2147483648    # 2 GiB — must match Create-FoundationUSB.ps1 + foundation-install
+STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
 AI_MODEL="$SCRIPT_DIR/model.gguf"
-AI_RUNTIME="$SCRIPT_DIR/ai-runtime.tar.gz"
-AI_SERVER="$SCRIPT_DIR/llama-server"
-REQUIRE_AI=1
-[[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]] && REQUIRE_AI=0
+AI_RUNTIME="$SCRIPT_DIR/ai-runtime.tar.gz"   # preferred: binary + libllama/libggml
+AI_SERVER="$SCRIPT_DIR/llama-server"         # legacy bare ELF
 STAGE_AI=0
 STAGE_SERVER=""
 
-_is_gzip_file() {
-  [[ -f "$1" ]] || return 1
-  local m; m="$(dd if="$1" bs=1 count=2 2>/dev/null || true)"
-  [[ "$m" == $'\x1f\x8b' ]]
-}
-
-file_size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1"; }
-
-# Raw device path for macOS (faster + needed for probe consistency)
-if [[ "$OS" == "Darwin" ]]; then
-  WRITE_DEV="${DEV/\/dev\//\/dev\/r}"
-else
-  WRITE_DEV="$DEV"
-fi
-
-_digest() {
-  # stdin → short digest (md5sum on Linux, md5 on macOS, cksum fallback)
-  if command -v md5sum >/dev/null 2>&1; then
-    md5sum | awk '{print $1}'
-  elif command -v md5 >/dev/null 2>&1; then
-    md5 -q
-  else
-    cksum | awk '{print $1"-"$2}'
-  fi
-}
-
-probe_iso_match() {
-  # head + tail 1 MiB (or half ISO if tiny)
-  local chunk=1048576
-  (( ISO_BYTES >= 2 * chunk )) || chunk=$(( ISO_BYTES / 2 ))
-  (( chunk >= 512 )) || chunk=512
-  local head_iso head_dev tail_iso tail_dev
-  head_iso="$(dd if="$ISO" bs="$chunk" count=1 2>/dev/null | _digest)"
-  head_dev="$(dd if="$WRITE_DEV" bs="$chunk" count=1 2>/dev/null | _digest)"
-  tail_iso="$(dd if="$ISO" bs=1 skip=$((ISO_BYTES - chunk)) count="$chunk" 2>/dev/null | _digest)"
-  tail_dev="$(dd if="$WRITE_DEV" bs=1 skip=$((ISO_BYTES - chunk)) count="$chunk" 2>/dev/null | _digest)"
-  [[ -n "$head_iso" && "$head_iso" == "$head_dev" && -n "$tail_iso" && "$tail_iso" == "$tail_dev" ]]
-}
-
-probe_ai() {
-  # sets AI_PRESENT=0/1 AI_MATCH=0/1 AI_NOTE=...
-  AI_PRESENT=0
-  AI_MATCH=0
-  AI_NOTE="no FOUNDATIONAI2 header at 2 GiB"
-  local rb mo ms so ss magic
-  rb="$(dd if="$WRITE_DEV" bs=4096 skip=$(( STAGE_OFFSET / 4096 )) count=1 2>/dev/null | tr -d '\000' || true)"
-  if [[ "$rb" != FOUNDATIONAI2* ]]; then
-    return 0
-  fi
-  AI_PRESENT=1
-  mo="$(printf '%s\n' "$rb" | awk -F= '/^model_offset=/{print $2; exit}')"
-  ms="$(printf '%s\n' "$rb" | awk -F= '/^model_size=/{print $2; exit}')"
-  so="$(printf '%s\n' "$rb" | awk -F= '/^server_offset=/{print $2; exit}')"
-  ss="$(printf '%s\n' "$rb" | awk -F= '/^server_size=/{print $2; exit}')"
-  magic="$(dd if="$WRITE_DEV" bs=1 skip="${mo:-0}" count=4 2>/dev/null || true)"
-  local gz
-  gz="$(dd if="$WRITE_DEV" bs=1 skip="${so:-0}" count=2 2>/dev/null || true)"
-  if [[ "$magic" != "GGUF" || "$gz" != $'\x1f\x8b' ]]; then
-    AI_NOTE="header present but payload magic failed"
-    return 0
-  fi
-  if (( REQUIRE_AI == 0 )); then
-    AI_MATCH=1
-    AI_NOTE="present (FOUNDATION_NO_MODEL — not restaging)"
-    return 0
-  fi
-  if [[ -f "$AI_MODEL" ]] && _is_gzip_file "$AI_RUNTIME"; then
-    local lms lss
-    lms="$(file_size "$AI_MODEL")"
-    lss="$(file_size "$AI_RUNTIME")"
-    if [[ "$ms" == "$lms" && "$ss" == "$lss" ]]; then
-      AI_MATCH=1
-      AI_NOTE="matches local AI (model $((ms / 1024 / 1024)) MB + runtime)"
-    else
-      AI_NOTE="present but size mismatch (stick model=$ms local=$lms)"
-    fi
-  else
-    AI_NOTE="present and readable (local AI files not ready to compare)"
-  fi
-}
-
-c_info "probing the stick (what is already there)…"
-ISO_MATCH=0
-ISO_NOTE="not a matching Foundation ISO (blank or other)"
-if probe_iso_match; then
-  ISO_MATCH=1
-  ISO_NOTE="matches local ISO (head+tail 1 MB)"
-else
-  # weak ISO9660 marker
-  sig="$(dd if="$WRITE_DEV" bs=1 skip=32769 count=5 2>/dev/null || true)"
-  if [[ "$sig" == "CD001" ]]; then
-    ISO_NOTE="different ISO present — will rewrite"
-  fi
-fi
-probe_ai
-echo "  ISO: $ISO_NOTE"
-echo "  AI:  $AI_NOTE"
-echo
-
-# ── decide mode ──────────────────────────────────────────────────────────────
-MODE=full
-if [[ "${FOUNDATION_FORCE_FULL:-0}" == "1" ]]; then
-  MODE=full
-  c_info "FOUNDATION_FORCE_FULL=1 — full wipe + rewrite"
-elif (( REQUIRE_AI == 0 )); then
-  if (( ISO_MATCH == 1 )); then MODE=skip; else MODE=iso_only; fi
-else
-  if (( ISO_MATCH == 1 && AI_MATCH == 1 )); then MODE=skip
-  elif (( ISO_MATCH == 1 && AI_MATCH == 0 )); then MODE=ai_only
-  elif (( ISO_MATCH == 0 && AI_MATCH == 1 )); then MODE=iso_only
-  else MODE=full
-  fi
-fi
-
-case "$MODE" in
-  skip)
-    c_ok "stick already has this ISO"
-    if (( REQUIRE_AI == 1 )); then c_ok "and a matching AI sidecar — nothing to write."
-    else c_ok "(FOUNDATION_NO_MODEL) — nothing to write."
-    fi
-    echo
-    c_ok "Your Foundation TerminalOS install USB is ready (unchanged)."
-    echo "Force a full rewrite with FOUNDATION_FORCE_FULL=1."
-    exit 0
-    ;;
-  iso_only)
-    c_info "Mode: ISO-ONLY — rewrite installer, keep AI sidecar past 2 GiB."
-    c_warn "Stick $DEV ISO will be rewritten; free-space AI (if any) is preserved."
-    read -rp "> type UPDATE (all caps) to continue, anything else aborts: " confirm
-    [[ "$confirm" == "UPDATE" ]] || { c_info "aborted — nothing was touched"; exit 0; }
-    ;;
-  ai_only)
-    c_info "Mode: AI-ONLY — keep existing ISO, stage/refresh AI sidecar only."
-    c_warn "AI sidecar will be written at 2 GiB on $DEV (ISO not wiped)."
-    read -rp "> type STAGE (all caps) to continue, anything else aborts: " confirm
-    [[ "$confirm" == "STAGE" ]] || { c_info "aborted — nothing was touched"; exit 0; }
-    ;;
-  *)
-    MODE=full
-    c_info "Mode: FULL — write ISO + stage AI (if required)."
-    c_warn "EVERYTHING on $DEV will be destroyed."
-    read -rp "> type ERASE (all caps) to continue, anything else aborts: " confirm
-    [[ "$confirm" == "ERASE" ]] || { c_info "aborted — nothing was touched"; exit 0; }
-    ;;
-esac
-
-# ── prepare AI when needed ───────────────────────────────────────────────────
 fail_ai() {
   c_warn "$*"
   c_warn "Local AI is required for a full offline install (Hub ASSISTANT + Frank)."
@@ -290,8 +139,14 @@ fail_ai() {
   exit 1
 }
 
+_is_gzip_file() {
+  [[ -f "$1" ]] || return 1
+  local m; m="$(dd if="$1" bs=1 count=2 2>/dev/null || true)"
+  [[ "$m" == $'\x1f\x8b' ]]
+}
+
 prepare_ai() {
-  if (( REQUIRE_AI == 0 )); then
+  if [[ "${FOUNDATION_NO_MODEL:-0}" == "1" ]]; then
     c_info "FOUNDATION_NO_MODEL=1 — not staging the AI."
     return 0
   fi
@@ -303,6 +158,7 @@ prepare_ai() {
     local surl="${FOUNDATION_AI_SERVER_URL:-}" json
     if [[ -z "$surl" ]]; then
       json="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null || true)"
+      # Prefer runtime tarball; fall back to bare ELF asset name.
       surl="$(printf '%s' "$json" | grep -o '"browser_download_url": *"[^"]*foundation-ai-runtime[^"]*\.tar\.gz"' \
         | grep -v sha256 | head -1 | cut -d'"' -f4 || true)"
       [[ -n "$surl" ]] || surl="$(printf '%s' "$json" \
@@ -318,6 +174,7 @@ prepare_ai() {
     c_info "downloading the AI runtime…"
     curl -fL --progress-bar -o "$dest" "$surl" || { rm -f "$dest"; fail_ai "runtime download failed"; }
   fi
+  # Require gzip runtime tarball — bare ELF alone cannot start (missing libs).
   if [[ -f "$AI_SERVER" ]] && ! _is_gzip_file "$AI_RUNTIME"; then
     c_warn "legacy bare llama-server ELF present; delete it and re-run to fetch the runtime tarball"
   fi
@@ -329,8 +186,8 @@ prepare_ai() {
   magic="$(dd if="$AI_MODEL" bs=1 count=4 2>/dev/null || true)"
   [[ "$magic" == "GGUF" ]] || fail_ai "model is not a GGUF file (magic='$magic')"
   local msize ssize
-  msize=$(file_size "$AI_MODEL")
-  ssize=$(file_size "$STAGE_SERVER")
+  msize=$(stat -c %s "$AI_MODEL" 2>/dev/null || stat -f %z "$AI_MODEL")
+  ssize=$(stat -c %s "$STAGE_SERVER" 2>/dev/null || stat -f %z "$STAGE_SERVER")
   (( ssize > 0 )) || fail_ai "AI runtime missing or empty"
   local stick_bytes=""
   stick_bytes="$(lsblk -bndo SIZE "$DEV" 2>/dev/null | head -1 || true)"
@@ -341,26 +198,37 @@ prepare_ai() {
   STAGE_AI=1
   c_ok "AI ready to stage (model $((msize / 1024 / 1024)) MB + runtime)"
 }
+prepare_ai
 
-if [[ "$MODE" == "full" || "$MODE" == "ai_only" ]]; then
-  prepare_ai
-elif [[ "$MODE" == "iso_only" ]]; then
-  if (( REQUIRE_AI == 1 && AI_MATCH == 1 )); then
-    c_ok "keeping existing AI sidecar on the stick"
-  elif (( REQUIRE_AI == 1 && AI_PRESENT == 1 )); then
-    c_info "AI sidecar present; ISO-only mode leaves it as-is"
-  elif (( REQUIRE_AI == 1 )); then
-    c_warn "no usable AI sidecar on this stick and mode is ISO-only"
-    c_warn "re-run without FOUNDATION_NO_MODEL for a full write if you need AI staged"
-  fi
+# ── 4. write the image ───────────────────────────────────────────────────────
+c_info "writing the installer (this takes a few minutes — do not unplug)…"
+if [[ "$OS" == "Darwin" ]]; then
+  diskutil unmountDisk force "$DEV" >/dev/null
+  WRITE_DEV="${DEV/\/dev\//\/dev\/r}"     # raw device is much faster on macOS
+  dd if="$ISO" of="$WRITE_DEV" bs=4m
+  c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
+  sync
+  # NB: eject happens AFTER the AI staging below, not here.
+else
+  # unmount anything auto-mounted from the stick
+  for part in $(lsblk -lnpo NAME "$DEV" | tail -n +2); do
+    umount "$part" 2>/dev/null || true
+  done
+  WRITE_DEV="$DEV"
+  dd if="$ISO" of="$WRITE_DEV" bs=4M status=progress conv=fsync
+  c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
+  sync
 fi
 
+# ── 5. stage Frank's local AI onto the stick (raw-offset sidecar) ────────────
+# Contract shared with Create-FoundationUSB.ps1 + foundation-install
+# (docs/FRANK-LOCAL-AI.md).
 write_ai_sidecar() {
   (( STAGE_AI == 1 )) || return 0
   [[ -n "$STAGE_SERVER" && -f "$STAGE_SERVER" ]] || return 0
   local msize ssize
-  msize=$(file_size "$AI_MODEL")
-  ssize=$(file_size "$STAGE_SERVER")
+  msize=$(stat -c %s "$AI_MODEL" 2>/dev/null || stat -f %z "$AI_MODEL")
+  ssize=$(stat -c %s "$STAGE_SERVER" 2>/dev/null || stat -f %z "$STAGE_SERVER")
   local model_off=$(( STAGE_OFFSET + STAGE_HDR ))
   local srv_off=$(( model_off + ( (msize + STAGE_HDR - 1) / STAGE_HDR ) * STAGE_HDR ))
   local hdr="FOUNDATIONAI2
@@ -378,6 +246,8 @@ server_size=$ssize
   dd if="$STAGE_SERVER" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
     && c_ok "staged the AI runtime onto the stick ($ssize bytes)."
   sync
+  # Read-back: header + GGUF + gzip magic so silent write failures never ship
+  # a stick that leaves the target as "idle: missing: runtime model".
   local rb magic
   rb="$(dd if="$WRITE_DEV" bs=4096 skip=$(( STAGE_OFFSET / 4096 )) count=1 2>/dev/null | tr -d '\000')"
   if [[ "$rb" != FOUNDATIONAI2* ]]; then
@@ -389,58 +259,12 @@ server_size=$ssize
   [[ "$magic" == $'\x1f\x8b' ]] || fail_ai "AI sidecar verification failed — runtime is not gzip at server_offset"
   c_ok "AI sidecar verified on the stick (model + runtime tarball)"
 }
-
-# ── 4. write ─────────────────────────────────────────────────────────────────
-if [[ "$OS" == "Darwin" ]]; then
-  diskutil unmountDisk force "$DEV" >/dev/null 2>&1 || true
-else
-  for part in $(lsblk -lnpo NAME "$DEV" 2>/dev/null | tail -n +2); do
-    umount "$part" 2>/dev/null || true
-  done
-fi
-
-if [[ "$MODE" == "ai_only" ]]; then
-  write_ai_sidecar
-elif [[ "$MODE" == "iso_only" ]]; then
-  c_info "writing the installer in-place (conv=notrunc — AI region preserved)…"
-  if [[ "$OS" == "Darwin" ]]; then
-    dd if="$ISO" of="$WRITE_DEV" bs=4m conv=notrunc
-  else
-    dd if="$ISO" of="$WRITE_DEV" bs=4M status=progress conv=notrunc,fsync
-  fi
-  c_info "flushing…"
-  sync
-  if (( AI_PRESENT == 1 )); then
-    rb="$(dd if="$WRITE_DEV" bs=4096 skip=$(( STAGE_OFFSET / 4096 )) count=1 2>/dev/null | tr -d '\000' || true)"
-    if [[ "$rb" == FOUNDATIONAI2* ]]; then
-      c_ok "existing AI sidecar still intact after ISO-only rewrite"
-    else
-      c_warn "AI sidecar no longer verifies after ISO rewrite — re-run full or stage AI"
-    fi
-  fi
-else
-  # full
-  c_info "writing the installer (this takes a few minutes — do not unplug)…"
-  if [[ "$OS" == "Darwin" ]]; then
-    dd if="$ISO" of="$WRITE_DEV" bs=4m
-  else
-    dd if="$ISO" of="$WRITE_DEV" bs=4M status=progress conv=fsync
-  fi
-  c_info "flushing everything to the stick (can take a minute — do NOT unplug)…"
-  sync
-  write_ai_sidecar
-fi
-
+write_ai_sidecar
 [[ "$OS" == "Darwin" ]] && { diskutil eject "$DEV" >/dev/null 2>&1 || true; }
 
 echo
 c_ok "All done — it is now safe to unplug the stick."
 echo
-case "$MODE" in
-  ai_only)  c_ok "Mode used: AI-ONLY (ISO kept)." ;;
-  iso_only) c_ok "Mode used: ISO-ONLY (AI sidecar preserved when present)." ;;
-  *)        c_ok "Mode used: FULL write." ;;
-esac
 c_ok "Your Foundation TerminalOS install USB is ready. Next steps:"
 echo
 echo "  1. Unplug the stick and plug it into the computer you want to turn"
@@ -448,8 +272,8 @@ echo "     into Foundation TerminalOS."
 echo "  2. Turn that computer on while tapping its boot-menu key (usually"
 echo "     F12, F11, Esc, F2, or Del — it flashes on screen at power-on)."
 echo "  3. Pick the USB stick from the boot menu."
-echo "  4. Follow the on-screen installer. UPDATE refreshes an existing"
-echo "     install; INSTALL / ERASE wipes a disk for a fresh machine."
+echo "  4. Follow the on-screen installer. The one destructive step — wiping"
+echo "     that computer's disk — is gated behind typing ERASE, same as here."
 echo
 echo "  WARNING: the installer turns that computer into a locked-down,"
 echo "  no-shell kiosk with an always-on overseer. Not for a machine you"

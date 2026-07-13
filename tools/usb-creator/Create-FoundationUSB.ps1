@@ -11,17 +11,10 @@ file. Or, from PowerShell:
 
     powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1
     powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -Iso C:\path\to\foundation-terminalos-....iso
-    powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -NoModel
-    powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -ForceFull
 
-Safety: it only ever offers USB-bus disks (never your internal drive).
-Writes are gated: ERASE (full wipe), UPDATE (ISO-only / keep AI), STAGE (AI-only).
-
-Stick-aware modes (probes the stick before writing):
-  full     — diskpart clean + ISO + AI sidecar (blank/unknown/both stale)
-  iso_only — rewrite ISO only; leave AI sidecar past 2 GiB untouched
-  ai_only  — write AI sidecar only; keep existing ISO
-  skip     — ISO + AI already match; nothing to write
+Safety: it only ever offers USB-bus disks (never your internal drive), and
+the write is gated behind typing ERASE in full — same gate as the OS
+installer itself.
 #>
 [CmdletBinding()]
 param(
@@ -31,16 +24,11 @@ param(
   # Skip staging Frank's local AI (model + llama-server) onto the stick.
   # Use only for faster stick refreshes when the target ALREADY has working
   # local AI. Fresh installs need full staging (default) for offline Assistant.
-  [switch]$NoModel,
-  # Always full wipe + rewrite even if the stick already matches.
-  [switch]$ForceFull
+  [switch]$NoModel
 )
 
 $ErrorActionPreference = 'Stop'
 $GitHubRepo = 'HankTheMan2828/Foundation-Terminal-OS'
-# Raw-offset AI sidecar (must match create-foundation-usb.sh + foundation-install).
-# Contract: ISO must stay under 2 GiB; sidecar lives at STAGE_OFFSET in free space.
-$STAGE_OFFSET = [long]2147483648   # 2 GiB
 
 function Say([string]$m)  { Write-Host "[*] $m" -ForegroundColor Yellow }
 function Good([string]$m) { Write-Host "[+] $m" -ForegroundColor Green }
@@ -53,9 +41,8 @@ function Show-Banner {
   Write-Host '  |                  "From the Foundation."                      |' -ForegroundColor Yellow
   Write-Host '  +--------------------------------------------------------------+' -ForegroundColor Yellow
   Write-Host ''
-  Write-Host '  This prepares a Foundation TerminalOS install USB.'
-  Write-Host '  It probes the stick first: full wipe only when needed;'
-  Write-Host '  otherwise it updates just the ISO and/or AI sidecar.'
+  Write-Host '  This writes the Foundation TerminalOS installer onto a USB stick.'
+  Write-Host '  Everything currently on that stick will be erased.'
   Write-Host '  Your computer itself is NOT touched - only the USB stick.'
   Write-Host ''
 }
@@ -69,7 +56,6 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
                '-File', ('"{0}"' -f $PSCommandPath))
   if ($Iso) { $argList += @('-Iso', ('"{0}"' -f $Iso)) }
   if ($NoModel) { $argList += '-NoModel' }
-  if ($ForceFull) { $argList += '-ForceFull' }
   Start-Process powershell -Verb RunAs -ArgumentList $argList
   exit 0
 }
@@ -198,7 +184,7 @@ function Find-Iso {
 }
 
 $IsoPath = Find-Iso $Iso
-$IsoSize = [long](Get-Item $IsoPath).Length
+$IsoSize = (Get-Item $IsoPath).Length
 Good ("Installer image: {0} ({1:N0} MB)" -f $IsoPath, ($IsoSize / 1MB))
 Write-Host ''
 
@@ -234,7 +220,152 @@ if ($target.Size -lt $IsoSize) {
   exit 1
 }
 
-# ── Raw disk helpers (used by probe + all write modes) ───────────────────────
+Write-Host ''
+Bad ("EVERYTHING on '{0}' ({1:N1} GB) will be destroyed." -f $target.FriendlyName.Trim(), ($target.Size / 1GB))
+$confirm = Read-Host '> type ERASE (all caps) to continue, anything else aborts'
+if ($confirm -cne 'ERASE') {
+  Say 'Aborted - nothing was touched.'
+  Read-Host 'Press ENTER to close'
+  exit 0
+}
+
+# ── 2b. prepare Frank's local AI to stage (downloaded on THIS online PC) ──────
+# The installed mini PCs have no network, so the model + server binary must ride
+# on the stick. We fetch them here (this PC is online) and stage them into the
+# stick's free space during the write below.
+#
+# Default: AI staging is REQUIRED so fresh offline installs get a working Hub
+# Assistant + Frank sensor. Fail before writing if prep fails. Skip only with
+# -NoModel (faster refreshes when the target already has local AI).
+$stageAI = $false
+$requireAI = -not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')
+# Raw-offset where the AI sidecar header is written (and where foundation-install
+# reads it back). MUST be defined before the size checks below — a use-before-def
+# left it $null, and `$IsoSize -ge $null` coerces to `-ge 0` (always true), so the
+# creator silently skipped AI staging on every run (2026-07-07). 2 GiB, not 3:
+# it sits just past a sub-2 GB ISO (our size target) and leaves room for the
+# ~1.2 GB AI on a 3.8 GB stick. Keep in sync with create-foundation-usb.sh and
+# foundation-install (off=…). Contract: the ISO must stay under 2 GiB.
+$STAGE_OFFSET = 2147483648   # 2 GiB
+$modelPath   = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
+# Runtime tarball (llama-server + libllama/libggml). Bare ELF alone cannot start.
+$runtimePath = Join-Path (Split-Path -Parent $PSCommandPath) 'ai-runtime.tar.gz'
+$serverPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'  # legacy bare ELF
+function FailAi([string]$m) {
+  Bad $m
+  if ($requireAI) {
+    Bad 'Local AI is required for a full offline install (Hub ASSISTANT + Frank).'
+    Bad 'Fix the problem above, or pass -NoModel only if the target already has AI.'
+    Read-Host 'Press ENTER to close'
+    exit 1
+  }
+}
+function Test-GzipFile([string]$path) {
+  if (-not (Test-Path $path)) { return $false }
+  $fs = [IO.File]::OpenRead($path)
+  try {
+    $b = New-Object byte[] 2
+    if ($fs.Read($b, 0, 2) -lt 2) { return $false }
+    return ($b[0] -eq 0x1f -and $b[1] -eq 0x8b)
+  } finally { $fs.Close() }
+}
+if ($requireAI) {
+  try {
+    $ModelUrl = if ($env:FOUNDATION_MODEL_URL) { $env:FOUNDATION_MODEL_URL }
+                else { 'https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf' }
+    if (-not (Test-Path $modelPath)) {
+      Say 'Downloading the AI model to stage (~1.2 GB; skip with -NoModel)...'
+      try { Start-BitsTransfer -Source $ModelUrl -Destination $modelPath -DisplayName 'Frank local AI model' }
+      catch {
+        $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
+        try { Invoke-WebRequest -UseBasicParsing $ModelUrl -OutFile $modelPath } finally { $ProgressPreference = $old }
+      }
+    }
+    # Prefer the runtime tarball (binary + shared libs). Bare ELF is not enough.
+    if (-not (Test-GzipFile $runtimePath)) {
+      $srvUrl = $env:FOUNDATION_AI_SERVER_URL
+      if (-not $srvUrl) {
+        try {
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
+          $assets = @($rels | ForEach-Object { $_.assets })
+          # Prefer runtime tarball names over the bare ELF asset.
+          $pick = $assets |
+            Where-Object {
+              $_.name -like 'foundation-ai-runtime*.tar.gz' -or
+              $_.name -like 'foundation-ai-llama-server*.tar.gz'
+            } |
+            Where-Object { $_.name -notlike '*.sha256' } |
+            Select-Object -First 1
+          if (-not $pick) {
+            $pick = $assets |
+              Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' -and $_.name -notlike '*.tar.gz' } |
+              Select-Object -First 1
+          }
+          $srvUrl = $pick.browser_download_url
+        } catch { $srvUrl = $null }
+      }
+      if ($srvUrl) {
+        $dest = if ($srvUrl -match '\.tar\.gz') { $runtimePath } else { $serverPath }
+        Say "Downloading the AI runtime ($([IO.Path]::GetFileName(($srvUrl -split '\?')[0])))..."
+        try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $dest } catch {}
+      }
+    }
+    # Require the gzip runtime tarball (binary + libllama + libggml). A bare
+    # ELF alone cannot start on the target — refuse it even if present from an
+    # older download.
+    if ((Test-Path $serverPath) -and -not (Test-GzipFile $runtimePath)) {
+      Bad 'Found legacy bare llama-server ELF next to this script.'
+      Bad 'Delete it and re-run so the creator downloads ai-runtime.tar.gz instead.'
+    }
+    $stageServerPath = $null
+    if (Test-GzipFile $runtimePath) { $stageServerPath = $runtimePath }
+
+    if (-not (Test-Path $modelPath)) {
+      FailAi 'AI model download failed.'
+    } elseif (-not $stageServerPath) {
+      FailAi 'AI runtime tarball missing (foundation-ai-runtime-*.tar.gz from the release).'
+    } elseif ($IsoSize -ge $STAGE_OFFSET) {
+      FailAi 'ISO is larger than the 2 GiB staging offset — cannot stage AI past it.'
+    } else {
+      # Quick GGUF magic check so we don't stage a truncated HTML error page.
+      $fs = [IO.File]::OpenRead($modelPath)
+      try {
+        $mag = New-Object byte[] 4
+        [void]$fs.Read($mag, 0, 4)
+      } finally { $fs.Close() }
+      $magStr = [Text.Encoding]::ASCII.GetString($mag)
+      if ($magStr -ne 'GGUF') {
+        Remove-Item -Force $modelPath -ErrorAction SilentlyContinue
+        FailAi "Downloaded model is not a GGUF file (magic='$magStr')."
+      } else {
+        $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
+        $need += (Get-Item $stageServerPath).Length + 512
+        if ($target.Size -lt $need) {
+          FailAi ("Stick too small to stage the AI (need ~{0:N1} GB)." -f ($need / 1GB))
+        } else {
+          $serverPath = $stageServerPath   # used in the write section below
+          $stageAI = $true
+          $kind = if (Test-GzipFile $serverPath) { 'runtime tarball' } else { 'bare ELF (may lack libs)' }
+          Good ("AI ready - model {0:N0} MB + {1} will stage with the OS." -f ((Get-Item $modelPath).Length / 1MB), $kind)
+        }
+      }
+    }
+  } catch {
+    FailAi "Could not prepare the AI to stage: $($_.Exception.Message)"
+  }
+  if (-not $stageAI) {
+    FailAi 'AI staging was not prepared (unexpected).'
+  }
+} else {
+  Say 'NoModel: skipping AI sidecar (target must already have local AI for Assistant).'
+}
+
+# ── 3. write the image ───────────────────────────────────────────────────────
+# Windows refuses raw writes to a disk while any volume on it counts as
+# mounted. The reliable sequence (same as Rufus/Win32DiskImager) is: lock and
+# dismount every volume on the stick, HOLD those locks, and only then stream
+# to \\.\PHYSICALDRIVEn.
 if (-not ([System.Management.Automation.PSTypeName]'RawDisk').Type) {
   Add-Type -TypeDefinition @'
 using System;
@@ -277,344 +408,19 @@ public static class RawDisk {
 '@
 }
 
-function Test-GzipFile([string]$path) {
-  if (-not (Test-Path $path)) { return $false }
-  $fs = [IO.File]::OpenRead($path)
-  try {
-    $b = New-Object byte[] 2
-    if ($fs.Read($b, 0, 2) -lt 2) { return $false }
-    return ($b[0] -eq 0x1f -and $b[1] -eq 0x8b)
-  } finally { $fs.Close() }
-}
+# ── Frank local-AI staging (raw-offset sidecar) ──────────────────────────────
+# Windows won't surface a volume for a 2nd partition on a REMOVABLE stick that
+# was raw-written with a hybrid ISO (both the Storage cmdlets and diskpart fail),
+# so we do NOT partition. Instead we write [4 KB header][model][server] as raw
+# bytes at a fixed offset in the stick's free space PAST the ISO, and the Linux
+# installer reads them straight off the raw device. Contract shared with
+# create-foundation-usb.sh and foundation-install (docs/FRANK-LOCAL-AI.md).
+# ($STAGE_OFFSET is defined up in section 2b — it has to exist before the size
+# checks there. 2 GiB; see the note at its definition.)
 
-function Test-BytesEqual([byte[]]$a, [byte[]]$b, [int]$len) {
-  if ($null -eq $a -or $null -eq $b) { return $false }
-  if ($a.Length -lt $len -or $b.Length -lt $len) { return $false }
-  for ($i = 0; $i -lt $len; $i++) {
-    if ($a[$i] -ne $b[$i]) { return $false }
-  }
-  return $true
-}
-
-function Read-DiskRange([string]$phys, [long]$offset, [int]$count) {
-  $buf = New-Object byte[] $count
-  $fs = New-Object IO.FileStream($phys, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
-  try {
-    $null = $fs.Seek($offset, [IO.SeekOrigin]::Begin)
-    $got = $fs.Read($buf, 0, $count)
-    if ($got -lt $count) {
-      $trim = New-Object byte[] $got
-      [Array]::Copy($buf, $trim, $got)
-      return $trim
-    }
-    return $buf
-  } finally { $fs.Close() }
-}
-
-function Get-StickProbe {
-  param(
-    [int]$DiskNumber,
-    [string]$IsoPath,
-    [long]$IsoSize,
-    [long]$StageOffset,
-    [string]$ModelPath,
-    [string]$ServerPath,
-    [bool]$WantAi
-  )
-  $phys = "\\.\PHYSICALDRIVE$DiskNumber"
-  $isoMatch = $false
-  $aiPresent = $false
-  $aiMatch = $false
-  $isoNote = 'unreadable or empty'
-  $aiNote = 'not checked'
-
-  try {
-    $chunk = 1MB
-    if ($IsoSize -lt (2 * $chunk)) { $chunk = [int]([math]::Max(512, [math]::Floor($IsoSize / 2))) }
-    $src = [IO.File]::OpenRead($IsoPath)
-    try {
-      $headIso = New-Object byte[] $chunk
-      $tailIso = New-Object byte[] $chunk
-      [void]$src.Read($headIso, 0, $chunk)
-      $null = $src.Seek($IsoSize - $chunk, [IO.SeekOrigin]::Begin)
-      [void]$src.Read($tailIso, 0, $chunk)
-    } finally { $src.Close() }
-
-    $headDisk = Read-DiskRange $phys 0 $chunk
-    $tailDisk = Read-DiskRange $phys ($IsoSize - $chunk) $chunk
-    $headOk = Test-BytesEqual $headIso $headDisk $chunk
-    $tailOk = Test-BytesEqual $tailIso $tailDisk $chunk
-    if ($headOk -and $tailOk) {
-      $isoMatch = $true
-      $isoNote = 'matches local ISO (head+tail 1 MB)'
-    } elseif ($headOk) {
-      $isoNote = 'partial match (head only) — will rewrite ISO'
-    } else {
-      # Hybrid ISO9660 marker at 32 KiB + 1 ("CD001") is a weak "looks like an ISO" signal
-      $looksIso = $false
-      if ($headDisk.Length -gt 32773) {
-        $sig = [Text.Encoding]::ASCII.GetString($headDisk, 32769, 5)
-        $looksIso = ($sig -eq 'CD001')
-      }
-      if ($looksIso) { $isoNote = 'different ISO present — will rewrite' }
-      else { $isoNote = 'not a matching Foundation ISO (blank or other)' }
-    }
-  } catch {
-    $isoNote = "probe failed: $($_.Exception.Message)"
-  }
-
-  try {
-    $hdrBuf = Read-DiskRange $phys $StageOffset 4096
-    if ($hdrBuf.Length -ge 64) {
-      $hdrEnd = [Array]::IndexOf($hdrBuf, [byte]0)
-      if ($hdrEnd -lt 0) { $hdrEnd = $hdrBuf.Length }
-      $hdrText = [Text.Encoding]::ASCII.GetString($hdrBuf, 0, $hdrEnd)
-      if ($hdrText.StartsWith('FOUNDATIONAI2')) {
-        $aiPresent = $true
-        $mo = 0L; $ms = 0L; $so = 0L; $ss = 0L
-        foreach ($ln in ($hdrText -split "`n")) {
-          $t = $ln.Trim()
-          if ($t.StartsWith('model_offset=')) { [void][long]::TryParse($t.Substring(13), [ref]$mo) }
-          elseif ($t.StartsWith('model_size=')) { [void][long]::TryParse($t.Substring(11), [ref]$ms) }
-          elseif ($t.StartsWith('server_offset=')) { [void][long]::TryParse($t.Substring(14), [ref]$so) }
-          elseif ($t.StartsWith('server_size=')) { [void][long]::TryParse($t.Substring(12), [ref]$ss) }
-        }
-        $gguf = Read-DiskRange $phys $mo 4
-        $gz = Read-DiskRange $phys $so 2
-        $ggufOk = ($gguf.Length -ge 4 -and [Text.Encoding]::ASCII.GetString($gguf) -eq 'GGUF')
-        $gzOk = ($gz.Length -ge 2 -and $gz[0] -eq 0x1f -and $gz[1] -eq 0x8b)
-        if (-not $WantAi) {
-          $aiMatch = $true
-          $aiNote = 'present (NoModel — not restaging)'
-        } elseif ($ggufOk -and $gzOk -and (Test-Path $ModelPath) -and (Test-Path $ServerPath)) {
-          $localMs = [long](Get-Item $ModelPath).Length
-          $localSs = [long](Get-Item $ServerPath).Length
-          if ($ms -eq $localMs -and $ss -eq $localSs) {
-            $aiMatch = $true
-            $aiNote = ("matches local AI (model {0:N0} MB + runtime {1:N0} KB)" -f ($ms / 1MB), ($ss / 1KB))
-          } else {
-            $aiNote = ("present but size mismatch (stick model={0} local={1})" -f $ms, $localMs)
-          }
-        } elseif ($ggufOk -and $gzOk) {
-          $aiNote = 'present and readable (local AI files not ready to compare)'
-          $aiMatch = $false
-        } else {
-          $aiNote = 'header present but payload magic failed'
-        }
-      } else {
-        $aiNote = 'no FOUNDATIONAI2 header at 2 GiB'
-      }
-    } else {
-      $aiNote = 'could not read AI header region'
-    }
-  } catch {
-    $aiNote = "AI probe failed: $($_.Exception.Message)"
-  }
-
-  [pscustomobject]@{
-    IsoMatch  = $isoMatch
-    AiPresent = $aiPresent
-    AiMatch   = $aiMatch
-    IsoNote   = $isoNote
-    AiNote    = $aiNote
-  }
-}
-
-# Paths for AI prep / probe (next to this script)
-$modelPath   = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
-$runtimePath = Join-Path (Split-Path -Parent $PSCommandPath) 'ai-runtime.tar.gz'
-$serverPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'  # legacy bare ELF
-$requireAI   = -not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')
-$stageAI     = $false
-$stageServerPath = $null
-
-function FailAi([string]$m) {
-  Bad $m
-  if ($requireAI) {
-    Bad 'Local AI is required for a full offline install (Hub ASSISTANT + Frank).'
-    Bad 'Fix the problem above, or pass -NoModel only if the target already has AI.'
-    Read-Host 'Press ENTER to close'
-    exit 1
-  }
-}
-
-# Light local AI discovery for probe (no downloads yet — downloads happen if mode needs AI)
-if ($requireAI) {
-  if (Test-GzipFile $runtimePath) { $stageServerPath = $runtimePath }
-  elseif (Test-Path $serverPath) { $stageServerPath = $serverPath }
-}
-
-Say 'Probing the stick (what is already there)...'
-$probe = Get-StickProbe -DiskNumber $target.Number -IsoPath $IsoPath -IsoSize $IsoSize `
-  -StageOffset $STAGE_OFFSET -ModelPath $modelPath -ServerPath $(if ($stageServerPath) { $stageServerPath } else { $runtimePath }) `
-  -WantAi $requireAI
-Write-Host ("  ISO: {0}" -f $probe.IsoNote)
-Write-Host ("  AI:  {0}" -f $probe.AiNote)
-Write-Host ''
-
-# ── decide write mode ────────────────────────────────────────────────────────
-# full | iso_only | ai_only | skip
-$mode = 'full'
-if ($ForceFull) {
-  $mode = 'full'
-  Say 'ForceFull: full wipe + rewrite requested.'
-} elseif (-not $requireAI) {
-  if ($probe.IsoMatch) { $mode = 'skip' } else { $mode = 'iso_only' }
-} else {
-  if ($probe.IsoMatch -and $probe.AiMatch) { $mode = 'skip' }
-  elseif ($probe.IsoMatch -and -not $probe.AiMatch) { $mode = 'ai_only' }
-  elseif (-not $probe.IsoMatch -and $probe.AiMatch) { $mode = 'iso_only' }
-  else { $mode = 'full' }
-}
-
-# Prefer if/elseif over switch when format strings with braces appear nearby
-# (switch case parsing can confuse closing braces with format tokens).
-if ($mode -eq 'skip') {
-  Good 'Stick already has this ISO'
-  if ($requireAI) { Good 'and a matching AI sidecar - nothing to write.' }
-  else { Good '(NoModel) - nothing to write.' }
-  Write-Host ''
-  Good 'Your Foundation TerminalOS install USB is ready (unchanged).'
-  Write-Host 'Boot the mini PC from this stick -> UPDATE or INSTALL as needed.'
-  Write-Host ''
-  Write-Host 'Force a full rewrite anytime with -ForceFull.'
-  Read-Host 'Press ENTER to close'
-  exit 0
-} elseif ($mode -eq 'iso_only') {
-  Say 'Mode: ISO-ONLY - rewrite installer, keep AI sidecar past 2 GiB.'
-  $stickName = $target.FriendlyName.Trim()
-  Bad "Stick '$stickName' ISO will be rewritten; free-space AI (if any) is preserved."
-  $confirm = Read-Host '> type UPDATE (all caps) to continue, anything else aborts'
-  if ($confirm -cne 'UPDATE') {
-    Say 'Aborted - nothing was touched.'
-    Read-Host 'Press ENTER to close'
-    exit 0
-  }
-  $stageAI = $false
-} elseif ($mode -eq 'ai_only') {
-  Say 'Mode: AI-ONLY - keep existing ISO, stage/refresh AI sidecar only.'
-  $stickName = $target.FriendlyName.Trim()
-  Bad "AI sidecar (~1.2 GB+) will be written at 2 GiB on '$stickName'."
-  Bad 'The installer ISO already on the stick is NOT wiped.'
-  $confirm = Read-Host '> type STAGE (all caps) to continue, anything else aborts'
-  if ($confirm -cne 'STAGE') {
-    Say 'Aborted - nothing was touched.'
-    Read-Host 'Press ENTER to close'
-    exit 0
-  }
-} else {
-  $mode = 'full'
-  Say 'Mode: FULL - clean stick, write ISO, stage AI (if required).'
-  $stickName = $target.FriendlyName.Trim()
-  $stickGb = [string]::Format('{0:N1}', ($target.Size / 1GB))
-  Bad "EVERYTHING on '$stickName' ($stickGb GB) will be destroyed."
-  $confirm = Read-Host '> type ERASE (all caps) to continue, anything else aborts'
-  if ($confirm -cne 'ERASE') {
-    Say 'Aborted - nothing was touched.'
-    Read-Host 'Press ENTER to close'
-    exit 0
-  }
-}
-
-# ── prepare AI when the chosen mode needs it ─────────────────────────────────
-if ($mode -eq 'full' -or $mode -eq 'ai_only') {
-  if ($requireAI) {
-    try {
-      $ModelUrl = if ($env:FOUNDATION_MODEL_URL) { $env:FOUNDATION_MODEL_URL }
-                  else { 'https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf/resolve/main/ggml-model-i2_s.gguf' }
-      if (-not (Test-Path $modelPath)) {
-        Say 'Downloading the AI model to stage (~1.2 GB; skip with -NoModel)...'
-        try { Start-BitsTransfer -Source $ModelUrl -Destination $modelPath -DisplayName 'Frank local AI model' }
-        catch {
-          $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
-          try { Invoke-WebRequest -UseBasicParsing $ModelUrl -OutFile $modelPath } finally { $ProgressPreference = $old }
-        }
-      }
-      if (-not (Test-GzipFile $runtimePath)) {
-        $srvUrl = $env:FOUNDATION_AI_SERVER_URL
-        if (-not $srvUrl) {
-          try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
-            $assets = @($rels | ForEach-Object { $_.assets })
-            $pick = $assets |
-              Where-Object {
-                $_.name -like 'foundation-ai-runtime*.tar.gz' -or
-                $_.name -like 'foundation-ai-llama-server*.tar.gz'
-              } |
-              Where-Object { $_.name -notlike '*.sha256' } |
-              Select-Object -First 1
-            if (-not $pick) {
-              $pick = $assets |
-                Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' -and $_.name -notlike '*.tar.gz' } |
-                Select-Object -First 1
-            }
-            $srvUrl = $pick.browser_download_url
-          } catch { $srvUrl = $null }
-        }
-        if ($srvUrl) {
-          $dest = if ($srvUrl -match '\.tar\.gz') { $runtimePath } else { $serverPath }
-          Say "Downloading the AI runtime ($([IO.Path]::GetFileName(($srvUrl -split '\?')[0])))..."
-          try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $dest } catch {}
-        }
-      }
-      if ((Test-Path $serverPath) -and -not (Test-GzipFile $runtimePath)) {
-        Bad 'Found legacy bare llama-server ELF next to this script.'
-        Bad 'Delete it and re-run so the creator downloads ai-runtime.tar.gz instead.'
-      }
-      $stageServerPath = $null
-      if (Test-GzipFile $runtimePath) { $stageServerPath = $runtimePath }
-
-      if (-not (Test-Path $modelPath)) {
-        FailAi 'AI model download failed.'
-      } elseif (-not $stageServerPath) {
-        FailAi 'AI runtime tarball missing (foundation-ai-runtime-*.tar.gz from the release).'
-      } elseif ($IsoSize -ge $STAGE_OFFSET) {
-        FailAi 'ISO is larger than the 2 GiB staging offset — cannot stage AI past it.'
-      } else {
-        $fs = [IO.File]::OpenRead($modelPath)
-        try {
-          $mag = New-Object byte[] 4
-          [void]$fs.Read($mag, 0, 4)
-        } finally { $fs.Close() }
-        $magStr = [Text.Encoding]::ASCII.GetString($mag)
-        if ($magStr -ne 'GGUF') {
-          Remove-Item -Force $modelPath -ErrorAction SilentlyContinue
-          FailAi "Downloaded model is not a GGUF file (magic='$magStr')."
-        } else {
-          $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
-          $need += (Get-Item $stageServerPath).Length + 512
-          if ($target.Size -lt $need) {
-            FailAi ("Stick too small to stage the AI (need ~{0:N1} GB)." -f ($need / 1GB))
-          } else {
-            $serverPath = $stageServerPath
-            $stageAI = $true
-            Good ("AI ready - model {0:N0} MB + runtime will stage." -f ((Get-Item $modelPath).Length / 1MB))
-          }
-        }
-      }
-    } catch {
-      FailAi "Could not prepare the AI to stage: $($_.Exception.Message)"
-    }
-    if (-not $stageAI) {
-      FailAi 'AI staging was not prepared (unexpected).'
-    }
-  } else {
-    Say 'NoModel: skipping AI sidecar (target must already have local AI for Assistant).'
-  }
-} elseif ($mode -eq 'iso_only') {
-  if ($requireAI -and $probe.AiMatch) {
-    Good 'Keeping existing AI sidecar on the stick (sizes match local files).'
-  } elseif ($requireAI -and $probe.AiPresent) {
-    Say 'AI sidecar present; ISO-only mode leaves it as-is.'
-  } elseif ($requireAI) {
-    Bad 'No usable AI sidecar on this stick and mode is ISO-only.'
-    Bad 'Re-run without special flags for a full write, or use Stage-FoundationAI.ps1 after.'
-  } else {
-    Say 'NoModel: ISO-only write (no AI staging).'
-  }
-}
-
+# Stream a file to the raw disk handle, zero-padding the final chunk up to a
+# 512-byte sector (raw disk writes must be whole sectors). The header records
+# exact byte sizes, so the padding is invisible to the reader.
 function Write-RawFileSectorPadded($dst, $path) {
   $f = [IO.File]::OpenRead($path)
   try {
@@ -629,106 +435,172 @@ function Write-RawFileSectorPadded($dst, $path) {
   } finally { $f.Close() }
 }
 
-function Lock-StickVolumes([int]$DiskNumber) {
-  $handles = @()
-  $volPaths = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction SilentlyContinue |
-                ForEach-Object { $_.AccessPaths } |
-                Where-Object { $_ -like '\\?\Volume*' } |
-                ForEach-Object { $_.TrimEnd('\') } | Sort-Object -Unique)
-  foreach ($vp in $volPaths) {
-    try {
-      $vh = [RawDisk]::Open($vp, $true)
-      [RawDisk]::Fsctl($vh, [RawDisk]::FSCTL_LOCK_VOLUME)
-      [RawDisk]::Fsctl($vh, [RawDisk]::FSCTL_DISMOUNT_VOLUME)
-      $handles += $vh
-    } catch {
-      # Best-effort on in-place modes; full mode fails hard if lock needed later
-      Say "Could not lock volume $vp : $($_.Exception.Message)"
+$n = $target.Number
+Say 'Preparing the stick (removing its old partitions)...'
+try { Set-Disk -Number $n -IsReadOnly $false -ErrorAction SilentlyContinue } catch {}
+# diskpart clean wipes the partition table, so no partition on the stick can
+# have a volume object Windows would protect against raw writes.
+$null = @"
+select disk $n
+clean
+rescan
+exit
+"@ | diskpart
+if ($LASTEXITCODE -ne 0) {
+  Bad "Windows (diskpart) could not clean the stick (exit code $LASTEXITCODE)."
+  Bad 'Unplug it, plug it back in, and run this again.'
+  Read-Host 'Press ENTER to close'
+  exit 1
+}
+Start-Sleep -Seconds 2
+$volHandles = @()
+$volPaths = @(Get-Partition -DiskNumber $n -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.AccessPaths } |
+              Where-Object { $_ -like '\\?\Volume*' } |
+              ForEach-Object { $_.TrimEnd('\') } | Sort-Object -Unique)
+foreach ($vp in $volPaths) {
+  try {
+    $vh = [RawDisk]::Open($vp, $true)
+    [RawDisk]::Fsctl($vh, [RawDisk]::FSCTL_LOCK_VOLUME)
+    [RawDisk]::Fsctl($vh, [RawDisk]::FSCTL_DISMOUNT_VOLUME)
+    $volHandles += $vh
+  } catch {
+    Bad "Could not lock a volume on the stick ($vp): $($_.Exception.Message)"
+    Bad 'Close any Explorer window or program using the stick and run this again.'
+    foreach ($h in $volHandles) { $h.Close() }
+    Read-Host 'Press ENTER to close'
+    exit 1
+  }
+}
+
+Say 'Writing the installer (this takes a few minutes - do not unplug)...'
+$src = [IO.File]::OpenRead($IsoPath)
+$dst = New-Object IO.FileStream(([RawDisk]::Open("\\.\PHYSICALDRIVE$n", $true)),
+        [IO.FileAccess]::Write)
+try {
+  # The image's first chunk holds the MBR/partition table. If it goes in
+  # first, Windows spots the new partitions while we're still streaming,
+  # mounts volumes over them, and denies every later write. So: skip the
+  # first chunk, write the rest, then drop the first chunk in LAST — the
+  # disk has no partition table (nothing to automount) until we're done.
+  $buf = New-Object byte[] (4MB)
+  $firstChunk = $null
+  $firstLen = 0
+  $done = [long]0
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  while (($read = $src.Read($buf, 0, $buf.Length)) -gt 0) {
+    if ($read % 512 -ne 0) {
+      # raw disk writes must be whole sectors; zero-pad the final chunk
+      $padded = 512 * [math]::Ceiling($read / 512.0)
+      [Array]::Clear($buf, $read, $padded - $read)
+      $read = $padded
     }
-  }
-  return $handles
-}
-
-function Write-AiSidecarToDisk($dst) {
-  # Raw-offset sidecar: [4 KB header][model][server] at STAGE_OFFSET
-  Say "Staging Frank's local AI into the stick's free space..."
-  $modelOff  = [long]$STAGE_OFFSET + 4096
-  $modelSize = (Get-Item $modelPath).Length
-  $srvSize   = if (Test-Path $serverPath) { (Get-Item $serverPath).Length } else { 0 }
-  $srvOff    = $modelOff + [long]([math]::Ceiling($modelSize / 512.0) * 512)
-  $hdrText   = "FOUNDATIONAI2`nmodel_offset=$modelOff`nmodel_size=$modelSize`nserver_offset=$srvOff`nserver_size=$srvSize`n"
-  $hdr = New-Object byte[] 4096
-  [Array]::Copy([Text.Encoding]::ASCII.GetBytes($hdrText), $hdr, [Text.Encoding]::ASCII.GetByteCount($hdrText))
-  $null = $dst.Seek([long]$STAGE_OFFSET, [IO.SeekOrigin]::Begin)
-  $dst.Write($hdr, 0, 4096)
-  Write-RawFileSectorPadded $dst $modelPath
-  if ($srvSize -gt 0) {
-    $null = $dst.Seek($srvOff, [IO.SeekOrigin]::Begin)
-    Write-RawFileSectorPadded $dst $serverPath
-  }
-  Good 'AI model + runtime staged onto the stick.'
-}
-
-function Write-IsoStream($dst, [string]$IsoPath, [long]$IsoSize, [string]$activity) {
-  $src = [IO.File]::OpenRead($IsoPath)
-  try {
-    # First chunk (MBR) last — avoids Windows automount mid-stream.
-    $buf = New-Object byte[] (4MB)
-    $firstChunk = $null
-    $firstLen = 0
-    $done = [long]0
-    $sw = [Diagnostics.Stopwatch]::StartNew()
-    while (($read = $src.Read($buf, 0, $buf.Length)) -gt 0) {
-      if ($read % 512 -ne 0) {
-        $padded = 512 * [math]::Ceiling($read / 512.0)
-        [Array]::Clear($buf, $read, $padded - $read)
-        $read = $padded
-      }
-      if ($null -eq $firstChunk) {
-        $firstChunk = $buf.Clone()
-        $firstLen = $read
-        $null = $dst.Seek($read, [IO.SeekOrigin]::Begin)
-      } else {
-        $dst.Write($buf, 0, $read)
-      }
-      $done += $read
-      $pct = [int](100 * $done / $IsoSize)
-      $mbs = if ($sw.Elapsed.TotalSeconds -gt 0) { $done / 1MB / $sw.Elapsed.TotalSeconds } else { 0 }
-      Write-Progress -Activity $activity `
-        -Status ("{0:N0} / {1:N0} MB  ({2:N1} MB/s)" -f ($done / 1MB), ($IsoSize / 1MB), $mbs) `
-        -PercentComplete ([math]::Min($pct, 100))
+    if ($null -eq $firstChunk) {
+      $firstChunk = $buf.Clone()
+      $firstLen = $read
+      $null = $dst.Seek($read, [IO.SeekOrigin]::Begin)
+    } else {
+      $dst.Write($buf, 0, $read)
     }
-    return @{ FirstChunk = $firstChunk; FirstLen = $firstLen }
-  } finally { $src.Close() }
-}
-
-function Test-IsoHead([int]$DiskNumber, [string]$IsoPath) {
-  $check = New-Object IO.FileStream("\\.\PHYSICALDRIVE$DiskNumber",
-            [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
-  $srcCheck = [IO.File]::OpenRead($IsoPath)
-  try {
-    $a = New-Object byte[] (1MB); $b = New-Object byte[] (1MB)
-    [void]$check.Read($a, 0, $a.Length)
-    [void]$srcCheck.Read($b, 0, $b.Length)
-    return [Linq.Enumerable]::SequenceEqual($a, $b)
-  } finally {
-    $check.Close()
-    $srcCheck.Close()
+    $done += $read
+    $pct = [int](100 * $done / $IsoSize)
+    $mbs = if ($sw.Elapsed.TotalSeconds -gt 0) { $done / 1MB / $sw.Elapsed.TotalSeconds } else { 0 }
+    Write-Progress -Activity 'Writing installer to USB' `
+      -Status ("{0:N0} / {1:N0} MB  ({2:N1} MB/s)" -f ($done / 1MB), ($IsoSize / 1MB), $mbs) `
+      -PercentComplete ([math]::Min($pct, 100))
   }
+  # Data is streamed, but the job is NOT done: the boot record still has to
+  # go in, and Windows' write cache has to be flushed all the way to the
+  # stick — that flush alone can take a minute or more on a slow stick.
+  Write-Progress -Activity 'Writing installer to USB' `
+    -Status 'Finalizing - do NOT unplug the stick!' -PercentComplete 100
+  Say 'Data written. Finalizing the stick - do NOT unplug it yet...'
+  # Stage AI BEFORE writing the MBR/first chunk. Once the boot record lands,
+  # Windows remounts ISO partitions and often blocks further raw seeks/writes
+  # at STAGE_OFFSET — which silently left sticks without a usable AI payload.
+  if ($stageAI) {
+    # Raw-offset sidecar: [4 KB header][model][server] at STAGE_OFFSET, past the
+    # ISO. The header records exact byte offsets/sizes; the Linux installer reads
+    # them off the raw device. No partition, so Windows has nothing to refuse.
+    Say "Staging Frank's local AI into the stick's free space..."
+    $modelOff  = [long]$STAGE_OFFSET + 4096
+    $modelSize = (Get-Item $modelPath).Length
+    $srvSize   = if (Test-Path $serverPath) { (Get-Item $serverPath).Length } else { 0 }
+    $srvOff    = $modelOff + [long]([math]::Ceiling($modelSize / 512.0) * 512)
+    $hdrText   = "FOUNDATIONAI2`nmodel_offset=$modelOff`nmodel_size=$modelSize`nserver_offset=$srvOff`nserver_size=$srvSize`n"
+    $hdr = New-Object byte[] 4096
+    [Array]::Copy([Text.Encoding]::ASCII.GetBytes($hdrText), $hdr, [Text.Encoding]::ASCII.GetByteCount($hdrText))
+    $null = $dst.Seek([long]$STAGE_OFFSET, [IO.SeekOrigin]::Begin)
+    $dst.Write($hdr, 0, 4096)
+    Write-RawFileSectorPadded $dst $modelPath
+    if ($srvSize -gt 0) {
+      $null = $dst.Seek($srvOff, [IO.SeekOrigin]::Begin)
+      Write-RawFileSectorPadded $dst $serverPath
+    }
+    Good 'AI model + runtime staged onto the stick.'
+  }
+  # Boot record last — after AI sidecar — so Windows automount cannot block AI.
+  $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
+  $dst.Write($firstChunk, 0, $firstLen)
+  Say 'Flushing everything to the stick (can take a minute, still do NOT unplug)...'
+  $dst.Flush($true)
+} catch [System.UnauthorizedAccessException] {
+  Bad 'Windows refused the raw write even with the stick''s volumes locked.'
+  Bad 'Usual causes: antivirus / Windows "Controlled folder access" blocking'
+  Bad 'disk writes, or something reopened the stick mid-write. Try excluding'
+  Bad 'PowerShell in your AV for a moment, or write the same ISO with Rufus'
+  Bad 'or balenaEtcher instead - the ISO itself is fine.'
+  Bad 'NOTE: Rufus/Etcher/Ventoy write the ISO ONLY — they do NOT stage the'
+  Bad 'local AI sidecar. Sticks made that way leave Hub ASSISTANT as:'
+  Bad '  idle: missing: runtime model'
+  Bad 'Re-run THIS creator (without -NoModel) for offline AI on the target.'
+  Read-Host 'Press ENTER to close'
+  exit 1
+} finally {
+  $dst.Close()
+  $src.Close()
+  foreach ($h in $volHandles) { $h.Close() }
+  Write-Progress -Activity 'Writing installer to USB' -Completed
 }
 
-function Test-AiSidecarOnDisk([int]$DiskNumber) {
-  $check = New-Object IO.FileStream("\\.\PHYSICALDRIVE$DiskNumber",
-            [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
-  try {
+# quick read-back sanity check of the first megabyte
+Say 'Verifying (almost done - keep the stick plugged in)...'
+$check = New-Object IO.FileStream("\\.\PHYSICALDRIVE$n",
+          [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+$srcCheck = [IO.File]::OpenRead($IsoPath)
+try {
+  $a = New-Object byte[] (1MB); $b = New-Object byte[] (1MB)
+  [void]$check.Read($a, 0, $a.Length)
+  [void]$srcCheck.Read($b, 0, $b.Length)
+  if ([Linq.Enumerable]::SequenceEqual($a, $b)) {
+    Good 'Verified - the stick reads back correctly.'
+  } else {
+    Bad 'Verification FAILED - the stick did not read back what was written.'
+    Bad 'Try a different USB stick or port and run this again.'
+    Read-Host 'Press ENTER to close'
+    exit 1
+  }
+  # AI sidecar: confirm FOUNDATIONAI2 header + GGUF magic at model_offset.
+  # Without this, a silent seek/write failure shipped sticks that left every
+  # offline install as "idle: missing: runtime model".
+  if ($stageAI) {
     $null = $check.Seek([long]$STAGE_OFFSET, [IO.SeekOrigin]::Begin)
     $hdrBuf = New-Object byte[] 4096
     $got = $check.Read($hdrBuf, 0, 4096)
-    if ($got -lt 64) { return $false }
+    if ($got -lt 64) {
+      Bad 'AI sidecar verification FAILED - could not read header at 2 GiB offset.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
     $hdrEnd = [Array]::IndexOf($hdrBuf, [byte]0)
     if ($hdrEnd -lt 0) { $hdrEnd = $hdrBuf.Length }
     $hdrTextRb = [Text.Encoding]::ASCII.GetString($hdrBuf, 0, $hdrEnd)
-    if (-not $hdrTextRb.StartsWith('FOUNDATIONAI2')) { return $false }
+    if (-not $hdrTextRb.StartsWith('FOUNDATIONAI2')) {
+      Bad 'AI sidecar verification FAILED - FOUNDATIONAI2 header missing after write.'
+      Bad 'The ISO is fine, but the local AI was not staged. Re-run this creator.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
     $moRb = 0L; $msRb = 0L; $soRb = 0L; $ssRb = 0L
     foreach ($ln in ($hdrTextRb -split "`n")) {
       $t = $ln.Trim()
@@ -737,135 +609,39 @@ function Test-AiSidecarOnDisk([int]$DiskNumber) {
       elseif ($t.StartsWith('server_offset=')) { [void][long]::TryParse($t.Substring(14), [ref]$soRb) }
       elseif ($t.StartsWith('server_size=')) { [void][long]::TryParse($t.Substring(12), [ref]$ssRb) }
     }
-    if ($moRb -lt ([long]$STAGE_OFFSET + 4096) -or $msRb -le 0 -or $ssRb -le 0) { return $false }
+    if ($moRb -lt ([long]$STAGE_OFFSET + 4096) -or $msRb -le 0 -or $ssRb -le 0) {
+      Bad ("AI sidecar verification FAILED - bad header fields (mo={0} ms={1} ss={2})." -f $moRb, $msRb, $ssRb)
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
     $null = $check.Seek($moRb, [IO.SeekOrigin]::Begin)
     $gguf = New-Object byte[] 4
-    if ($check.Read($gguf, 0, 4) -lt 4 -or [Text.Encoding]::ASCII.GetString($gguf) -ne 'GGUF') { return $false }
+    if ($check.Read($gguf, 0, 4) -lt 4 -or [Text.Encoding]::ASCII.GetString($gguf) -ne 'GGUF') {
+      Bad 'AI sidecar verification FAILED - model GGUF magic not at model_offset.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
     $null = $check.Seek($soRb, [IO.SeekOrigin]::Begin)
     $srvMag = New-Object byte[] 2
-    if ($check.Read($srvMag, 0, 2) -lt 2 -or $srvMag[0] -ne 0x1f -or $srvMag[1] -ne 0x8b) { return $false }
+    if ($check.Read($srvMag, 0, 2) -lt 2 -or $srvMag[0] -ne 0x1f -or $srvMag[1] -ne 0x8b) {
+      Bad 'AI sidecar verification FAILED - runtime is not a gzip tarball at server_offset.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
     Good ("AI sidecar verified (model {0:N0} MB + runtime {1:N0} KB)." -f ($msRb / 1MB), ($ssRb / 1KB))
-    return $true
-  } finally { $check.Close() }
-}
-
-$n = $target.Number
-$phys = "\\.\PHYSICALDRIVE$n"
-
-try {
-  if ($mode -eq 'ai_only') {
-    Say 'Writing AI sidecar only (ISO untouched)...'
-    try { Set-Disk -Number $n -IsReadOnly $false -ErrorAction SilentlyContinue } catch {}
-    $volHandles = Lock-StickVolumes $n
-    $dst = New-Object IO.FileStream($phys, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::ReadWrite)
-    try {
-      Write-AiSidecarToDisk $dst
-      Say 'Flushing AI to the stick (do NOT unplug)...'
-      $dst.Flush($true)
-    } finally {
-      $dst.Close()
-      foreach ($h in $volHandles) { $h.Close() }
-    }
-    Say 'Verifying AI sidecar...'
-    if (-not (Test-AiSidecarOnDisk $n)) {
-      Bad 'AI sidecar verification FAILED.'
-      Read-Host 'Press ENTER to close'
-      exit 1
-    }
-  } else {
-    # full or iso_only — write ISO; full also cleans + stages AI
-    try { Set-Disk -Number $n -IsReadOnly $false -ErrorAction SilentlyContinue } catch {}
-    if ($mode -eq 'full') {
-      Say 'Preparing the stick (removing its old partitions)...'
-      $null = @"
-select disk $n
-clean
-rescan
-exit
-"@ | diskpart
-      if ($LASTEXITCODE -ne 0) {
-        Bad "Windows (diskpart) could not clean the stick (exit code $LASTEXITCODE)."
-        Bad 'Unplug it, plug it back in, and run this again.'
-        Read-Host 'Press ENTER to close'
-        exit 1
-      }
-      Start-Sleep -Seconds 2
-    } else {
-      Say 'In-place ISO rewrite (no diskpart clean — AI region preserved)...'
-    }
-
-    $volHandles = Lock-StickVolumes $n
-    Say 'Writing the installer (this takes a few minutes - do not unplug)...'
-    $dst = New-Object IO.FileStream(([RawDisk]::Open($phys, $true)), [IO.FileAccess]::Write)
-    try {
-      $parts = Write-IsoStream $dst $IsoPath $IsoSize 'Writing installer to USB'
-      Write-Progress -Activity 'Writing installer to USB' `
-        -Status 'Finalizing - do NOT unplug the stick!' -PercentComplete 100
-      Say 'Data written. Finalizing the stick - do NOT unplug it yet...'
-      # Stage AI BEFORE MBR on full mode so automount cannot block STAGE_OFFSET writes.
-      if ($stageAI) {
-        Write-AiSidecarToDisk $dst
-      }
-      $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
-      $dst.Write($parts.FirstChunk, 0, $parts.FirstLen)
-      Say 'Flushing everything to the stick (can take a minute, still do NOT unplug)...'
-      $dst.Flush($true)
-    } catch [System.UnauthorizedAccessException] {
-      Bad 'Windows refused the raw write even with the stick''s volumes locked.'
-      Bad 'Usual causes: antivirus / Windows "Controlled folder access" blocking'
-      Bad 'disk writes, or something reopened the stick mid-write. Try excluding'
-      Bad 'PowerShell in your AV for a moment, or write the same ISO with Rufus'
-      Bad 'or balenaEtcher instead - the ISO itself is fine.'
-      Bad 'NOTE: Rufus/Etcher/Ventoy write the ISO ONLY — they do NOT stage the'
-      Bad 'local AI sidecar. Sticks made that way leave Hub ASSISTANT as:'
-      Bad '  idle: missing: runtime model'
-      Bad 'Re-run THIS creator (without -NoModel) for offline AI on the target.'
-      Read-Host 'Press ENTER to close'
-      exit 1
-    } finally {
-      $dst.Close()
-      foreach ($h in $volHandles) { $h.Close() }
-      Write-Progress -Activity 'Writing installer to USB' -Completed
-    }
-
-    Say 'Verifying (almost done - keep the stick plugged in)...'
-    if (Test-IsoHead $n $IsoPath) {
-      Good 'Verified - the stick reads back correctly.'
-    } else {
-      Bad 'Verification FAILED - the stick did not read back what was written.'
-      Bad 'Try a different USB stick or port and run this again.'
-      Read-Host 'Press ENTER to close'
-      exit 1
-    }
-    if ($stageAI) {
-      if (-not (Test-AiSidecarOnDisk $n)) {
-        Bad 'AI sidecar verification FAILED - FOUNDATIONAI2 / GGUF / runtime check failed.'
-        Bad 'The ISO is fine, but the local AI was not staged. Re-run this creator.'
-        Read-Host 'Press ENTER to close'
-        exit 1
-      }
-    } elseif ($mode -eq 'iso_only' -and $probe.AiPresent) {
-      if (Test-AiSidecarOnDisk $n) {
-        Good 'Existing AI sidecar still intact after ISO-only rewrite.'
-      } else {
-        Bad 'WARNING: AI sidecar no longer verifies after ISO rewrite.'
-        Bad 'Re-run with default options (full) or Stage-FoundationAI.ps1.'
-      }
-    }
   }
-} catch {
-  Bad "Write failed: $($_.Exception.Message)"
-  Read-Host 'Press ENTER to close'
-  exit 1
+} finally {
+  $check.Close()
+  $srcCheck.Close()
 }
+
+# (Frank's local AI was staged during the write above, as a raw-offset sidecar in
+#  the stick's free space — see the STAGE_OFFSET section. No post-write step.)
 
 # ── done ─────────────────────────────────────────────────────────────────────
 Write-Host ''
 Good 'All done - it is now safe to unplug the stick.'
 Write-Host ''
-if ($mode -eq 'ai_only') { Good 'Mode used: AI-ONLY (ISO kept).' }
-elseif ($mode -eq 'iso_only') { Good 'Mode used: ISO-ONLY (AI sidecar preserved when present).' }
-else { Good 'Mode used: FULL wipe + write.' }
 Good 'Your Foundation TerminalOS install USB is ready. Next steps:'
 Write-Host ''
 Write-Host '  1. Unplug the stick. (If Windows offers to "format" it, say no -'
@@ -874,8 +650,8 @@ Write-Host '  2. Plug it into the computer you want to turn into Foundation'
 Write-Host '     TerminalOS, and turn that computer on while tapping its boot-menu'
 Write-Host '     key (usually F12, F11, Esc, F2, or Del - it flashes on screen).'
 Write-Host '  3. Pick the USB stick from the boot menu.'
-Write-Host '  4. Follow the on-screen installer. UPDATE refreshes an existing'
-Write-Host '     install; INSTALL / ERASE wipes a disk for a fresh machine.'
+Write-Host '  4. Follow the on-screen installer. The one destructive step - wiping'
+Write-Host '     that computer''s disk - is gated behind typing ERASE, same as here.'
 Write-Host ''
 Write-Host '  WARNING: the installer turns that computer into a locked-down,'
 Write-Host '  no-shell kiosk with an always-on overseer. Not for a machine you'
