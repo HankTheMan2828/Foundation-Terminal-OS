@@ -6,9 +6,9 @@ lock is never negotiable and never reaches here. The user types a statement,
 Frank's rule-bounded engine answers, and the reply (a baked negotiation line)
 is shown. On a "released" outcome the lock is gone and we return.
 
-Reachable once the in-session lock display is wired into the run loop — the
-enforced-lock equivalent on the root VT locker is TODO(hardware), same status
-the locker's DRM takeover already carries.
+Reachable from the full-screen lockout banner when Frank reports
+``negotiable=1`` (press N). The lockout banner always states whether
+negotiation is available and how to open this screen.
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ class NegotiateScreen(Screen):
         self.edit = LineEdit(limit=200)
         self.message = labels.NEGOTIATE_INTRO
         self.editing = True
+        self._released = False
 
     def draw(self, win, top: int, left: int) -> None:
         _, w = win.getmaxyx()
@@ -43,6 +44,9 @@ class NegotiateScreen(Screen):
                 win.addstr(top + i, left, line[:width], theme.attr(theme.PAIR_NORMAL))
             except curses.error:
                 pass
+
+    def status_text(self) -> str:
+        return labels.NEGOTIATE_HINT
 
     def handle_key(self, key: int, app):
         if not self.editing:
@@ -64,6 +68,7 @@ class NegotiateScreen(Screen):
             else:
                 self.message = resp.get("msg") or resp.get("outcome", "")
                 if resp.get("outcome") == "released":
+                    self._released = True
                     return POP        # the restriction is lifted; nothing to negotiate
             self.editing = False
         return None

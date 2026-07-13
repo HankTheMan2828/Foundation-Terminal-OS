@@ -122,10 +122,83 @@ def set_active_account(acct) -> None:
             ACTIVE_USER_FILE.write_text(acct.username + "\n")
         except OSError:
             pass   # off-device: /run/foundationhub may not exist; Frank just sees no user
+    else:
+        # Logout to the login roster: clear the logical user so Frank stops
+        # attributing activity to them and continuous session-lock polls go quiet.
+        os.environ.pop("FOUNDATIONHUB_USER", None)
+        try:
+            if ACTIVE_USER_FILE.exists():
+                ACTIVE_USER_FILE.write_text("")
+        except OSError:
+            pass
 
 
 def get_active_account():
     return _active_account
+
+
+# Last note/file the operator saved with content — used to redact a matched
+# infraction string from the source file when a lockout fires.
+_last_content_path: Path | None = None
+
+
+def note_content_path(path) -> None:
+    """Remember the most recently saved content path (editor on save)."""
+    global _last_content_path
+    try:
+        _last_content_path = Path(path) if path is not None else None
+    except (TypeError, ValueError):
+        _last_content_path = None
+
+
+def last_content_path() -> Path | None:
+    return _last_content_path
+
+
+def redact_matched_in_text(text: str, matched: str) -> str:
+    """Replace every case-insensitive occurrence of `matched` with same-length *."""
+    if not matched or not text:
+        return text
+    out: list[str] = []
+    lower = text.lower()
+    needle = matched.lower()
+    n = len(needle)
+    i = 0
+    while i < len(text):
+        j = lower.find(needle, i)
+        if j < 0:
+            out.append(text[i:])
+            break
+        out.append(text[i:j])
+        out.append("*" * n)
+        i = j + n
+    return "".join(out)
+
+
+def redact_infraction_in_file(matched: str, path: Path | None = None) -> bool:
+    """Replace the matched infraction text in a content file with * per character.
+
+    Returns True if the file was modified. Best-effort: missing path, missing
+    match, or IO errors are silent no-ops (the lockout still proceeds).
+    """
+    path = path if path is not None else _last_content_path
+    if not matched or path is None:
+        return False
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return False
+        original = p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    redacted = redact_matched_in_text(original, matched)
+    if redacted == original:
+        return False
+    try:
+        p.write_text(redacted, encoding="utf-8")
+        return True
+    except OSError:
+        return False
 
 
 def read_login_locks() -> dict:
@@ -315,15 +388,33 @@ class FrankClient:
             return None  # Frank not reachable (off-device / not running)
 
     def poll(self) -> dict | None:
-        """Non-blocking check for a pending warn/lockout. None if offline/none."""
+        """Non-blocking check for a pending warn/lockout. None if offline/none.
+
+        Returns a dict with at least ``type`` and ``raw``. Common optional keys
+        from frankd: delivery, user, scope, remaining, negotiable, matched, msg.
+        ``matched`` is URL-decoded (frankd percent-encodes it for the wire).
+        """
         resp = self._send("poll")
         if not resp:
             return None
-        # Protocol is line-oriented "TYPE key=val ...". Kept trivial on purpose.
-        parts = resp.split()
+        # Protocol is line-oriented "TYPE key=val ... msg=<free text>".
+        head, _, msg = resp.partition("msg=")
+        parts = head.split()
         if not parts:
             return None
-        return {"type": parts[0], "raw": resp}
+        out: dict = {"type": parts[0], "raw": resp}
+        if msg or "msg=" in resp:
+            out["msg"] = msg.strip()
+        from urllib.parse import unquote
+        for tok in parts[1:]:
+            key, _, val = tok.partition("=")
+            if not key:
+                continue
+            if key == "matched" and val:
+                out[key] = unquote(val)
+            else:
+                out[key] = val
+        return out
 
     def negotiate(self, plea: str) -> dict | None:
         """Submit a plea against a NEGOTIABLE lockout. Frank decides and can

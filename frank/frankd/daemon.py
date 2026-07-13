@@ -141,6 +141,14 @@ class Frank:
     # Sensitivity is fixed from root-owned config at load; the operator cannot
     # change it, or anything else about Frank, from within the running OS.
 
+    def _negotiable_flag(self, lk, now: float) -> int:
+        """1 if the Hub should offer the negotiation screen for this lock."""
+        return 1 if (lk is not None
+                     and lk.negotiable
+                     and lk.attempts_used < self.cfg.negotiation.max_attempts
+                     and self.cfg.negotiation.enabled
+                     and lk.active(now)) else 0
+
     def poll_message(self) -> str:
         """Hub asks for something to DISPLAY. Read-only; grants no authority."""
         if self._pending:
@@ -148,16 +156,17 @@ class Frank:
         now = time.time()
         machine = self.enforcers.machine_lockout(now)
         if machine is not None:
-            return (f"lockout scope=machine "
-                    f"remaining={int(machine[1].end - now)}")
+            user, lk = machine
+            return (f"lockout scope=machine user={user} "
+                    f"remaining={int(lk.end - now)} negotiable=0")
         sessions = self.enforcers.session_lockouts(now)
-        if sessions:
-            user, lk = next(iter(sessions.items()))
-            # negotiable flag tells the Hub whether to offer the plea screen.
-            negotiable = 1 if (lk.negotiable
-                               and lk.attempts_used < self.cfg.negotiation.max_attempts
-                               and self.cfg.negotiation.enabled) else 0
-            return (f"lockout scope=session user={user} "
+        # Only surface a session lock for the account currently holding the
+        # console — another user's session lock must not interrupt them.
+        active = sources.active_user() or DEFAULT_USER
+        if active in sessions:
+            lk = sessions[active]
+            negotiable = self._negotiable_flag(lk, now)
+            return (f"lockout scope=session user={active} "
                     f"remaining={int(lk.end - now)} negotiable={negotiable}")
         return "NONE"
 
@@ -175,8 +184,9 @@ class Frank:
         # Commentary only on user-facing reactions (flagged events), never on
         # silent observations — keeps AI cost down (spec §6).
         if reaction.kind in (ReactionKind.WARN, ReactionKind.LOCKOUT):
-            commentary = self.commentator.comment(reaction)
-            self._queue_for_hub(reaction, commentary)
+            commentary = self.commentator.comment(
+                reaction, matched=finding.matched or "", now=now)
+            self._queue_for_hub(reaction, commentary, finding=finding, now=now)
             # A user-facing reaction is a violation on the person's permanent
             # count (silent observations aren't). Count only, never detail.
             self.violations.increment(finding.event.user or DEFAULT_USER)
@@ -217,14 +227,40 @@ class Frank:
                 f"removed={int(result.removed_seconds)} "
                 f"remaining={int(result.remaining_seconds)} msg={result.message}")
 
-    def _queue_for_hub(self, reaction, commentary: str) -> None:
-        # Warnings are DISPLAYED by the Hub. Lockouts are ENFORCED by the root
-        # enforcer (via lockout.state); the Hub only reflects them.
+    def _queue_for_hub(self, reaction, commentary: str, *, finding=None,
+                       now: float | None = None) -> None:
+        # Warnings and lockout announcements are DISPLAYED by the Hub (full-
+        # screen). Lockouts are ENFORCED by the root enforcer (via lockout.state);
+        # the Hub reflects them and, for session locks, tears the session down.
+        from urllib.parse import quote
+        now = time.time() if now is None else now
+        user = ""
+        matched = ""
+        if finding is not None:
+            user = finding.event.user or DEFAULT_USER
+            matched = finding.matched or ""
+        # Wire-safe: quote so spaces/newlines in matched text can't break the
+        # key=val token parser on the Hub side.
+        matched_q = quote(matched, safe="") if matched else ""
         if reaction.kind is ReactionKind.LOCKOUT:
+            # Pull negotiable from the enforcer that just entered the lock.
+            enf = self.enforcers.enforcer_for(user or DEFAULT_USER)
+            negotiable = self._negotiable_flag(enf.lockout, now)
+            remaining = 0
+            if reaction.lockout_end is not None:
+                remaining = max(0, int(reaction.lockout_end - now))
             msg = (f"lockout scope={reaction.scope.value} "
-                   f"end={int(reaction.lockout_end or 0)} msg={commentary}")
+                   f"user={user} "
+                   f"end={int(reaction.lockout_end or 0)} "
+                   f"remaining={remaining} "
+                   f"negotiable={negotiable} "
+                   f"matched={matched_q} "
+                   f"msg={commentary}")
         else:
-            msg = f"warn delivery={reaction.delivery.value} msg={commentary}"
+            msg = (f"warn delivery={reaction.delivery.value} "
+                   f"user={user} "
+                   f"matched={matched_q} "
+                   f"msg={commentary}")
         self._pending.append(msg)
 
     def tick(self, now: float | None = None) -> None:

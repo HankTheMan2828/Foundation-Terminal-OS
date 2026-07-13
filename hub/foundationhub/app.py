@@ -5,6 +5,7 @@ The Home Hub is a stack of Screens. Handlers return navigation *actions*:
     None            -> stay
     POP             -> go back one screen  (Esc/Backspace)
     QUIT            -> exit the Hub -> logs out the session (spec §4)
+    LOGOUT          -> tear down to the login roster (session lock / power)
     a Screen        -> push it
     Launch(argv)    -> suspend curses, run an external program, resume
 
@@ -25,6 +26,7 @@ from . import labels
 
 POP = object()
 QUIT = object()
+LOGOUT = object()   # return to the users/login page without killing the process
 
 # How long getch() blocks before the loop wakes on its own (ms). Without a
 # timeout the loop only wakes on a keypress, so a Frank warning or the
@@ -34,6 +36,9 @@ QUIT = object()
 _FRANK_POLL_MS = 500
 # Don't hammer the socket every wake — poll Frank at most this often (seconds).
 _FRANK_POLL_INTERVAL = 1.0
+# Infractions (and lockout copy) stay un-clearable for this long so the operator
+# cannot key away before reading what Frank said.
+_INFRACTION_HOLD_S = 2.0
 
 
 @dataclass
@@ -98,7 +103,7 @@ class App:
     def __init__(self, stdscr, root_factory):
         self.stdscr = stdscr
         self.stack: list[Screen] = [root_factory(self)]
-        self.status_message = ""     # transient line (e.g. Frank status-bar warns)
+        self.status_message = ""     # transient line (care messages only now)
         # Frank produces warnings and the harm-to-user care message asynchronously
         # and queues them; the Hub has to POLL to display them (read-only IPC —
         # this grants the Hub no power over Frank, spec §6). Missing this poll was
@@ -107,7 +112,9 @@ class App:
         # poll() returns None, so this is a no-op in the dev preview.
         self.frank = session.FrankClient()
         self._last_frank_poll = 0.0
-        self._status_warn = True     # care lines render calm; warns/locks alarm
+        self._status_warn = True     # care lines render calm; residual status alarms
+        # Once a lockout full-screen is up we avoid re-pushing every poll tick.
+        self._lockout_active = False
 
     # -- navigation helpers usable from screens --
     def push(self, screen: Screen) -> None:
@@ -119,6 +126,18 @@ class App:
     def pop(self) -> None:
         if len(self.stack) > 1:
             self.stack.pop()
+
+    def logout_to_login(self, notice: str = "") -> None:
+        """Tear the logical session down and land on the users/login roster.
+
+        Used by session-scope lockouts (and anything else that must return to
+        the account list without exiting the foundationhub process).
+        """
+        session.set_active_account(None)
+        self.status_message = ""
+        self._lockout_active = False
+        from .screens.login import LoginScreen
+        self.stack[:] = [LoginScreen(notice=notice or labels.LOGIN_LOCKOUT_NOTICE)]
 
     # -- external programs --
     def launch(self, launch: Launch) -> None:
@@ -185,9 +204,11 @@ class App:
             self._dispatch(action)
 
     def _poll_frank(self) -> None:
-        """Ask frankd if there's a warning / care line to DISPLAY. Read-only —
-        the Hub can only reflect what Frank decides (spec §6). Throttled, and a
-        no-op when Frank isn't reachable (dev preview / not installed)."""
+        """Ask frankd if there's a warning / care line / lockout to DISPLAY.
+
+        Read-only — the Hub can only reflect what Frank decides (spec §6).
+        Throttled, and a no-op when Frank isn't reachable (dev preview).
+        """
         now = time.monotonic()
         if now - self._last_frank_poll < _FRANK_POLL_INTERVAL:
             return
@@ -195,12 +216,234 @@ class App:
         msg = self.frank.poll()
         if not msg or msg.get("type") == "NONE":
             return
+        mtype = msg.get("type", "")
+        if mtype == "care":
+            raw = msg.get("raw", "")
+            text = msg.get("msg") or raw.partition("msg=")[2].strip() or raw
+            self.status_message = text
+            self._status_warn = False
+            return
+        if mtype == "warn":
+            self._show_infraction_banner(msg)
+            return
+        if mtype == "lockout":
+            self._handle_lockout_message(msg)
+            return
+        # Unknown type: fall back to a status line so nothing is silently lost.
         raw = msg.get("raw", "")
-        # Protocol is "TYPE ... msg=<free text>"; show the human line if present.
-        text = raw.partition("msg=")[2].strip()
-        self.status_message = text or raw
-        # The harm-to-user care line is supportive, not an alarm — render it calm.
-        self._status_warn = msg.get("type") != "care"
+        text = msg.get("msg") or raw.partition("msg=")[2].strip() or raw
+        self.status_message = text
+        self._status_warn = True
+
+    def _show_infraction_banner(self, msg: dict) -> None:
+        """Full-screen infraction notice; clearable only after 2 seconds.
+
+        Replaces the old one-line status-bar delivery so the operator cannot
+        key past a violation without seeing what it was.
+        """
+        text = (msg.get("msg") or "").strip() or "Infraction recorded."
+        # Also redact matched content when a warn fires (same rule as lockout).
+        matched = (msg.get("matched") or "").strip()
+        if matched:
+            session.redact_infraction_in_file(matched)
+            self._redact_open_editor(matched)
+        lines = [
+            labels.INFRACTION_TITLE,
+            "",
+            *self._wrap_msg(text, 60),
+            "",
+            labels.INFRACTION_HOLD,
+        ]
+        self._blocking_banner(lines, min_seconds=_INFRACTION_HOLD_S)
+
+    def _handle_lockout_message(self, msg: dict) -> None:
+        """Immediate lockout: full screen, redact source file, then logout.
+
+        Session locks always end on the users/login page. If negotiation is
+        available, the banner says so and offers N before accepting logout.
+        Machine locks are also shown (root enforcer still owns the VT on
+        hardware); the Hub still tears the logical session down.
+        """
+        if session.get_active_account() is None and not self._lockout_active:
+            # Already on the login roster — continuous lock status is reflected
+            # there via login.locks; don't re-banner every poll.
+            return
+        if self._lockout_active:
+            return
+
+        matched = (msg.get("matched") or "").strip()
+        if matched:
+            session.redact_infraction_in_file(matched)
+            self._redact_open_editor(matched)
+
+        self._lockout_active = True
+        negotiable = str(msg.get("negotiable", "0")) == "1"
+        remaining = self._parse_remaining(msg)
+
+        while self._lockout_active:
+            lines = self._lockout_lines(msg, negotiable=negotiable,
+                                        remaining=remaining)
+            accept_keys = {ord("\n"), ord("\r"), curses.KEY_ENTER, ord(" ")}
+            extra = {ord("n"), ord("N")} if negotiable else set()
+            key = self._blocking_banner(
+                lines, min_seconds=_INFRACTION_HOLD_S,
+                accept_keys=accept_keys | extra | {27})
+            if negotiable and key in (ord("n"), ord("N")):
+                released = self._run_negotiate()
+                if released:
+                    self._lockout_active = False
+                    return
+                # Re-check remaining / negotiable after a denied or shortened plea.
+                follow = self.frank.poll()
+                if follow and follow.get("type") == "lockout":
+                    msg = follow
+                    negotiable = str(msg.get("negotiable", "0")) == "1"
+                    remaining = self._parse_remaining(msg)
+                elif follow and follow.get("type") == "NONE":
+                    self._lockout_active = False
+                    return
+                continue
+            break
+
+        self.logout_to_login(labels.LOGIN_LOCKOUT_NOTICE)
+
+    def _lockout_lines(self, msg: dict, *, negotiable: bool,
+                       remaining: int) -> list[str]:
+        text = (msg.get("msg") or "").strip() or "Access to this console is suspended."
+        mmss = f"{max(0, remaining) // 60:02d}:{max(0, remaining) % 60:02d}"
+        lines = [
+            labels.LOCKOUT_TITLE,
+            "",
+            *self._wrap_msg(text, 60),
+            "",
+            labels.LOCKOUT_REMAINING.format(mmss=mmss),
+            "",
+        ]
+        if negotiable:
+            lines.append(labels.LOCKOUT_NEGOTIABLE)
+            lines.append(labels.LOCKOUT_NEGOTIABLE_HOW)
+        else:
+            lines.append(labels.LOCKOUT_NOT_NEGOTIABLE)
+        lines.append("")
+        lines.append(labels.LOCKOUT_ACCEPT)
+        lines.append(labels.LOCKOUT_HOLD)
+        return lines
+
+    def _run_negotiate(self) -> bool:
+        """Push the negotiate screen as a modal loop. True if lock was lifted."""
+        from .screens.negotiate import NegotiateScreen
+        screen = NegotiateScreen(client=self.frank)
+        # Don't report this navigation as ordinary activity mid-lockout.
+        self.stack.append(screen)
+        released = False
+        try:
+            while self.stack and self.stack[-1] is screen:
+                screen.render(self.stdscr)
+                curses.doupdate()
+                theme.dress_console()
+                try:
+                    key = self.stdscr.getch()
+                except KeyboardInterrupt:
+                    key = 27
+                if key == -1:
+                    continue
+                action = screen.handle_key(key, self)
+                if action is POP:
+                    self.stack.pop()
+                    break
+                # NegotiateScreen returns POP on "released"; also detect via
+                # a fresh poll in case the screen only cleared its message.
+            # After leaving negotiate, see if the lock is gone.
+            follow = self.frank.poll()
+            if follow is None or follow.get("type") == "NONE":
+                released = True
+            elif follow.get("type") == "lockout":
+                remaining = self._parse_remaining(follow)
+                released = remaining <= 0
+            # If the screen popped itself because outcome=released:
+            if getattr(screen, "_released", False):
+                released = True
+        finally:
+            while self.stack and self.stack[-1] is screen:
+                self.stack.pop()
+        return released
+
+    def _redact_open_editor(self, matched: str) -> None:
+        """If an editor is on the stack for the last content path, redact buffer."""
+        if not matched:
+            return
+        path = session.last_content_path()
+        for scr in self.stack:
+            editor = getattr(scr, "editor", None) or scr
+            epath = getattr(editor, "path", None)
+            buf = getattr(editor, "buffer", None)
+            if epath is None or buf is None:
+                continue
+            if path is not None and str(epath) != str(path):
+                continue
+            try:
+                text = buf.text()
+                new = session.redact_matched_in_text(text, matched)
+                if new != text:
+                    buf.lines = new.split("\n") if new else [""]
+                    buf.dirty = True
+            except Exception:
+                pass
+
+    def _blocking_banner(self, lines: list[str], *, min_seconds: float,
+                         accept_keys: set[int] | None = None) -> int:
+        """Paint a full-screen banner; ignore keys until min_seconds elapses.
+
+        Returns the key that dismissed it, or -1 if the hold elapsed with no
+        further key (caller may treat any post-hold key, including -1 timeout
+        after hold, as they wish — we wait for a real key after the hold).
+        """
+        clearable_at = time.monotonic() + min_seconds
+        self.stdscr.timeout(100)
+        key = -1
+        while True:
+            ui.full_screen_banner(self.stdscr, lines, alert=True)
+            curses.doupdate()
+            theme.dress_console()
+            try:
+                key = self.stdscr.getch()
+            except KeyboardInterrupt:
+                key = 27
+            now = time.monotonic()
+            if now < clearable_at:
+                continue
+            if key == -1:
+                continue
+            if accept_keys is not None and key not in accept_keys:
+                # After hold, still only accept the keys the caller named
+                # (lockout: Enter/N); for infractions accept_keys is None = any.
+                continue
+            break
+        self.stdscr.timeout(_FRANK_POLL_MS)
+        return key
+
+    @staticmethod
+    def _wrap_msg(text: str, width: int) -> list[str]:
+        words = text.split()
+        if not words:
+            return [text]
+        rows: list[str] = []
+        cur = words[0]
+        for w in words[1:]:
+            if len(cur) + 1 + len(w) <= width:
+                cur = f"{cur} {w}"
+            else:
+                rows.append(cur)
+                cur = w
+        rows.append(cur)
+        return rows
+
+    @staticmethod
+    def _parse_remaining(msg: dict) -> int:
+        try:
+            return max(0, int(msg.get("remaining") or 0))
+        except (TypeError, ValueError):
+            return 0
 
     def _dispatch(self, action) -> None:
         if action is None:
@@ -209,6 +452,8 @@ class App:
             self.pop()
         elif action is QUIT:
             self.stack.clear()
+        elif action is LOGOUT:
+            self.logout_to_login()
         elif isinstance(action, Launch):
             self.launch(action)
         elif isinstance(action, Screen):

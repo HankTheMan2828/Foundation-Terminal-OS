@@ -199,6 +199,20 @@ EDITOR_SAVE_FAILED = "SAVE FAILED: {err}"
 EDITOR_RENAME_PROMPT = "RENAME TO"
 EDITOR_RENAME_EXISTS = "A RECORD BY THAT NAME EXISTS"
 
+# ── Frank infractions / lockouts (Hub full-screen delivery) ────────────────
+# Warnings and lockouts interrupt the whole screen (no more one-line footer).
+INFRACTION_TITLE = "INFRACTION"
+INFRACTION_HOLD = "Acknowledged after 2 seconds — then any key to continue"
+LOCKOUT_TITLE = "ACCESS SUSPENDED"
+LOCKOUT_REMAINING = "Time remaining: {mmss}"
+# Negotiation availability is always stated so the operator knows the path.
+LOCKOUT_NEGOTIABLE = "Negotiation: AVAILABLE"
+LOCKOUT_NEGOTIABLE_HOW = "Press N to present your case to the overseer"
+LOCKOUT_NOT_NEGOTIABLE = "Negotiation: NOT AVAILABLE for this restriction"
+LOCKOUT_ACCEPT = "Press Enter to accept and return to the login roster"
+LOCKOUT_HOLD = "Hold 2 seconds — then keys are accepted"
+LOGIN_LOCKOUT_NOTICE = "SESSION ENDED BY THE OVERSEER"
+
 # ── Frank negotiation (docs/FRANK-LOCAL-AI.md §4) ─────────────────────────
 NEGOTIATE_TITLE = "REVIEW"
 NEGOTIATE_SUBTITLE = "this restriction is open to negotiation"
@@ -207,6 +221,7 @@ NEGOTIATE_INTRO = ("You are being frank with me. I am being frank with you. "
 NEGOTIATE_PROMPT = "Your statement"
 NEGOTIATE_DONE = "Esc to return · any key to speak again"
 NEGOTIATE_OFFLINE = "The overseer is not reachable."
+NEGOTIATE_HINT = "type your case   ↵ submit   Esc back to lockout"
 
 # ── Power ────────────────────────────────────────────────────────────────────
 POWER_LOGOUT = "LOG OUT"

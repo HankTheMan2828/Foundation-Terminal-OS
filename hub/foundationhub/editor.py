@@ -18,7 +18,7 @@ from __future__ import annotations
 import curses
 from pathlib import Path
 
-from . import activity, labels, notesdb, theme
+from . import activity, labels, notesdb, session, theme
 from .app import POP, Screen
 from .ui import KEYS_DOWN, KEYS_SELECT, KEYS_UP, LineEdit
 
@@ -170,6 +170,9 @@ class Editor:
             self.message = labels.EDITOR_SAVE_FAILED.format(err=exc)
             return False
         self.buffer.dirty = False
+        # Remember this path so a subsequent lockout can redact the matched
+        # infraction text in the source file (same-length * per character).
+        session.note_content_path(self.path)
         # Report the edit *with its content* so Frank's content-review tiers can
         # actually see what was written — this is the "notes edited" half of the
         # OG design (report-only; see activity.py).

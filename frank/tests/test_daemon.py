@@ -196,6 +196,45 @@ def test_negotiate_shortens_a_negotiable_session_lock(tmp_path):
     assert f.enforcers.enforcer_for("operator").lockout.end >= 50   # floor held
 
 
+def test_queue_lockout_carries_negotiable_and_matched(tmp_path):
+    """Hub needs negotiable= + matched= on the lockout wire to full-screen,
+    offer negotiation, and redact the source file."""
+    f = Frank(_cfg(tmp_path))
+    # Four minors => session lockout (threshold 4, weight 1).
+    for i in range(4):
+        f._handle_finding(
+            Finding("rule", Track.SECURITY, Severity.MINOR,
+                    Event(Source.SHELL, "msfconsole", user="alice"),
+                    matched="msfconsole"),
+            now=float(i))
+    pending = list(f._pending)
+    assert pending, "lockout should be queued for Hub display"
+    last = pending[-1]
+    assert last.startswith("lockout")
+    assert "negotiable=1" in last
+    assert "matched=msfconsole" in last
+    assert "user=alice" in last
+    assert "msg=" in last
+
+
+def test_poll_session_lock_only_for_active_user(tmp_path, monkeypatch):
+    import time as _time
+    f = Frank(_cfg(tmp_path))
+    from frankd.enforcement import Lockout, Scope
+    now = _time.time()
+    enf = f.enforcers.enforcer_for("alice")
+    enf.lockout = Lockout(Scope.SESSION, now, now + 100, now + 10_000,
+                          Severity.MINOR, negotiable=True, orig_end=now + 100)
+    # Different active user -> continuous poll stays quiet for them.
+    monkeypatch.setattr("frankd.sources.active_user", lambda: "bob")
+    assert f.poll_message() == "NONE"
+    monkeypatch.setattr("frankd.sources.active_user", lambda: "alice")
+    msg = f.poll_message()
+    assert msg.startswith("lockout")
+    assert "user=alice" in msg
+    assert "negotiable=1" in msg
+
+
 def test_negotiate_refuses_a_machine_lock(tmp_path):
     f = Frank(_cfg(tmp_path))
     f._handle_finding(_finding(sev=Severity.SERIOUS), now=100)  # machine lock

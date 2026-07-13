@@ -40,3 +40,17 @@ def test_negotiate_ignores_unexpected_reply():
     c = FrankClient()
     c._send = lambda line: "ERR read-only"
     assert c.negotiate("x") is None
+
+
+def test_poll_parses_lockout_fields_and_decodes_matched():
+    c = FrankClient()
+    c._send = lambda line: (
+        "lockout scope=session user=alice remaining=90 negotiable=1 "
+        "matched=msfconsole%20tool msg=Access suspended due to infractions."
+    )
+    r = c.poll()
+    assert r["type"] == "lockout"
+    assert r["scope"] == "session"
+    assert r["negotiable"] == "1"
+    assert r["matched"] == "msfconsole tool"
+    assert r["msg"].startswith("Access suspended")

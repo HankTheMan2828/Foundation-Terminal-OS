@@ -130,16 +130,60 @@ def _situation(reaction: Reaction) -> str:
     return "warn_minor"
 
 
+def _duration_parts(seconds: float) -> tuple[int, str]:
+    """Human duration for lockout templates: (N, unit)."""
+    secs = max(0, int(seconds))
+    if secs >= 3600:
+        n = max(1, (secs + 1800) // 3600)  # nearest hour, at least 1
+        return n, "hour" if n == 1 else "hours"
+    if secs >= 60:
+        n = max(1, (secs + 30) // 60)
+        return n, "minute" if n == 1 else "minutes"
+    n = max(1, secs)
+    return n, "second" if n == 1 else "seconds"
+
+
+def format_line(template: str, reaction: Reaction, *, matched: str = "",
+                now: float | None = None) -> str:
+    """Fill the approved line-bank placeholders for a decided reaction.
+
+    Placeholders: {n} notice index, {N}/{unit} lockout duration, {Infraction}
+    the matched string (serious machine lockout only — deliberate exception in
+    docs/FRANK-VOICE.md).
+    """
+    import time as _time
+    now = _time.time() if now is None else now
+    remaining = 0.0
+    if reaction.lockout_end is not None:
+        remaining = max(0.0, reaction.lockout_end - now)
+    n_notice = 1
+    if reaction.warnings_remaining is not None:
+        # warnings_remaining is how many score-points until lockout; invert to
+        # a 1-based notice index for "this is your {n} notice".
+        n_notice = max(1, 4 - reaction.warnings_remaining)
+    N, unit = _duration_parts(remaining)
+    infraction = (matched or "restricted activity").strip()
+    if len(infraction) > 80:
+        infraction = infraction[:77] + "..."
+    try:
+        return template.format(n=n_notice, N=N, unit=unit, Infraction=infraction)
+    except (KeyError, ValueError):
+        return template
+
+
 class Commentator(Protocol):
-    def comment(self, reaction: Reaction) -> str: ...
+    def comment(self, reaction: Reaction, *, matched: str = "",
+                now: float | None = None) -> str: ...
 
 
 class LineBankCommentator:
     """Frank's primary, rule-based voice: picks from the approved bank for
     the situation the enforcer already decided. Needs no network or key."""
 
-    def comment(self, reaction: Reaction) -> str:
-        return random.choice(_LINES[_situation(reaction)])
+    def comment(self, reaction: Reaction, *, matched: str = "",
+                now: float | None = None) -> str:
+        template = random.choice(_LINES[_situation(reaction)])
+        return format_line(template, reaction, matched=matched, now=now)
 
 
 
@@ -167,13 +211,14 @@ class MistralCommentator:
             pass
         return None
 
-    def comment(self, reaction: Reaction) -> str:
+    def comment(self, reaction: Reaction, *, matched: str = "",
+                now: float | None = None) -> str:
         if not self.api_key:
-            return self._offline.comment(reaction)   # offline mode (current default)
+            return self._offline.comment(reaction, matched=matched, now=now)
         try:
             import requests
         except ModuleNotFoundError:
-            return self._offline.comment(reaction)
+            return self._offline.comment(reaction, matched=matched, now=now)
         # Hand the model ONLY the non-revealing descriptor (track/severity/source).
         user = (f"Situation: {_situation(reaction)}. "
                 f"Context: {reaction.track.value}, {reaction.severity.name.lower()}. "
@@ -195,9 +240,9 @@ class MistralCommentator:
             resp.raise_for_status()
             text = resp.json()["choices"][0]["message"]["content"].strip()
         except Exception:
-            return self._offline.comment(reaction)
+            return self._offline.comment(reaction, matched=matched, now=now)
         if not text or "FALLBACK" in text or len(text) > 240:
-            return self._offline.comment(reaction)
+            return self._offline.comment(reaction, matched=matched, now=now)
         return text
 
 
