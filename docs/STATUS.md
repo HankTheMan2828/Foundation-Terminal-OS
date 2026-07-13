@@ -1,9 +1,10 @@
 # Status — what's real vs. stubbed
 
 Honest tracking against the spec's build order (§11). **Stable line:
-`v0.1.x`** (first cut `v0.1.0`; current feature cut **`v0.1.4`** hardens
-Firefox Web Access after the one-frame-flash hardware report) — see
-[`VERSIONING.md`](VERSIONING.md). The OS is
+`v0.1.x`** (first cut `v0.1.0`; current feature cut **`v0.1.5`** makes
+Web Access prefer Xorg+Firefox so the graphical browser actually stays up;
+w3m only after every GUI path fails) — see [`VERSIONING.md`](VERSIONING.md).
+The OS is
 software-complete for the intended console product: Hub, Frank, games, media,
 install/ISO, and updates are in-tree and unit-tested off-device. Rows still
 marked 🟨/⬜ are hardware soak, asset polish, or explicitly deferred work —

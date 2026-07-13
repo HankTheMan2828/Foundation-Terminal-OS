@@ -51,15 +51,16 @@ fi
 # ── Web Access (Firefox kiosk) ─────────────────────────────────────────────
 # Packages: firefox + sway + seatd (install/packages.txt). The wrapper owns
 # the enter/exit contract and keyboard pointer binds — see its header.
-pac firefox sway seatd cage xorg-xwayland dbus w3m || pac w3m || true
+pac firefox sway seatd cage xorg-server xorg-xinit xorg-xwayland xorg-xsetroot \
+  dbus w3m || pac w3m || true
 install_file "usr/local/bin/foundationhub-web" "/usr/local/bin/foundationhub-web" 0755
-# seatd: libseat backend for sway/cage when the Hub hands the console over.
-# Runtime prefers logind for getty sessions; seatd is the fallback backend.
+# seatd + video/input/seat groups for DRM when launching Xorg/sway/cage from
+# the Hub. seatd-launch is used at runtime when available.
 if is_arch; then
   usermod -aG seat,video,input "$OPERATOR" 2>/dev/null || true
   systemctl enable seatd.service 2>/dev/null || true
   systemctl start seatd.service 2>/dev/null || true
-  c_ok "Web Access: foundationhub-web (Firefox kiosk + w3m fallback)"
+  c_ok "Web Access: foundationhub-web (Xorg/sway Firefox; w3m last resort)"
 fi
 
 # Register the shell and set it (spec §4). After this the operator has NO bash.
