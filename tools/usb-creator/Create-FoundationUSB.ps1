@@ -247,8 +247,10 @@ $requireAI = -not ($NoModel -or $env:FOUNDATION_NO_MODEL -eq '1')
 # ~1.2 GB AI on a 3.8 GB stick. Keep in sync with create-foundation-usb.sh and
 # foundation-install (off=…). Contract: the ISO must stay under 2 GiB.
 $STAGE_OFFSET = 2147483648   # 2 GiB
-$modelPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
-$serverPath = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'
+$modelPath   = Join-Path (Split-Path -Parent $PSCommandPath) 'model.gguf'
+# Runtime tarball (llama-server + libllama/libggml). Bare ELF alone cannot start.
+$runtimePath = Join-Path (Split-Path -Parent $PSCommandPath) 'ai-runtime.tar.gz'
+$serverPath  = Join-Path (Split-Path -Parent $PSCommandPath) 'llama-server'  # legacy bare ELF
 function FailAi([string]$m) {
   Bad $m
   if ($requireAI) {
@@ -257,6 +259,15 @@ function FailAi([string]$m) {
     Read-Host 'Press ENTER to close'
     exit 1
   }
+}
+function Test-GzipFile([string]$path) {
+  if (-not (Test-Path $path)) { return $false }
+  $fs = [IO.File]::OpenRead($path)
+  try {
+    $b = New-Object byte[] 2
+    if ($fs.Read($b, 0, 2) -lt 2) { return $false }
+    return ($b[0] -eq 0x1f -and $b[1] -eq 0x8b)
+  } finally { $fs.Close() }
 }
 if ($requireAI) {
   try {
@@ -270,28 +281,45 @@ if ($requireAI) {
         try { Invoke-WebRequest -UseBasicParsing $ModelUrl -OutFile $modelPath } finally { $ProgressPreference = $old }
       }
     }
-    if (-not (Test-Path $serverPath)) {
+    # Prefer the runtime tarball (binary + shared libs). Bare ELF is not enough.
+    if (-not (Test-GzipFile $runtimePath)) {
       $srvUrl = $env:FOUNDATION_AI_SERVER_URL
       if (-not $srvUrl) {
         try {
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           $rels = @(Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$GitHubRepo/releases")
-          $srvUrl = ($rels | ForEach-Object { $_.assets } |
-                     Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' } |
-                     Select-Object -First 1).browser_download_url
+          $assets = @($rels | ForEach-Object { $_.assets })
+          # Prefer runtime tarball names over the bare ELF asset.
+          $pick = $assets |
+            Where-Object {
+              $_.name -like 'foundation-ai-runtime*.tar.gz' -or
+              $_.name -like 'foundation-ai-llama-server*.tar.gz'
+            } |
+            Where-Object { $_.name -notlike '*.sha256' } |
+            Select-Object -First 1
+          if (-not $pick) {
+            $pick = $assets |
+              Where-Object { $_.name -like 'foundation-ai-llama-server*' -and $_.name -notlike '*.sha256' -and $_.name -notlike '*.tar.gz' } |
+              Select-Object -First 1
+          }
+          $srvUrl = $pick.browser_download_url
         } catch { $srvUrl = $null }
       }
       if ($srvUrl) {
-        Say 'Downloading the AI server binary...'
-        try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $serverPath } catch {}
+        $dest = if ($srvUrl -match '\.tar\.gz') { $runtimePath } else { $serverPath }
+        Say "Downloading the AI runtime ($([IO.Path]::GetFileName(($srvUrl -split '\?')[0])))..."
+        try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $dest } catch {}
       }
     }
-    # Offline install needs BOTH the GGUF and the prebuilt llama-server — model
-    # alone leaves frank-ai.service idle (no on-target build without network).
+    # What we actually stage: gzip runtime preferred; bare ELF only as last resort.
+    $stageServerPath = $null
+    if (Test-GzipFile $runtimePath) { $stageServerPath = $runtimePath }
+    elseif (Test-Path $serverPath) { $stageServerPath = $serverPath }
+
     if (-not (Test-Path $modelPath)) {
       FailAi 'AI model download failed.'
-    } elseif (-not (Test-Path $serverPath)) {
-      FailAi 'AI server binary missing (foundation-ai-llama-server from the release).'
+    } elseif (-not $stageServerPath) {
+      FailAi 'AI runtime missing (foundation-ai-runtime-*.tar.gz from the release).'
     } elseif ($IsoSize -ge $STAGE_OFFSET) {
       FailAi 'ISO is larger than the 2 GiB staging offset — cannot stage AI past it.'
     } else {
@@ -307,12 +335,14 @@ if ($requireAI) {
         FailAi "Downloaded model is not a GGUF file (magic='$magStr')."
       } else {
         $need = [long]$STAGE_OFFSET + 4096 + (Get-Item $modelPath).Length + 512
-        $need += (Get-Item $serverPath).Length + 512
+        $need += (Get-Item $stageServerPath).Length + 512
         if ($target.Size -lt $need) {
           FailAi ("Stick too small to stage the AI (need ~{0:N1} GB)." -f ($need / 1GB))
         } else {
+          $serverPath = $stageServerPath   # used in the write section below
           $stageAI = $true
-          Good ("AI ready - model {0:N0} MB + server will stage after the OS is written." -f ((Get-Item $modelPath).Length / 1MB))
+          $kind = if (Test-GzipFile $serverPath) { 'runtime tarball' } else { 'bare ELF (may lack libs)' }
+          Good ("AI ready - model {0:N0} MB + {1} will stage with the OS." -f ((Get-Item $modelPath).Length / 1MB), $kind)
         }
       }
     }
@@ -480,8 +510,9 @@ try {
   Write-Progress -Activity 'Writing installer to USB' `
     -Status 'Finalizing - do NOT unplug the stick!' -PercentComplete 100
   Say 'Data written. Finalizing the stick - do NOT unplug it yet...'
-  $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
-  $dst.Write($firstChunk, 0, $firstLen)
+  # Stage AI BEFORE writing the MBR/first chunk. Once the boot record lands,
+  # Windows remounts ISO partitions and often blocks further raw seeks/writes
+  # at STAGE_OFFSET — which silently left sticks without a usable AI payload.
   if ($stageAI) {
     # Raw-offset sidecar: [4 KB header][model][server] at STAGE_OFFSET, past the
     # ISO. The header records exact byte offsets/sizes; the Linux installer reads
@@ -501,8 +532,11 @@ try {
       $null = $dst.Seek($srvOff, [IO.SeekOrigin]::Begin)
       Write-RawFileSectorPadded $dst $serverPath
     }
-    Good 'AI model + server staged onto the stick.'
+    Good 'AI model + runtime staged onto the stick.'
   }
+  # Boot record last — after AI sidecar — so Windows automount cannot block AI.
+  $null = $dst.Seek(0, [IO.SeekOrigin]::Begin)
+  $dst.Write($firstChunk, 0, $firstLen)
   Say 'Flushing everything to the stick (can take a minute, still do NOT unplug)...'
   $dst.Flush($true)
 } catch [System.UnauthorizedAccessException] {

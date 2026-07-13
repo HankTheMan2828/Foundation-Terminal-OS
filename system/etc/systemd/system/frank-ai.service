@@ -28,8 +28,12 @@ Type=simple
 User=frank
 Group=frank
 # Both assets required. Missing either → unit never starts (not a crash loop).
+# Runtime is a directory: llama-server + libllama/libggml (RPATH=$ORIGIN); the
+# LD_LIBRARY_PATH is belt-and-braces if patchelf wasn't applied on the build host.
 ExecCondition=/usr/bin/test -x /usr/local/lib/foundation-ai/llama-server
 ExecCondition=/usr/bin/test -f /var/lib/frank/models/model.gguf
+Environment=LD_LIBRARY_PATH=/usr/local/lib/foundation-ai
+WorkingDirectory=/usr/local/lib/foundation-ai
 # Quiet, single-slot server on loopback. --threads left default so bitnet.cpp
 # picks a sane core count; MemoryMax caps the process either way.
 ExecStart=/usr/local/lib/foundation-ai/llama-server \

@@ -162,25 +162,35 @@ stage_frank_ai() {
         c_warn "staged server size mismatch (got $got, expected $ss) — discarding binary"
         rm -f "$server_out"
       else
-        # ELF magic — the prebuilt bitnet.cpp llama-server is a Linux ELF.
+        # Preferred: gzip runtime tarball (llama-server + libllama/libggml).
+        # Legacy: bare ELF (usually cannot start without shared libs).
         magic="$(dd if="$server_out" bs=1 count=4 2>/dev/null || true)"
-        if [[ "$magic" != $'\x7fELF' ]]; then
-          c_warn "staged server is not an ELF binary — discarding"
-          rm -f "$server_out"
-        else
+        local magic2
+        magic2="$(dd if="$server_out" bs=1 count=2 2>/dev/null || true)"
+        if [[ "$magic2" == $'\x1f\x8b' ]]; then
+          # install/11 prefers runtime.tar.gz name when present.
+          cp -a "$server_out" "$dest/vendor/bitnet/runtime.tar.gz"
+          chmod 0644 "$dest/vendor/bitnet/runtime.tar.gz"
+          c_ok "staged AI runtime tarball from USB ($ss bytes)"
+        elif [[ "$magic" == $'\x7fELF' ]]; then
           chmod +x "$server_out"
-          c_ok "staged AI server from USB ($ss bytes) → $server_out"
+          c_warn "staged bare ELF llama-server (no bundled libs) — may not start"
+          c_ok "staged AI server ELF from USB ($ss bytes) → $server_out"
+        else
+          c_warn "staged server is neither gzip runtime nor ELF — discarding"
+          rm -f "$server_out"
         fi
       fi
     else
       c_warn "could not read the staged AI server binary"
     fi
   else
-    c_warn "USB has the model but no AI server binary — install/11 will leave"
+    c_warn "USB has the model but no AI server/runtime — install/11 will leave"
     c_warn "frank-ai.service idle offline (no on-target build without network)."
   fi
 
-  if [[ -f "$model_out" && -x "$server_out" ]]; then
+  if [[ -f "$model_out" ]] && { [[ -f "$dest/vendor/bitnet/runtime.tar.gz" ]] \
+       || [[ -f "$server_out" ]]; }; then
     c_ok "AI payload ready for install/11-frank-ai.sh (local BitNet)"
     return 0
   elif [[ -f "$model_out" ]]; then
@@ -203,20 +213,31 @@ recover_ai_vendor_from_prev() {
     cp -a "$prev/vendor/models/model.gguf" "$dest/vendor/models/model.gguf"
     c_ok "recovered staged model from previous OS payload"
   fi
-  if [[ ! -x "$dest/vendor/bitnet/llama-server" && -f "$prev/vendor/bitnet/llama-server" ]]; then
+  if [[ ! -f "$dest/vendor/bitnet/runtime.tar.gz" \
+     && -f "$prev/vendor/bitnet/runtime.tar.gz" ]]; then
+    mkdir -p "$dest/vendor/bitnet"
+    cp -a "$prev/vendor/bitnet/runtime.tar.gz" "$dest/vendor/bitnet/runtime.tar.gz"
+    c_ok "recovered staged AI runtime tarball from previous OS payload"
+  fi
+  if [[ ! -f "$dest/vendor/bitnet/llama-server" \
+     && ! -f "$dest/vendor/bitnet/runtime.tar.gz" \
+     && -f "$prev/vendor/bitnet/llama-server" ]]; then
     mkdir -p "$dest/vendor/bitnet"
     cp -a "$prev/vendor/bitnet/llama-server" "$dest/vendor/bitnet/llama-server"
-    chmod +x "$dest/vendor/bitnet/llama-server"
-    c_ok "recovered staged llama-server from previous OS payload"
+    chmod +x "$dest/vendor/bitnet/llama-server" 2>/dev/null || true
+    c_ok "recovered staged llama-server blob from previous OS payload"
   fi
 }
 
 # Operator-facing readiness line after install/11 has run in the chroot.
 report_ai_readiness() {
   local root="${1:-$MNT}"
-  local bin="$root/usr/local/lib/foundation-ai/llama-server"
+  local lib="$root/usr/local/lib/foundation-ai"
+  local bin="$lib/llama-server"
   local model="$root/var/lib/frank/models/model.gguf"
-  if [[ -x "$bin" && -f "$model" ]]; then
+  local so_n=0
+  so_n="$(find "$lib" -maxdepth 1 -name 'lib*.so*' 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ -x "$bin" && -f "$model" && "${so_n:-0}" -ge 1 ]]; then
     local magic
     magic="$(dd if="$model" bs=1 count=4 2>/dev/null || true)"
     if [[ "$magic" == "GGUF" ]]; then
@@ -225,6 +246,9 @@ report_ai_readiness() {
     fi
   fi
   c_warn "Local AI IDLE — Assistant will say the model is not reachable"
+  if [[ -x "$bin" && "${so_n:-0}" -lt 1 ]]; then
+    c_warn "  llama-server present but libllama/libggml missing (need runtime tarball)"
+  fi
   c_warn "Rewrite the USB without -NoModel (full AI staging), then UPDATE or INSTALL"
 }
 

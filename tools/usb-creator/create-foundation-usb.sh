@@ -127,14 +127,22 @@ MODEL_URL="${FOUNDATION_MODEL_URL:-https://huggingface.co/microsoft/bitnet-b1.58
 STAGE_OFFSET=2147483648    # 2 GiB — must match Create-FoundationUSB.ps1 + foundation-install
 STAGE_HDR=1048576          # 1 MiB header region (keeps every dd write 1 MiB-aligned)
 AI_MODEL="$SCRIPT_DIR/model.gguf"
-AI_SERVER="$SCRIPT_DIR/llama-server"
+AI_RUNTIME="$SCRIPT_DIR/ai-runtime.tar.gz"   # preferred: binary + libllama/libggml
+AI_SERVER="$SCRIPT_DIR/llama-server"         # legacy bare ELF
 STAGE_AI=0
+STAGE_SERVER=""
 
 fail_ai() {
   c_warn "$*"
   c_warn "Local AI is required for a full offline install (Hub ASSISTANT + Frank)."
   c_warn "Fix the problem, or set FOUNDATION_NO_MODEL=1 only if the target already has AI."
   exit 1
+}
+
+_is_gzip_file() {
+  [[ -f "$1" ]] || return 1
+  local m; m="$(dd if="$1" bs=1 count=2 2>/dev/null || true)"
+  [[ "$m" == $'\x1f\x8b' ]]
 }
 
 prepare_ai() {
@@ -146,13 +154,29 @@ prepare_ai() {
     c_info "downloading the AI model (~1.2 GB) to stage on the stick…"
     curl -fL --progress-bar -o "$AI_MODEL" "$MODEL_URL" || fail_ai "model download failed"
   fi
-  if [[ ! -f "$AI_SERVER" ]]; then
-    local surl="${FOUNDATION_AI_SERVER_URL:-}"
-    [[ -z "$surl" ]] && surl="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null \
-      | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' | grep -v '\.sha256' | head -1 | cut -d'"' -f4 || true)"
-    [[ -n "$surl" ]] || fail_ai "no foundation-ai-llama-server on any release (wait for build-ai-binary CI)"
-    c_info "downloading the AI server binary…"
-    curl -fL --progress-bar -o "$AI_SERVER" "$surl" || { rm -f "$AI_SERVER"; fail_ai "server binary download failed"; }
+  if ! _is_gzip_file "$AI_RUNTIME"; then
+    local surl="${FOUNDATION_AI_SERVER_URL:-}" json
+    if [[ -z "$surl" ]]; then
+      json="$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases" 2>/dev/null || true)"
+      # Prefer runtime tarball; fall back to bare ELF asset name.
+      surl="$(printf '%s' "$json" | grep -o '"browser_download_url": *"[^"]*foundation-ai-runtime[^"]*\.tar\.gz"' \
+        | grep -v sha256 | head -1 | cut -d'"' -f4 || true)"
+      [[ -n "$surl" ]] || surl="$(printf '%s' "$json" \
+        | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*\.tar\.gz"' \
+        | grep -v sha256 | head -1 | cut -d'"' -f4 || true)"
+      [[ -n "$surl" ]] || surl="$(printf '%s' "$json" \
+        | grep -o '"browser_download_url": *"[^"]*foundation-ai-llama-server[^"]*"' \
+        | grep -v sha256 | grep -v '\.tar\.gz' | head -1 | cut -d'"' -f4 || true)"
+    fi
+    [[ -n "$surl" ]] || fail_ai "no foundation-ai-runtime on any release (wait for build-ai-binary CI)"
+    local dest="$AI_RUNTIME"
+    [[ "$surl" == *.tar.gz* ]] || dest="$AI_SERVER"
+    c_info "downloading the AI runtime…"
+    curl -fL --progress-bar -o "$dest" "$surl" || { rm -f "$dest"; fail_ai "runtime download failed"; }
+  fi
+  if _is_gzip_file "$AI_RUNTIME"; then STAGE_SERVER="$AI_RUNTIME"
+  elif [[ -f "$AI_SERVER" ]]; then STAGE_SERVER="$AI_SERVER"
+  else fail_ai "AI runtime missing (foundation-ai-runtime-*.tar.gz)"
   fi
   (( ISO_BYTES < STAGE_OFFSET )) || fail_ai "ISO exceeds the 2 GiB staging offset"
   local magic
@@ -160,9 +184,8 @@ prepare_ai() {
   [[ "$magic" == "GGUF" ]] || fail_ai "model is not a GGUF file (magic='$magic')"
   local msize ssize
   msize=$(stat -c %s "$AI_MODEL" 2>/dev/null || stat -f %z "$AI_MODEL")
-  ssize=$(stat -c %s "$AI_SERVER" 2>/dev/null || stat -f %z "$AI_SERVER")
-  (( ssize > 0 )) || fail_ai "AI server binary missing or empty"
-  # Stick capacity check (best-effort; size may be under /sys).
+  ssize=$(stat -c %s "$STAGE_SERVER" 2>/dev/null || stat -f %z "$STAGE_SERVER")
+  (( ssize > 0 )) || fail_ai "AI runtime missing or empty"
   local stick_bytes=""
   stick_bytes="$(lsblk -bndo SIZE "$DEV" 2>/dev/null | head -1 || true)"
   if [[ "$stick_bytes" =~ ^[0-9]+$ ]]; then
@@ -170,7 +193,7 @@ prepare_ai() {
     (( stick_bytes >= need )) || fail_ai "stick too small to stage AI (need ~$((need / 1024 / 1024)) MB)"
   fi
   STAGE_AI=1
-  c_ok "AI ready to stage (model $((msize / 1024 / 1024)) MB + server)"
+  c_ok "AI ready to stage (model $((msize / 1024 / 1024)) MB + runtime)"
 }
 prepare_ai
 
@@ -199,9 +222,10 @@ fi
 # (docs/FRANK-LOCAL-AI.md).
 write_ai_sidecar() {
   (( STAGE_AI == 1 )) || return 0
+  [[ -n "$STAGE_SERVER" && -f "$STAGE_SERVER" ]] || return 0
   local msize ssize
   msize=$(stat -c %s "$AI_MODEL" 2>/dev/null || stat -f %z "$AI_MODEL")
-  ssize=$(stat -c %s "$AI_SERVER" 2>/dev/null || stat -f %z "$AI_SERVER")
+  ssize=$(stat -c %s "$STAGE_SERVER" 2>/dev/null || stat -f %z "$STAGE_SERVER")
   local model_off=$(( STAGE_OFFSET + STAGE_HDR ))
   local srv_off=$(( model_off + ( (msize + STAGE_HDR - 1) / STAGE_HDR ) * STAGE_HDR ))
   local hdr="FOUNDATIONAI2
@@ -216,8 +240,8 @@ server_size=$ssize
     | dd of="$WRITE_DEV" bs="$BS" seek=$(( STAGE_OFFSET / 1048576 )) count=1 conv=notrunc 2>/dev/null
   dd if="$AI_MODEL" of="$WRITE_DEV" bs="$BS" seek=$(( model_off / 1048576 )) conv=notrunc 2>/dev/null \
     && c_ok "staged the AI model onto the stick ($msize bytes)."
-  dd if="$AI_SERVER" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
-    && c_ok "staged the AI server binary onto the stick ($ssize bytes)."
+  dd if="$STAGE_SERVER" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
+    && c_ok "staged the AI runtime onto the stick ($ssize bytes)."
   sync
 }
 write_ai_sidecar

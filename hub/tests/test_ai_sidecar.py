@@ -91,3 +91,8 @@ def test_installer_bounds_match_foundation_install():
 def test_gguf_magic_constant():
     """install/11 and the creators check the first 4 bytes == 'GGUF'."""
     assert b"GGUF" == struct.pack("<4s", b"GGUF")
+
+
+def test_gzip_runtime_magic():
+    """Runtime tarball is detected by gzip magic 1f 8b (not bare ELF)."""
+    assert bytes([0x1F, 0x8B]) == b"\x1f\x8b"

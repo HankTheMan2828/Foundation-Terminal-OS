@@ -129,31 +129,30 @@ GGUF is ~1.2 GB, too big to bake into the ISO (GitHub's 2 GiB asset cap), and
 (both the Storage cmdlets and diskpart fail). So delivery uses a **raw-offset
 sidecar**:
 
-- **CI builds the server binary.** `.github/workflows/build-ai-binary.yml` builds
+- **CI builds the AI runtime.** `.github/workflows/build-ai-binary.yml` builds
   `bitnet.cpp`'s `llama-server` (BitNet 2B4T, i2_s) — needs **clang** + a const
-  patch to `ggml-bitnet-mad.cpp` — and attaches it to the release as
-  `foundation-ai-llama-server-x86_64`. Independent, re-runnable via
-  workflow_dispatch, built on ubuntu (older glibc → runs on the Arch target).
+  patch to `ggml-bitnet-mad.cpp` — and attaches a **gzipped tarball**
+  (`foundation-ai-runtime-x86_64.tar.gz`) containing `llama-server` **plus**
+  `libllama.so` / `libggml*.so` with `RPATH=$ORIGIN`. A bare ELF alone cannot
+  start (dynamic link). Independent, re-runnable via workflow_dispatch, built
+  on ubuntu (older glibc → runs on the Arch target).
 - **The USB creator writes a raw sidecar.** On the online host, it downloads the
-  model (HF) + the binary (release) and writes, at a fixed offset (`STAGE_OFFSET`
-  = 2 GiB — just past a sub-2 GB ISO so the AI still fits a 3.8 GB stick; in the
-  stick's free space **past the ISO**), a block: a header
+  model (HF) + the **runtime tarball** (release) and writes, at a fixed offset
+  (`STAGE_OFFSET` = 2 GiB — just past a sub-2 GB ISO so the AI still fits a
+  3.8 GB stick; in the stick's free space **past the ISO**), a block: a header
   (`FOUNDATIONAI2` magic + `model_offset`/`model_size`/`server_offset`/
-  `server_size`) then the model then the binary. **No partition, no filesystem** —
-  nothing for Windows to refuse. Same contract in `Create-FoundationUSB.ps1`
-  (raw FileStream) and `create-foundation-usb.sh` (dd). Both pieces are required
-  to stage: model-only is refused (offline target cannot build the server).
-  Creators also check GGUF magic before writing.
+  `server_size`) then the model then the runtime blob. **No partition, no
+  filesystem** — nothing for Windows to refuse. On Windows the AI is written
+  **before** the MBR so automount cannot block the sidecar. Both pieces are
+  required: model-only is refused. Creators check GGUF + gzip magic.
 - **The installer reads it raw onto the TARGET disk.** `foundation-install`
   `dd`s the header off the live device (from `detect_live_disk`) at
-  `STAGE_OFFSET`, and if the magic is present, `dd`s the model + binary into
-  **`$MNT/opt/terminal-os/vendor/{models,bitnet}/`** (the installed root — not
-  the live overlay's RAM-backed `/opt/terminal-os`, which would OOM a ~1.2 GB
-  write). Size + GGUF/ELF magic are verified. `install/11-frank-ai.sh` then
-  copies those into `/var/lib/frank/models/model.gguf` and
-  `/usr/local/lib/foundation-ai/llama-server`, enables `frank-ai.service`.
-  UPDATE mode re-runs the same stage so a stick with AI can repair an idle
-  install. Fully offline → working AI, zero on-target building.
+  `STAGE_OFFSET`, and if the magic is present, `dd`s the model + runtime into
+  **`$MNT/opt/terminal-os/vendor/{models,bitnet}/`**. Size + GGUF/gzip magic
+  are verified. `install/11-frank-ai.sh` extracts the tarball into
+  `/usr/local/lib/foundation-ai/` (binary + libs) and the GGUF into
+  `/var/lib/frank/models/model.gguf`, enables `frank-ai.service`. UPDATE mode
+  re-runs the same stage so a stick with AI can repair an idle install.
 - **Fallback:** if nothing is staged (e.g. intentional `-NoModel` update of a
   machine that already has AI under `/var/lib/frank/models`), the service's
   `ExecCondition`s keep it idle only when assets are still missing; otherwise

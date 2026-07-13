@@ -67,7 +67,7 @@ ASSISTANT_THINKING = "… thinking"
 # in docs/FRANK-LOCAL-AI.md and INSTALL.md §2.
 ASSISTANT_OFFLINE = (
     "Local model not reachable (frank-ai.service on 127.0.0.1:8080). "
-    "Stage llama-server + model.gguf (docs/FRANK-LOCAL-AI.md), then start the service.")
+    "Need runtime tarball (llama-server+libs) + model.gguf on the install USB, then UPDATE.")
 ASSISTANT_ERROR_HTTP = (
     "Model server answered with an error. Check frank-ai.service / model name.")
 ASSISTANT_ERROR_EMPTY = "Model returned an empty reply. Try again."

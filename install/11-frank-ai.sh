@@ -74,33 +74,105 @@ _is_elf() {
   [[ "$magic" == $'\x7fELF' ]]
 }
 
+# Gzip magic (foundation-ai-runtime tarball from CI).
+_is_gzip() {
+  [[ -f "$1" ]] || return 1
+  local magic
+  magic="$(dd if="$1" bs=1 count=2 2>/dev/null || true)"
+  [[ "$magic" == $'\x1f\x8b' ]]
+}
+
 _file_size() {
   stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0
 }
 
-# ── the inference server binary ──────────────────────────────────────────────
-# When a valid staged binary is present, always re-install it (USB update can
-# ship a newer llama-server; repair path if the installed binary was deleted).
-# When nothing is staged, keep a working installed binary (network update /
-# -NoModel USB).
+# Install runtime from a staged blob: gzipped tarball (preferred — binary +
+# libllama/libggml) or a bare ELF (legacy; usually fails without .so files).
+_install_runtime_blob() {
+  local staged="$1"
+  if _is_gzip "$staged"; then
+    # Wipe prior partial runtime so old bare-ELF installs pick up libs.
+    find "$AI_LIB" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+    if ! tar -xzf "$staged" -C "$AI_LIB" 2>/dev/null; then
+      c_warn "failed to extract AI runtime tarball from $staged"
+      return 1
+    fi
+    # Tarball may nest llama-server at top level (CI layout).
+    if [[ ! -x "$BIN" ]]; then
+      local found
+      found="$(find "$AI_LIB" -name llama-server -type f 2>/dev/null | head -1 || true)"
+      if [[ -n "$found" && "$found" != "$BIN" ]]; then
+        install -m 0755 "$found" "$BIN"
+      fi
+    fi
+    chmod 0755 "$BIN" 2>/dev/null || true
+    # World-readable libs so User=frank can dlopen them; tree stays root-owned.
+    find "$AI_LIB" -type f -name 'lib*.so*' -exec chmod 0644 {} + 2>/dev/null || true
+    local so_n
+    so_n="$(find "$AI_LIB" -maxdepth 1 -name 'lib*.so*' 2>/dev/null | wc -l | tr -d ' ')"
+    c_ok "AI runtime tarball -> $AI_LIB (llama-server + ${so_n} shared libs)"
+    return 0
+  fi
+  if _is_elf "$staged"; then
+    install -m 0755 "$staged" "$BIN"
+    chmod 0755 "$BIN"
+    c_warn "staged bare ELF llama-server (no bundled libs) — may fail to start"
+    c_warn "prefer foundation-ai-runtime-*.tar.gz from the release"
+    return 0
+  fi
+  c_warn "staged server at $staged is neither gzip runtime nor ELF — ignoring"
+  return 1
+}
+
+# Runtime is usable only if the binary exists AND at least one private .so is
+# present (or ldd reports no missing libllama — we check for lib*.so* files).
+_runtime_ok() {
+  [[ -x "$BIN" ]] && _is_elf "$BIN" || return 1
+  # Bare ELF with system-only deps would pass; BitNet always needs libllama.
+  local so_n
+  so_n="$(find "$AI_LIB" -maxdepth 1 -name 'lib*.so*' 2>/dev/null | wc -l | tr -d ' ')"
+  [[ "${so_n:-0}" -ge 1 ]]
+}
+
+# ── the inference server runtime ─────────────────────────────────────────────
+# Staged blob preferred (USB update can repair/upgrade). When nothing staged,
+# keep a working installed runtime (network update / -NoModel USB).
 lay_down_server() {
-  if [[ -n "$STAGED_BIN" && -f "$STAGED_BIN" ]]; then
-    if ! _is_elf "$STAGED_BIN"; then
-      c_warn "staged binary at $STAGED_BIN is not an ELF — ignoring it"
-    else
-      install -m 0755 "$STAGED_BIN" "$BIN"
-      chmod 0755 "$BIN"
-      c_ok "llama-server from stage -> $BIN"
+  # Prefer tarball names in vendor/, then legacy bare llama-server path.
+  local blob=""
+  for cand in \
+    "$REPO_ROOT/vendor/bitnet/runtime.tar.gz" \
+    "$REPO_ROOT/vendor/bitnet/llama-server.tar.gz" \
+    "$REPO_ROOT/vendor/bitnet/llama-server" \
+    "$REPO_ROOT.prev/vendor/bitnet/runtime.tar.gz" \
+    "$REPO_ROOT.prev/vendor/bitnet/llama-server.tar.gz" \
+    "$REPO_ROOT.prev/vendor/bitnet/llama-server"
+  do
+    if [[ -f "$cand" ]]; then blob="$cand"; break; fi
+  done
+  # STAGED_BIN from the loop at top may still point at llama-server path.
+  if [[ -z "$blob" && -n "$STAGED_BIN" && -f "$STAGED_BIN" ]]; then
+    blob="$STAGED_BIN"
+  fi
+
+  if [[ -n "$blob" ]]; then
+    if _install_runtime_blob "$blob"; then
+      if _runtime_ok; then return 0; fi
+      c_warn "runtime installed but libllama/libggml missing — Assistant will stay offline"
       return 0
     fi
   fi
-  if [[ -x "$BIN" ]] && _is_elf "$BIN"; then
-    c_ok "llama-server already present (kept): $BIN"
+  if _runtime_ok; then
+    c_ok "AI runtime already present (kept): $AI_LIB"
     return 0
   fi
+  if [[ -x "$BIN" ]] && _is_elf "$BIN"; then
+    c_warn "llama-server present but shared libs missing under $AI_LIB"
+    c_warn "re-stage foundation-ai-runtime tarball from the release USB"
+  fi
   if [[ "${FOUNDATION_OFFLINE:-0}" == "1" ]]; then
-    c_warn "offline install and no staged binary"
-    c_warn "USB must carry foundation-ai-llama-server (USB creator stages it);"
+    c_warn "offline install and no staged AI runtime"
+    c_warn "USB must carry foundation-ai-runtime (USB creator stages it);"
     c_warn "frank-ai.service + Hub Assistant stay idle until then — rules still run"
     return 0
   fi
@@ -119,11 +191,15 @@ lay_down_server() {
   if cmake -S "$src" -B "$src/build" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 \
      && cmake --build "$src/build" --config Release -j --target llama-server >/dev/null 2>&1; then
     local built; built="$(find "$src/build" -name llama-server -type f 2>/dev/null | head -1 || true)"
-    if [[ -n "$built" ]] && _is_elf "$built"; then
-      install -m 0755 "$built" "$BIN"; c_ok "built llama-server -> $BIN"; return 0
+    if [[ -n "$built" && -x "$built" ]]; then
+      install -m 0755 "$built" "$BIN"
+      find "$src/build" -type f \( -name 'libllama.so*' -o -name 'libggml*.so*' \) \
+        -exec cp -a {} "$AI_LIB/" \; 2>/dev/null || true
+      c_ok "built AI runtime -> $AI_LIB"
+      return 0
     fi
   fi
-  c_warn "bitnet.cpp build did not produce llama-server — sensor stays idle"
+  c_warn "bitnet.cpp build did not produce a usable runtime — sensor stays idle"
   c_warn "verify the build for this toolchain (docs/FRANK-LOCAL-AI.md); re-run to retry"
 }
 lay_down_server
@@ -212,7 +288,7 @@ if is_arch && systemctl daemon-reload 2>/dev/null; then
   systemctl enable frank-ai.service 2>/dev/null || true
   # Start when assets are present (live system). Inside install chroot this is
   # a no-op / fails quietly — first boot picks up the wants-symlink.
-  if [[ -x "$BIN" && -f "$MODEL" ]] && _is_elf "$BIN" && _is_gguf "$MODEL"; then
+  if _runtime_ok && [[ -f "$MODEL" ]] && _is_gguf "$MODEL"; then
     systemctl restart frank-ai.service 2>/dev/null \
       || systemctl start frank-ai.service 2>/dev/null \
       || true
@@ -243,17 +319,17 @@ EOF
   c_ok "wrote $AICHAT_ENV (local-only defaults)"
 fi
 
-if [[ -x "$BIN" && -f "$MODEL" ]] && _is_elf "$BIN" && _is_gguf "$MODEL"; then
-  c_ok "local AI assets in place: $BIN + $MODEL"
+if _runtime_ok && [[ -f "$MODEL" ]] && _is_gguf "$MODEL"; then
+  c_ok "local AI assets in place: runtime under $AI_LIB + $MODEL"
   c_ok "on boot, frank-ai.service serves OpenAI-compat chat on 127.0.0.1:8080"
   c_ok "Hub ASSISTANT + Frank's sensor both use that endpoint (offline, no cloud)"
 else
-  c_warn "frank-ai.service enabled but IDLE — binary and/or model missing"
+  c_warn "frank-ai.service enabled but IDLE — runtime and/or model incomplete"
   c_warn "Hub ASSISTANT will report 'local model not reachable' until fixed"
   c_info "missing:"
-  [[ -x "$BIN" ]] && _is_elf "$BIN" || c_info "  - server binary ($BIN)"
+  _runtime_ok || c_info "  - AI runtime (llama-server + libllama/libggml under $AI_LIB)"
   [[ -f "$MODEL" ]] && _is_gguf "$MODEL" || c_info "  - model GGUF ($MODEL)"
   c_info "fix: rewrite the USB WITHOUT -NoModel (full AI staging), then"
-  c_info "      INSTALL or UPDATE from that stick (docs/FRANK-LOCAL-AI.md)"
+  c_info "      UPDATE from that stick (docs/FRANK-LOCAL-AI.md)"
 fi
 c_ok "Frank local AI step complete"

@@ -1,8 +1,11 @@
-# Builds Frank's LOCAL AI server binary — bitnet.cpp's `llama-server` for BitNet
-# b1.58 2B4T (i2_s) — and attaches it to a release as
-# foundation-ai-llama-server-x86_64. The USB creator stages it beside the model,
-# so a fully-offline install has a working AI with zero on-target building
-# (docs/FRANK-LOCAL-AI.md).
+# Builds Frank's LOCAL AI runtime — bitnet.cpp's `llama-server` for BitNet
+# b1.58 2B4T (i2_s) — and attaches it to a release. The USB creator stages it
+# beside the model, so a fully-offline install has a working AI with zero
+# on-target building (docs/FRANK-LOCAL-AI.md).
+#
+# CRITICAL: llama-server is dynamically linked against libllama.so + libggml*.so.
+# Shipping the binary alone leaves frank-ai.service crash-looping (missing
+# shared objects). We ship a gzipped tarball of binary + libs with RPATH=$ORIGIN.
 #
 # Separate from build-iso.yml on purpose: bitnet.cpp's build is finicky, so this
 # is independently re-runnable via the "Run workflow" button (workflow_dispatch)
@@ -45,7 +48,7 @@ jobs:
       - name: Build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake build-essential git python3 python3-pip jq
+          sudo apt-get install -y clang cmake build-essential git python3 python3-pip jq patchelf
           pip3 install --break-system-packages huggingface_hub || pip3 install huggingface_hub
 
       - name: Build bitnet.cpp llama-server (BitNet b1.58 2B4T, i2_s)
@@ -73,18 +76,73 @@ jobs:
           python3 setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s || {
             echo '=== logs/compile.log ==='; cat logs/compile.log 2>/dev/null || true; exit 1; }
           test -x build/bin/llama-server
-          install -m 0755 build/bin/llama-server \
+
+          # Bundle binary + private shared libs. install/11 extracts this into
+          # /usr/local/lib/foundation-ai/ (RPATH=$ORIGIN so systemd needs no
+          # LD_LIBRARY_PATH for the private .so files).
+          STAGE="$GITHUB_WORKSPACE/foundation-ai-stage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          install -m 0755 build/bin/llama-server "$STAGE/llama-server"
+          # Collect every libllama / libggml (and versioned siblings) the tree built.
+          while IFS= read -r -d '' lib; do
+            cp -a "$lib" "$STAGE/"
+          done < <(find build -type f \( \
+              -name 'libllama.so*' -o -name 'libggml*.so*' \
+            \) -print0 2>/dev/null)
+          # Also copy anything sitting next to llama-server (some builds put .so here).
+          shopt -s nullglob
+          for f in build/bin/*.so build/bin/*.so.*; do
+            cp -a "$f" "$STAGE/"
+          done
+          shopt -u nullglob
+
+          # Point the binary at libs shipped beside it.
+          if command -v patchelf >/dev/null 2>&1; then
+            patchelf --set-rpath '$ORIGIN' "$STAGE/llama-server" || true
+            for so in "$STAGE"/lib*.so*; do
+              [[ -f "$so" ]] || continue
+              patchelf --set-rpath '$ORIGIN' "$so" 2>/dev/null || true
+            done
+          fi
+
+          # Sanity: we must ship more than the naked binary.
+          so_count=$(find "$STAGE" -maxdepth 1 -name 'lib*.so*' | wc -l)
+          echo "bundled shared libs: $so_count"
+          ls -la "$STAGE"
+          if [[ "$so_count" -lt 1 ]]; then
+            echo "ERROR: no libllama/libggml shared objects found — binary alone will not run"
+            # Still package so we can inspect, but fail the job.
+            ldd "$STAGE/llama-server" || true
+            exit 1
+          fi
+          ldd "$STAGE/llama-server" || true
+
+          tar -C "$STAGE" -czf "$GITHUB_WORKSPACE/foundation-ai-runtime-x86_64.tar.gz" .
+          # Keep the bare binary asset name for older USB creators / debugging.
+          install -m 0755 "$STAGE/llama-server" \
             "$GITHUB_WORKSPACE/foundation-ai-llama-server-x86_64"
+          # Preferred asset the USB creator looks for first:
+          cp -a "$GITHUB_WORKSPACE/foundation-ai-runtime-x86_64.tar.gz" \
+            "$GITHUB_WORKSPACE/foundation-ai-llama-server-x86_64.tar.gz"
 
       - name: Checksum
         run: |
+          sha256sum foundation-ai-runtime-x86_64.tar.gz \
+            > foundation-ai-runtime-x86_64.tar.gz.sha256
+          sha256sum foundation-ai-llama-server-x86_64.tar.gz \
+            > foundation-ai-llama-server-x86_64.tar.gz.sha256
           sha256sum foundation-ai-llama-server-x86_64 \
             > foundation-ai-llama-server-x86_64.sha256
 
-      - name: Attach binary to the release
+      - name: Attach runtime to the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           files: |
+            foundation-ai-runtime-x86_64.tar.gz
+            foundation-ai-runtime-x86_64.tar.gz.sha256
+            foundation-ai-llama-server-x86_64.tar.gz
+            foundation-ai-llama-server-x86_64.tar.gz.sha256
             foundation-ai-llama-server-x86_64
             foundation-ai-llama-server-x86_64.sha256
