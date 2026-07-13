@@ -83,10 +83,11 @@ PROG_MONITOR = "SYSTEM MONITOR"
 PROG_WEB = "WEB ACCESS"         # DuckDuckGo — needs network (Settings → NETWORK)
 
 # ── Web Access (Programs — DuckDuckGo when online) ───────────────────────────
-# Text browser in the Hub terminal (w3m). Graphical browsers are opt-in only
-# (FOUNDATIONHUB_WEB_GUI) and untested — auto-GUI left operators unable to
-# type or exit (v0.1.1 hardware report; not zenbook-specific).
-WEB_SUBTITLE = "DuckDuckGo — text browser (q quit · / search · Esc menu)"
+# Preferred: Firefox in a temporary sway kiosk (foundationhub-web) with
+# keyboard pointer until a real mouse is system-wide. Fallback: w3m text.
+WEB_SUBTITLE = (
+    "DuckDuckGo — Firefox  ·  Alt+arrows move  ·  Alt+↵ click  ·  Ctrl+Q quit"
+)
 WEB_NO_BROWSER = "NO BROWSER AVAILABLE"
 WEB_OFFLINE = "NO NETWORK — SETTINGS → NETWORK"
 

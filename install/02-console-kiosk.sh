@@ -18,8 +18,11 @@ fi
 # Create the operator account if missing.
 if ! id "$OPERATOR" >/dev/null 2>&1; then
   c_info "creating operator user '$OPERATOR'"
-  useradd -m -G video,input,wheel "$OPERATOR" || useradd -m "$OPERATOR"
+  # seat: sway/libseat for Programs → WEB ACCESS (Firefox kiosk).
+  useradd -m -G video,input,seat,wheel "$OPERATOR" || useradd -m "$OPERATOR"
 fi
+# Existing operator: ensure seat/video/input for the Web Access compositor.
+usermod -aG video,input,seat "$OPERATOR" 2>/dev/null || true
 
 # Console text size (feedback #1). Persist the machine's font face where both
 # the session wrapper (reads it at login) and the Hub's Functions > TEXT SIZE

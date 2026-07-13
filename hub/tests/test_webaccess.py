@@ -20,77 +20,106 @@ class TestDisplayAvailable:
         assert not webaccess.display_available({})
 
 
-class TestGuiOptIn:
-    def test_default_off(self):
-        assert not webaccess.gui_opted_in({})
+class TestGuiStackReady:
+    def test_wrapper_alone(self):
+        assert webaccess.gui_stack_ready(_which_map({"foundationhub-web"}))
 
-    def test_on(self):
-        assert webaccess.gui_opted_in({"FOUNDATIONHUB_WEB_GUI": "1"})
-        assert webaccess.gui_opted_in({"FOUNDATIONHUB_WEB_GUI": "yes"})
+    def test_firefox_and_sway_without_wrapper(self):
+        # Pieces present, but ready() still true only via wrapper OR both
+        # binaries — gui_stack_ready treats firefox+sway as ready for messaging.
+        assert webaccess.gui_stack_ready(_which_map({"firefox", "sway"}))
+
+    def test_firefox_only_not_ready(self):
+        assert not webaccess.gui_stack_ready(_which_map({"firefox"}))
 
 
 class TestPlanLaunch:
     def test_offline_blocks(self):
         plan = webaccess.plan_launch(
-            online=False, which=_which_map({"firefox", "w3m"}))
+            online=False,
+            which=_which_map({"foundationhub-web", "firefox", "w3m"}))
         assert not plan.ok
         assert plan.argv is None
         assert "NO NETWORK" in plan.error
 
-    def test_prefers_text_even_when_firefox_and_display(self):
-        """Text wins even if firefox + Wayland exist — never auto-launch GUI."""
+    def test_prefers_firefox_wrapper_over_w3m(self):
+        """Real browser wins when the kiosk wrapper is installed."""
         plan = webaccess.plan_launch(
             online=True,
-            which=_which_map({"firefox", "w3m"}),
-            env={"WAYLAND_DISPLAY": "wayland-0"},
+            which=_which_map({"foundationhub-web", "firefox", "w3m", "sway"}),
         )
         assert plan.ok
-        assert plan.mode == "text"
-        assert plan.argv[0] == "w3m"
-        assert webaccess.DDG_HTML in plan.argv
-        # Must not pass -v (that is w3m --version and exits immediately).
-        assert "-v" not in plan.argv
+        assert plan.mode == "gui"
+        assert plan.argv[0] == "foundationhub-web"
+        assert webaccess.DDG_HOME in plan.argv
+        assert plan.argv[0] != "w3m"
 
-    def test_w3m_argv_is_just_binary_and_url(self):
+    def test_wrapper_argv_is_binary_and_url(self):
+        plan = webaccess.plan_launch(
+            online=True,
+            which=_which_map({"foundationhub-web"}))
+        assert plan.argv == ["foundationhub-web", webaccess.DDG_HOME]
+
+    def test_custom_url(self):
+        plan = webaccess.plan_launch(
+            online=True,
+            which=_which_map({"foundationhub-web"}),
+            url="https://example.com/")
+        assert plan.argv == ["foundationhub-web", "https://example.com/"]
+
+    def test_text_fallback_when_no_gui(self):
         plan = webaccess.plan_launch(
             online=True, which=_which_map({"w3m"}))
-        assert plan.argv == ["w3m", webaccess.DDG_HTML]
-
-    def test_gui_only_when_forced(self):
-        plan = webaccess.plan_launch(
-            online=True, gui=True,
-            which=_which_map({"firefox", "w3m"}))
         assert plan.ok
-        assert plan.mode == "gui"
-        assert plan.argv[0] == "firefox"
-        assert webaccess.DDG_HOME in plan.argv
-
-    def test_gui_opt_in_env_with_display(self):
-        plan = webaccess.plan_launch(
-            online=True,
-            which=_which_map({"firefox", "w3m"}),
-            env={"FOUNDATIONHUB_WEB_GUI": "1",
-                 "WAYLAND_DISPLAY": "wayland-0"},
-        )
-        # Text still wins when both are present — only gui=True forces GUI
-        # ahead of text. Opt-in env is for when text is missing.
         assert plan.mode == "text"
+        assert plan.argv == ["w3m", webaccess.DDG_HTML]
+        assert "-v" not in plan.argv
 
-    def test_gui_opt_in_when_no_text_browser(self):
+    def test_force_text_skips_wrapper(self):
         plan = webaccess.plan_launch(
             online=True,
-            which=_which_map({"firefox"}),
-            env={"FOUNDATIONHUB_WEB_GUI": "1",
-                 "WAYLAND_DISPLAY": "wayland-0"},
-        )
-        assert plan.mode == "gui"
-        assert plan.argv[0] == "firefox"
+            gui=False,
+            which=_which_map({"foundationhub-web", "w3m"}))
+        assert plan.mode == "text"
+        assert plan.argv[0] == "w3m"
+
+    def test_force_gui_without_stack_errors(self):
+        plan = webaccess.plan_launch(
+            online=True,
+            gui=True,
+            which=_which_map({"w3m"}))
+        assert not plan.ok
+        assert plan.mode == "none"
+        assert "NO BROWSER" in plan.error or "NO FIREFOX" in plan.error
+
+    def test_force_gui_firefox_no_sway(self):
+        plan = webaccess.plan_launch(
+            online=True,
+            gui=True,
+            which=_which_map({"firefox"}))
+        assert not plan.ok
+        assert "sway" in plan.error.lower() or "COMPOSITOR" in plan.error
+
+    def test_force_gui_firefox_sway_no_wrapper(self):
+        plan = webaccess.plan_launch(
+            online=True,
+            gui=True,
+            which=_which_map({"firefox", "sway"}))
+        assert not plan.ok
+        assert "LAUNCHER" in plan.error or "foundationhub-web" in plan.error
+
+    def test_firefox_without_kiosk_incomplete_message(self):
+        plan = webaccess.plan_launch(
+            online=True,
+            which=_which_map({"firefox"}))
+        assert not plan.ok
+        assert "INCOMPLETE" in plan.error or "NO BROWSER" in plan.error
 
     def test_no_browser_at_all(self):
         plan = webaccess.plan_launch(
             online=True, which=_which_map(set()))
         assert not plan.ok
-        assert "NO TEXT BROWSER" in plan.error or "NO BROWSER" in plan.error
+        assert "NO BROWSER" in plan.error
 
     def test_lynx_fallback(self):
         plan = webaccess.plan_launch(
@@ -101,9 +130,16 @@ class TestPlanLaunch:
     def test_status_hint_offline(self):
         assert webaccess.status_hint(online=False) == "offline"
 
+    def test_status_hint_gui(self):
+        hint = webaccess.status_hint(
+            online=True,
+            which=_which_map({"foundationhub-web", "w3m"}),
+        )
+        assert "Firefox" in hint
+        assert "Ctrl+Q" in hint
+
     def test_status_hint_text(self):
         assert webaccess.status_hint(
             online=True,
-            which=_which_map({"w3m", "firefox"}),
-            env={"WAYLAND_DISPLAY": "wayland-0"},
-        ) == "DuckDuckGo · text"
+            which=_which_map({"w3m"}),
+        ) == "text browser · q quit"

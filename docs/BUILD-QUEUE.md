@@ -253,7 +253,8 @@ Procedure (follow verbatim):
 ## Parked (not in this queue, decisions already recorded)
 
 - **NETWORK ARCHIVE** (retrieval-terminal web area, Kagi or Brave search
-  API) — optional evolution; **WEB ACCESS** (DuckDuckGo via gui/text browser)
+  API) — optional evolution; **WEB ACCESS** (Firefox kiosk via foundationhub-web;
+  w3m text fallback; keyboard pointer until system mouse)
   + Settings → NETWORK (WiFi radio + nmtui) landed as the post-v0.1.0 path
   (see OPEN-QUESTIONS.md §10).
 - **User-ID provisioning system** (replaces setup code `1234`) — see

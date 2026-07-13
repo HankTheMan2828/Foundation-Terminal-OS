@@ -234,19 +234,19 @@ The operator's finalized vision, decided in one pass:
   curses editor plus a note browser — dated journal, tagged notes, search by
   tag/text — all inside the Hub. No external editor. *Built 2026-07-01
   (BUILD-QUEUE §1); nvim retired — see STATUS row 12.*
-- ✅ **Web integration — WEB ACCESS landed post-v0.1.0 direction (2026-07-13).**
+- ✅ **Web integration — WEB ACCESS (2026-07-13; Firefox path same day).**
   v0.1 stayed offline-first; the next stage adds:
   - **Settings → NETWORK:** link status, WiFi radio on/off, CONFIGURE via
     `nmtui`. Ethernet: plug in, NetworkManager handles the rest. General
     connectivity (any online link) is enough for everyday use — *not* gated
     by the stricter system-update wireless policy.
-  - **Programs → WEB ACCESS:** opens **DuckDuckGo** via **w3m** (text) in
-    the Hub terminal — `q` quits back to Programs. Graphical browsers are
-    *not* default: auto-GUI left the operator unable to type or exit
-    (hardware report after v0.1.1; **not** zenbook-specific — zenbook
-    stack remains untested for this). GUI is experimental
-    (`FOUNDATIONHUB_WEB_GUI`) only when no text browser is installed.
-  A later verified GUI path or retrieval terminal can revisit that.
+  - **Programs → WEB ACCESS:** opens **DuckDuckGo** in **Firefox** via
+    `foundationhub-web` (temporary **sway** kiosk). Session always returns
+    to the Hub on Ctrl+Q or closing Firefox (fixes the v0.1.1 stuck-GUI
+    report). **Keyboard pointer** until a real mouse is system-wide:
+    Alt+arrows move, Alt+Enter click, Alt+Backspace right-click. **w3m**
+    remains text fallback only if the GUI stack is missing. Hardware mouse
+    for the whole OS is a later expansion.
 - ✅ **Multi-user login + tiers + per-user Frank** — see §6 and
   [`docs/USERS.md`](USERS.md).
 - ✅ Per-tier quota amounts (GUEST 64 MB / EMPLOYEE 5 GB / SENIOR 15 GB /

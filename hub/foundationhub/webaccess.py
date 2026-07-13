@@ -1,24 +1,30 @@
-"""Web Access — open DuckDuckGo in a console-safe browser.
+"""Web Access — open DuckDuckGo in a real browser when possible.
 
 Curses-free launch planner used by Programs → WEB ACCESS.
 
-Why text-first (operator report after v0.1.1):
-  This OS is console-first (Hub on the kernel VT / a terminal). Auto-picking
-  a graphical browser left the operator in a UI they could neither type in
-  nor exit. That report was *not* from the zenbook profile — GUI browsers
-  are simply not the verified path for this product. The supported path is
-  a text browser *inside the same terminal* the Hub owns: Launch suspends
-  curses, runs w3m, and resumes when the user quits (q).
+Preferred path (operator request 2026-07-13):
+  **Firefox** inside a temporary **sway** kiosk session, launched via the
+  `foundationhub-web` wrapper. That wrapper always returns to the Hub when
+  Firefox exits (Ctrl+Q or close window), and provides **keyboard pointer**
+  control until a real mouse is wired system-wide:
 
-Preference order:
-  1. Text browser (w3m / lynx / links / elinks) → DuckDuckGo HTML.
-  2. Graphical browser only when explicitly opted in via
-     FOUNDATIONHUB_WEB_GUI=1 *and* a display is available (experimental;
-     untested on target hardware).
-  3. Clear offline / not-installed messages otherwise.
+    Alt+arrows       move pointer
+    Alt+Shift+arrows fine move
+    Alt+Enter        left click
+    Alt+Backspace    right click
+    Ctrl+Q           quit session → back to Programs
 
-General connectivity (any online link — ethernet or WiFi) is enough; this is
-*not* gated by the system-update wireless policy.
+Fallback:
+  Text browser (w3m / lynx / links / elinks) in the Hub terminal — same as
+  the pre-Firefox path. Used only when the GUI stack is not installed.
+
+Why not bare `firefox` on the VT:
+  Auto-picking a graphical browser without a session manager left the
+  operator unable to type or exit (v0.1.1 hardware report). The wrapper is
+  the verified entry/exit contract.
+
+General connectivity (ethernet or WiFi) is enough; not gated by the
+system-update wireless policy.
 """
 from __future__ import annotations
 
@@ -30,27 +36,19 @@ from typing import Callable, Optional, Sequence
 from . import network as netmod
 from . import session
 
-# DuckDuckGo — full site for experimental GUI; HTML endpoint for text browsers.
+# DuckDuckGo — full site for Firefox; HTML endpoint for text browsers.
 DDG_HOME = "https://duckduckgo.com"
 DDG_HTML = "https://html.duckduckgo.com/html/"
 
-# Opt-in only — never auto-pick GUI after the v0.1.1 stuck-browser report.
-_GUI_OPT_IN_ENV = "FOUNDATIONHUB_WEB_GUI"
+# Wrapper installed by install/04-hub.sh from system/usr/local/bin/.
+_WEB_WRAPPER = "foundationhub-web"
 
-# Graphical candidates (only when opt-in + display). Experimental / untested
-# on target hardware; not the supported Web Access path.
-_GUI_BROWSERS: Sequence[tuple[str, tuple[str, ...]]] = (
-    ("firefox", ("firefox", "--new-window")),
-    ("firefox-esr", ("firefox-esr", "--new-window")),
-    ("chromium", ("chromium", "--new-window")),
-    ("chromium-browser", ("chromium-browser", "--new-window")),
-    ("google-chrome-stable", ("google-chrome-stable", "--new-window")),
-    ("google-chrome", ("google-chrome", "--new-window")),
-    ("brave", ("brave", "--new-window")),
-    ("brave-browser", ("brave-browser", "--new-window")),
-    ("duckduckgo", ("duckduckgo",)),
-    ("ddg", ("ddg",)),
+# Pieces the wrapper needs if someone invokes a degraded path.
+_FIREFOX_BINS: Sequence[str] = (
+    "firefox",
+    "firefox-esr",
 )
+_SWAY_BIN = "sway"
 
 # Text browsers: argv prefix only — URL is appended. Never pass w3m -v:
 # that flag is --version and exits immediately.
@@ -76,18 +74,15 @@ class LaunchPlan:
 
 
 def display_available(env: Optional[dict] = None) -> bool:
-    """True when a graphical session looks reachable (X11 or Wayland)."""
+    """True when a graphical session looks reachable (X11 or Wayland).
+
+    Kept for tests/diagnostics. The Firefox path does **not** require a
+    pre-existing display — foundationhub-web starts its own sway session.
+    """
     e = env if env is not None else os.environ
     if e.get("WAYLAND_DISPLAY") or e.get("DISPLAY"):
         return True
     return os.path.isdir("/tmp/.X11-unix")
-
-
-def gui_opted_in(env: Optional[dict] = None) -> bool:
-    """Graphical Web Access is experimental and off unless explicitly enabled."""
-    e = env if env is not None else os.environ
-    val = (e.get(_GUI_OPT_IN_ENV) or "").strip().lower()
-    return val in ("1", "true", "yes", "on")
 
 
 def which_first(names: Sequence[str],
@@ -105,10 +100,21 @@ def _pick_text(which: Callable[[str], Optional[str]]) -> Optional[list[str]]:
     return None
 
 
-def _pick_gui(which: Callable[[str], Optional[str]]) -> Optional[list[str]]:
-    for binary, prefix in _GUI_BROWSERS:
-        if which(binary):
-            return list(prefix) + [DDG_HOME]
+def gui_stack_ready(which: Callable[[str], Optional[str]] = shutil.which) -> bool:
+    """True when the Firefox kiosk path can run (wrapper, or firefox+sway)."""
+    if which(_WEB_WRAPPER):
+        return True
+    return bool(which_first(_FIREFOX_BINS, which) and which(_SWAY_BIN))
+
+
+def _pick_gui(which: Callable[[str], Optional[str]],
+              url: str = DDG_HOME) -> Optional[list[str]]:
+    """Prefer the install wrapper; otherwise firefox+sway is incomplete without
+    it (no pointer binds / exit contract), so only the wrapper is returned as
+    a ready argv. Callers may still detect firefox presence for messaging.
+    """
+    if which(_WEB_WRAPPER):
+        return [_WEB_WRAPPER, url]
     return None
 
 
@@ -116,12 +122,19 @@ def plan_launch(*,
                 online: Optional[bool] = None,
                 gui: Optional[bool] = None,
                 which: Callable[[str], Optional[str]] = shutil.which,
-                env: Optional[dict] = None) -> LaunchPlan:
+                env: Optional[dict] = None,
+                url: str = DDG_HOME) -> LaunchPlan:
     """Decide how to open Web Access. All IO is injectable for tests.
 
-    `gui` when set forces the experimental path on/off for tests. Production
-    uses text-first unless FOUNDATIONHUB_WEB_GUI is set and a display exists.
+    Preference order:
+      1. Firefox via foundationhub-web (real browser + keyboard pointer)
+      2. Text browser (w3m/…) in the Hub terminal
+      3. Clear not-installed message
+
+    `gui` when False forces text-only (tests / emergency). When True, refuse
+    to fall back to text if the GUI stack is missing.
     """
+    del env  # reserved for future display/env gates; wrapper owns the session
     if online is None:
         online = session.check_network()
     if not online:
@@ -131,36 +144,54 @@ def plan_launch(*,
             "none",
         )
 
-    # Supported path: text browser in the Hub's terminal (q to quit → back).
-    text_argv = _pick_text(which)
-    if text_argv is not None:
-        # Only skip text when tests/operator force pure-gui selection.
-        if gui is not True:
-            return LaunchPlan(text_argv, None, "text")
+    force_text = gui is False
+    force_gui = gui is True
 
-    # Experimental GUI: opt-in env (or gui=True in tests) + display + binary.
-    if gui is None:
-        want_gui = gui_opted_in(env) and display_available(env)
-    else:
-        want_gui = bool(gui)
-
-    if want_gui:
-        gui_argv = _pick_gui(which)
+    if not force_text:
+        gui_argv = _pick_gui(which, url=url)
         if gui_argv is not None:
             return LaunchPlan(gui_argv, None, "gui")
+        if force_gui:
+            ff = which_first(_FIREFOX_BINS, which)
+            if not ff and not which(_SWAY_BIN):
+                return LaunchPlan(
+                    None,
+                    "NO BROWSER — install firefox + sway (see install/packages.txt)",
+                    "none",
+                )
+            if not ff:
+                return LaunchPlan(
+                    None,
+                    "NO FIREFOX — install package: firefox",
+                    "none",
+                )
+            if not which(_SWAY_BIN):
+                return LaunchPlan(
+                    None,
+                    "NO COMPOSITOR — install package: sway (Web Access kiosk)",
+                    "none",
+                )
+            return LaunchPlan(
+                None,
+                "NO WEB LAUNCHER — install foundationhub-web (re-run install/04)",
+                "none",
+            )
 
+    text_argv = _pick_text(which)
     if text_argv is not None:
         return LaunchPlan(text_argv, None, "text")
 
-    if want_gui:
+    if gui_stack_ready(which) is False and which_first(_FIREFOX_BINS, which):
+        # Firefox on disk but no wrapper/sway — tell them what to install.
         return LaunchPlan(
             None,
-            "NO BROWSER — install w3m (text) or firefox (experimental GUI)",
+            "FIREFOX FOUND BUT WEB KIOSK INCOMPLETE — install sway + re-run install/04",
             "none",
         )
+
     return LaunchPlan(
         None,
-        "NO TEXT BROWSER — install w3m (package: w3m)",
+        "NO BROWSER — install firefox (and sway) or w3m; see install/packages.txt",
         "none",
     )
 
@@ -180,9 +211,9 @@ def status_hint(*,
         return "offline"
     plan = plan_launch(online=True, gui=gui, which=which, env=env)
     if plan.mode == "gui":
-        return "DuckDuckGo · gui"
+        return "Firefox · Alt+arrows pointer · Ctrl+Q quit"
     if plan.mode == "text":
-        return "DuckDuckGo · text"
+        return "text browser · q quit"
     return "no browser"
 
 

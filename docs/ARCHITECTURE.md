@@ -32,14 +32,20 @@ Key property from the spec: **the TUI is the login shell.** There is no bash
 prompt behind it. `foundationhub-session` execs foundationhub; when foundationhub
 exits, the session ends. No shell to drop to.
 
-**No display stack in the core.** The Hub draws on the kernel's own text
-console the way DOS programs drew on the BIOS console. A hardware profile
+**No persistent display stack in the core.** The Hub draws on the kernel's own
+text console the way DOS programs drew on the BIOS console. A hardware profile
 whose glue genuinely needs a display stack installs
 `/usr/local/lib/foundationhub/display-stack`, which `foundationhub-session`
 execs instead when present — the zenbook-duo-2024 profile does this (cage +
 kitty) because its dual-panel topology is driven through `wlr-randr`, which
 needs a Wayland compositor. On a generic install that file doesn't exist and
-nothing graphical is even installed.
+the Hub stays on the VT.
+
+**Web Access is a temporary graphical session**, not a desktop: Programs →
+WEB ACCESS runs `/usr/local/bin/foundationhub-web`, which starts **sway +
+Firefox** for one browsing session (keyboard pointer binds in the generated
+sway config), then exits back to the Hub. Packages `firefox`, `sway`, and
+`seatd` ship in the generic core for this path only.
 
 Multi-user (docs/USERS.md): foundationhub now opens on a **login screen** — up to 8
 tiered accounts per machine. In the interim layering, the Linux user

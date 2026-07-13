@@ -12,6 +12,7 @@ cage              # Wayland kiosk compositor
 kitty             # graphical terminal the Hub runs in under cage
 wlr-randr         # eDP-1/eDP-2 topology control
 seatd             # seat management for cage
-# No firefox here: Web Access is w3m (console text browser) for the whole
-# OS, not a zenbook special case. A future GUI browser would need a verified
-# multi-client display path + FOUNDATIONHUB_WEB_GUI — not done yet.
+# Firefox + sway for Web Access live in the generic core (install/packages.txt
+# + foundationhub-web). On this profile the Hub already runs under cage; the
+# web launcher opens a free VT (openvt) or nested sway so it does not steal
+# cage's single client slot.

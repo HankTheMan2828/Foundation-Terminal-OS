@@ -81,10 +81,16 @@ ffmpeg          # foundationmedia's optional decode engine (mp3/flac/ogg/…)
 # (hub/foundationhub/screens/monitor.py + hub/foundationhub/sysinfo.py) reads /proc
 # directly, stdlib only — view-only, no kill/renice.
 networkmanager  # nmtui network config (Settings → NETWORK → CONFIGURE)
-# w3m: Programs → WEB ACCESS (DuckDuckGo HTML). Runs in the Hub terminal via
-# Launch — q quits back to Programs. Graphical browsers are NOT the default
-# (v0.1.1 hardware report: auto-GUI was unusable — no typing, no exit; not
-# zenbook-specific). Experimental GUI remains opt-in (FOUNDATIONHUB_WEB_GUI).
+# Programs → WEB ACCESS (2026-07-13): real Firefox in a temporary sway kiosk
+# via foundationhub-web (install/04). Bounded session — Ctrl+Q or close
+# Firefox returns to the Hub (fixes the v0.1.1 stuck-GUI report). Keyboard
+# pointer (Alt+arrows / Alt+Enter) until a hardware mouse is system-wide.
+# Seat management for the kiosk compositor:
+seatd
+sway
+firefox
+# w3m: text fallback only when the GUI stack is missing (dev boxes, lean
+# installs). Still useful; keep shipping it.
 w3m
 
 # --- AI features (spec §5, §6) ---

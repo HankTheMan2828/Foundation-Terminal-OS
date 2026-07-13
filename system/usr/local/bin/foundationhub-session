@@ -25,6 +25,17 @@ set -euo pipefail
 # CRT theme (spec §2): one fixed look — base yellow on near-black.
 export FOUNDATIONHUB_ETC="${FOUNDATIONHUB_ETC:-/etc/foundationhub}"
 
+# Wayland apps launched from the Hub (Programs → WEB ACCESS / foundationhub-web)
+# need a runtime dir for the compositor socket. pam_systemd normally sets this
+# on graphical logins; getty autologin sometimes does not.
+if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
+  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
+if [[ ! -d "${XDG_RUNTIME_DIR}" ]]; then
+  mkdir -p "${XDG_RUNTIME_DIR}" 2>/dev/null || true
+  chmod 700 "${XDG_RUNTIME_DIR}" 2>/dev/null || true
+fi
+
 # Start the per-session ambient sound + event daemon if present (spec §8).
 if command -v foundationhub-sound >/dev/null 2>&1; then
   foundationhub-sound & disown || true
