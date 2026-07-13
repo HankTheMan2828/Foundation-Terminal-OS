@@ -198,7 +198,11 @@ def test_negotiate_shortens_a_negotiable_session_lock(tmp_path):
 
 def test_queue_lockout_carries_negotiable_and_matched(tmp_path):
     """Hub needs negotiable= + matched= on the lockout wire to full-screen,
-    offer negotiation, and redact the source file."""
+    offer negotiation, and redact the source file.
+
+    At the instant of entry, min_served_fraction has not been met, so
+    negotiable=0 — the continuous poll flips to 1 later once the gate passes.
+    """
     f = Frank(_cfg(tmp_path))
     # Four minors => session lockout (threshold 4, weight 1).
     for i in range(4):
@@ -211,7 +215,7 @@ def test_queue_lockout_carries_negotiable_and_matched(tmp_path):
     assert pending, "lockout should be queued for Hub display"
     last = pending[-1]
     assert last.startswith("lockout")
-    assert "negotiable=1" in last
+    assert "negotiable=0" in last   # too early at entry; flag flips later
     assert "matched=msfconsole" in last
     assert "user=alice" in last
     assert "msg=" in last
@@ -222,9 +226,11 @@ def test_poll_session_lock_only_for_active_user(tmp_path, monkeypatch):
     f = Frank(_cfg(tmp_path))
     from frankd.enforcement import Lockout, Scope
     now = _time.time()
+    # Start 50s ago so min_served (0.3 of 100s) is already satisfied.
+    start = now - 50
     enf = f.enforcers.enforcer_for("alice")
-    enf.lockout = Lockout(Scope.SESSION, now, now + 100, now + 10_000,
-                          Severity.MINOR, negotiable=True, orig_end=now + 100)
+    enf.lockout = Lockout(Scope.SESSION, start, start + 100, start + 10_000,
+                          Severity.MINOR, negotiable=True, orig_end=start + 100)
     # Different active user -> continuous poll stays quiet for them.
     monkeypatch.setattr("frankd.sources.active_user", lambda: "bob")
     assert f.poll_message() == "NONE"
@@ -233,6 +239,83 @@ def test_poll_session_lock_only_for_active_user(tmp_path, monkeypatch):
     assert msg.startswith("lockout")
     assert "user=alice" in msg
     assert "negotiable=1" in msg
+
+
+def test_pending_warn_for_other_user_does_not_block_active_user(tmp_path, monkeypatch):
+    """One account's queued warn/lockout must not silence another account.
+
+    While Alice is locked (or has pending messages), Bob must still receive
+    his own warnings — the previous FIFO pending queue delivered Alice's
+    line to whoever polled next, so Bob's enforcement looked "dead" until
+    Alice's lock expired.
+    """
+    f = Frank(_cfg(tmp_path))
+    # Alice's lockout announcement sits in the pending queue.
+    f._pending.append(
+        "lockout scope=session user=alice remaining=90 negotiable=1 msg=locked")
+    # Bob's warn is behind it.
+    f._pending.append(
+        "warn delivery=status_bar user=bob matched=x msg=Minor infraction.")
+    monkeypatch.setattr("frankd.sources.active_user", lambda: "bob")
+    msg = f.poll_message()
+    assert msg.startswith("warn")
+    assert "user=bob" in msg
+    # Alice's message is still waiting for her, not dropped.
+    assert any("user=alice" in m for m in f._pending)
+
+
+def test_lockout_drops_pending_warns_for_same_user(tmp_path):
+    """Full lockout must not still flash a notice page first.
+
+    If a warn was already queued for the same user (multi-rule same tick, or
+    an earlier finding), the lockout path clears those notices so the Hub
+    goes straight to ACCESS SUSPENDED.
+    """
+    f = Frank(_cfg(tmp_path))
+    f._pending.append(
+        "warn delivery=status_bar user=alice matched=x msg=Minor infraction.")
+    f._pending.append(
+        "warn delivery=status_bar user=bob matched=y msg=Bob notice.")
+    # Alice hits a serious lockout immediately.
+    f._handle_finding(
+        Finding("rule", Track.SECURITY, Severity.SERIOUS,
+                Event(Source.SHELL, "msfconsole", user="alice"),
+                matched="msfconsole"),
+        now=0.0)
+    pending = list(f._pending)
+    assert not any(m.startswith("warn ") and "user=alice" in m for m in pending)
+    assert any(m.startswith("warn ") and "user=bob" in m for m in pending)
+    assert any(m.startswith("lockout ") and "user=alice" in m for m in pending)
+
+
+def test_negotiable_flag_requires_min_served(tmp_path):
+    """Banner must not offer N until the served-fraction gate would pass."""
+    import time as _time
+    f = Frank(_cfg(tmp_path))
+    from frankd.enforcement import Lockout, Scope
+    now = _time.time()
+    # 100s sentence; min_served default 0.3 => need 30s served.
+    lk = Lockout(Scope.SESSION, now, now + 100, now + 10_000,
+                 Severity.MINOR, negotiable=True, orig_end=now + 100)
+    assert f._negotiable_flag(lk, now + 10) == 0   # too early
+    assert f._negotiable_flag(lk, now + 40) == 1   # past the gate
+
+
+def test_poll_quiet_on_login_roster_even_with_session_lock(tmp_path, monkeypatch):
+    """No active account (login screen): continuous session locks stay quiet.
+
+    login.locks already refuses the locked account; defaulting active to
+    'operator' used to resurface a session lock while the greeter was up.
+    """
+    import time as _time
+    f = Frank(_cfg(tmp_path))
+    from frankd.enforcement import Lockout, Scope
+    now = _time.time()
+    f.enforcers.enforcer_for("alice").lockout = Lockout(
+        Scope.SESSION, now, now + 100, now + 10_000, Severity.MINOR,
+        negotiable=True, orig_end=now + 100)
+    monkeypatch.setattr("frankd.sources.active_user", lambda: "")
+    assert f.poll_message() == "NONE"
 
 
 def test_negotiate_refuses_a_machine_lock(tmp_path):

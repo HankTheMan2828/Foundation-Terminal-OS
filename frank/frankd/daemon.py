@@ -142,27 +142,93 @@ class Frank:
     # change it, or anything else about Frank, from within the running OS.
 
     def _negotiable_flag(self, lk, now: float) -> int:
-        """1 if the Hub should offer the negotiation screen for this lock."""
-        return 1 if (lk is not None
-                     and lk.negotiable
-                     and lk.attempts_used < self.cfg.negotiation.max_attempts
-                     and self.cfg.negotiation.enabled
-                     and lk.active(now)) else 0
+        """1 if the Hub should offer the negotiation screen for this lock.
+
+        Must match the deterministic gates in NegotiationEngine so the banner
+        never says AVAILABLE and then answers "not open to negotiation" for a
+        plea that simply arrived before min_served_fraction.
+        """
+        if (lk is None
+                or not lk.negotiable
+                or not self.cfg.negotiation.enabled
+                or not lk.active(now)
+                or lk.attempts_used >= self.cfg.negotiation.max_attempts):
+            return 0
+        orig = max(1e-9, lk.orig_end - lk.start)
+        served = (now - lk.start) / orig
+        if served < self.cfg.negotiation.min_served_fraction:
+            return 0
+        return 1
+
+    @staticmethod
+    def _wire_user(msg: str) -> str:
+        """Extract user= from a pending wire line, or '' if absent."""
+        for tok in msg.split():
+            if tok.startswith("user="):
+                return tok.split("=", 1)[1]
+        return ""
+
+    @staticmethod
+    def _wire_scope(msg: str) -> str:
+        for tok in msg.split():
+            if tok.startswith("scope="):
+                return tok.split("=", 1)[1]
+        return ""
+
+    def _pending_for_active(self, msg: str, active: str) -> bool:
+        """Whether a queued Hub message should be delivered to `active`.
+
+        Multi-user isolation (docs/USERS.md): one account's warn/session-lock
+        must not interrupt another account. Machine-scope lockouts still hit
+        whoever holds the console. Care lines only make sense with someone
+        logged in. Messages for other users stay in the queue until their
+        account is active again (or are aged out by the deque cap).
+        """
+        if not active:
+            return False
+        if msg.startswith("care "):
+            return True
+        user = self._wire_user(msg)
+        if msg.startswith("lockout "):
+            if self._wire_scope(msg) == "machine":
+                return True
+            return (not user) or user == active
+        if msg.startswith("warn "):
+            return (not user) or user == active
+        # Unknown type: only deliver when attributed to active (or unattributed).
+        return (not user) or user == active
 
     def poll_message(self) -> str:
-        """Hub asks for something to DISPLAY. Read-only; grants no authority."""
-        if self._pending:
-            return self._pending.popleft()
+        """Hub asks for something to DISPLAY. Read-only; grants no authority.
+
+        Pending messages and continuous session locks are filtered to the
+        account currently holding the console so one user's lockout cannot
+        silence warnings/lockouts for everyone else.
+        """
+        active = sources.active_user()  # "" on the login roster — no default
+        # Rotate the queue: deliver the first message meant for this user;
+        # leave others in place so they still fire when that account signs in.
+        n = len(self._pending)
+        for _ in range(n):
+            msg = self._pending.popleft()
+            if self._pending_for_active(msg, active):
+                return msg
+            self._pending.append(msg)
+
         now = time.time()
+        # Machine locks freeze the whole terminal for whoever is signed in.
+        # On the login roster (no active user) the public login.locks file
+        # already freezes the roster — no continuous banner spam needed.
         machine = self.enforcers.machine_lockout(now)
-        if machine is not None:
+        if machine is not None and active:
             user, lk = machine
             return (f"lockout scope=machine user={user} "
                     f"remaining={int(lk.end - now)} negotiable=0")
+        if not active:
+            return "NONE"
         sessions = self.enforcers.session_lockouts(now)
         # Only surface a session lock for the account currently holding the
         # console — another user's session lock must not interrupt them.
-        active = sources.active_user() or DEFAULT_USER
         if active in sessions:
             lk = sessions[active]
             negotiable = self._negotiable_flag(lk, now)
@@ -227,6 +293,23 @@ class Frank:
                 f"removed={int(result.removed_seconds)} "
                 f"remaining={int(result.remaining_seconds)} msg={result.message}")
 
+    def _drop_pending_warns_for(self, user: str) -> None:
+        """Remove queued infraction notices for `user`.
+
+        Used when a LOCKOUT is about to be shown: a full lockout without
+        further notices must not still flash a prior warn/notice page for the
+        same account (e.g. multi-rule same-tick WARN then LOCKOUT, or a
+        serious finding that locks immediately).
+        """
+        if not user:
+            return
+        kept = deque(maxlen=self._pending.maxlen)
+        for msg in self._pending:
+            if msg.startswith("warn ") and self._wire_user(msg) == user:
+                continue
+            kept.append(msg)
+        self._pending = kept
+
     def _queue_for_hub(self, reaction, commentary: str, *, finding=None,
                        now: float | None = None) -> None:
         # Warnings and lockout announcements are DISPLAYED by the Hub (full-
@@ -243,6 +326,9 @@ class Frank:
         # key=val token parser on the Hub side.
         matched_q = quote(matched, safe="") if matched else ""
         if reaction.kind is ReactionKind.LOCKOUT:
+            # Full lockout: drop any still-queued notice pages for this user so
+            # the Hub goes straight to ACCESS SUSPENDED, not INFRACTION first.
+            self._drop_pending_warns_for(user or DEFAULT_USER)
             # Pull negotiable from the enforcer that just entered the lock.
             enf = self.enforcers.enforcer_for(user or DEFAULT_USER)
             negotiable = self._negotiable_flag(enf.lockout, now)

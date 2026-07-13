@@ -203,6 +203,27 @@ class App:
             action = screen.handle_key(key, self)
             self._dispatch(action)
 
+    def _frank_msg_for_active(self, msg: dict) -> bool:
+        """Multi-user isolation: only surface Frank lines meant for this account.
+
+        frankd already filters the poll queue, but the Hub double-checks so a
+        stale or mis-routed session warn/lockout for Alice can never interrupt
+        Bob (docs/USERS.md). Machine-scope lockouts still apply to whoever is
+        signed in. With no active account (login roster), only machine lockouts
+        are considered — and those are gated by login.locks, so we drop them
+        here to avoid banner spam on the greeter.
+        """
+        mtype = msg.get("type", "")
+        acct = session.get_active_account()
+        if mtype == "lockout" and str(msg.get("scope", "")) == "machine":
+            return acct is not None
+        if acct is None:
+            return False
+        user = (msg.get("user") or "").strip()
+        if not user:
+            return True
+        return user == acct.username
+
     def _poll_frank(self) -> None:
         """Ask frankd if there's a warning / care line / lockout to DISPLAY.
 
@@ -217,6 +238,8 @@ class App:
         if not msg or msg.get("type") == "NONE":
             return
         mtype = msg.get("type", "")
+        if mtype in ("warn", "lockout", "care") and not self._frank_msg_for_active(msg):
+            return
         if mtype == "care":
             raw = msg.get("raw", "")
             text = msg.get("msg") or raw.partition("msg=")[2].strip() or raw
@@ -242,11 +265,9 @@ class App:
         key past a violation without seeing what it was.
         """
         text = (msg.get("msg") or "").strip() or "Infraction recorded."
-        # Also redact matched content when a warn fires (same rule as lockout).
-        matched = (msg.get("matched") or "").strip()
-        if matched:
-            session.redact_infraction_in_file(matched)
-            self._redact_open_editor(matched)
+        # Scrub the trip string so the same content cannot re-fire after
+        # the operator continues (or after a lockout expires).
+        self._scrub_infraction(msg)
         lines = [
             labels.INFRACTION_TITLE,
             "",
@@ -271,10 +292,7 @@ class App:
         if self._lockout_active:
             return
 
-        matched = (msg.get("matched") or "").strip()
-        if matched:
-            session.redact_infraction_in_file(matched)
-            self._redact_open_editor(matched)
+        self._scrub_infraction(msg)
 
         self._lockout_active = True
         negotiable = str(msg.get("negotiable", "0")) == "1"
@@ -368,18 +386,29 @@ class App:
                 self.stack.pop()
         return released
 
-    def _redact_open_editor(self, matched: str) -> None:
-        """If an editor is on the stack for the last content path, redact buffer."""
+    def _scrub_infraction(self, msg: dict) -> None:
+        """Replace the trip string with *** everywhere it could re-fire.
+
+        Covers the last saved content file, any open editor buffers, the
+        activity spool (so a frankd restart cannot re-classify the line),
+        and AI chat transcript/history still on the screen stack.
+        """
+        matched = (msg.get("matched") or "").strip()
         if not matched:
             return
-        path = session.last_content_path()
+        session.redact_infraction_in_file(matched)
+        session.redact_infraction_in_activity(matched)
+        self._redact_open_editor(matched)
+        self._redact_open_chat(matched)
+
+    def _redact_open_editor(self, matched: str) -> None:
+        """Redact `matched` in every open editor buffer on the stack."""
+        if not matched:
+            return
         for scr in self.stack:
             editor = getattr(scr, "editor", None) or scr
-            epath = getattr(editor, "path", None)
             buf = getattr(editor, "buffer", None)
-            if epath is None or buf is None:
-                continue
-            if path is not None and str(epath) != str(path):
+            if buf is None:
                 continue
             try:
                 text = buf.text()
@@ -389,6 +418,30 @@ class App:
                     buf.dirty = True
             except Exception:
                 pass
+
+    def _redact_open_chat(self, matched: str) -> None:
+        """Redact `matched` in any open AI chat transcript/history."""
+        if not matched:
+            return
+        for scr in self.stack:
+            transcript = getattr(scr, "transcript", None)
+            history = getattr(scr, "history", None)
+            if transcript is not None:
+                try:
+                    scr.transcript = [
+                        (speaker, session.redact_matched_in_text(text, matched))
+                        for speaker, text in transcript
+                    ]
+                except Exception:
+                    pass
+            if history is not None:
+                try:
+                    for turn in history:
+                        if isinstance(turn, dict) and "content" in turn:
+                            turn["content"] = session.redact_matched_in_text(
+                                str(turn["content"]), matched)
+                except Exception:
+                    pass
 
     def _blocking_banner(self, lines: list[str], *, min_seconds: float,
                          accept_keys: set[int] | None = None) -> int:

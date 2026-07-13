@@ -78,9 +78,20 @@ _CARE_LINES: list[str] = [
 
 # Negotiation dialogue (docs/FRANK-LOCAL-AI.md §4). Keyed by outcome. The
 # reserved line from FRANK-VOICE.md opens a negotiation; Frank stays procedural.
+# Keep "too_early" / "exhausted" distinct from "ineligible" so a plea that
+# simply arrives before the served-fraction gate is not phrased as if the
+# restriction were never negotiable.
 _NEGOTIATION_LINES: dict[str, list[str]] = {
     "ineligible": [
-        "This restriction is not open to negotiation at this time.",
+        "This restriction is not open to negotiation.",
+    ],
+    "too_early": [
+        "A minimum portion of this restriction must be served before a review "
+        "will be entertained. Present your case again later.",
+    ],
+    "exhausted": [
+        "No further review of this restriction will be entertained. "
+        "The restriction stands until it expires.",
     ],
     "denied": [
         "You are being frank with me. I am being frank with you. This is not "

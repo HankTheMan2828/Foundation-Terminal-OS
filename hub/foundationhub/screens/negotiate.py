@@ -36,7 +36,11 @@ class NegotiateScreen(Screen):
         width = max(1, w - 2 * left)
         rows = [self.message, ""]
         if self.editing:
-            rows.append(f"{labels.NEGOTIATE_PROMPT}: {self.edit.display()}")
+            # Scroll the input so typing past the edge stays visible (same
+            # fix as the AI assistant input line).
+            prefix = f"{labels.NEGOTIATE_PROMPT}: "
+            edit_width = max(1, width - len(prefix))
+            rows.append(prefix + self.edit.display(width=edit_width))
         else:
             rows.append(labels.NEGOTIATE_DONE)
         for i, line in enumerate(rows):

@@ -171,7 +171,7 @@ class Editor:
             return False
         self.buffer.dirty = False
         # Remember this path so a subsequent lockout can redact the matched
-        # infraction text in the source file (same-length * per character).
+        # infraction text in the source file (replaced with ***).
         session.note_content_path(self.path)
         # Report the edit *with its content* so Frank's content-review tiers can
         # actually see what was written — this is the "notes edited" half of the

@@ -34,7 +34,14 @@ def _app(resp):
     return app
 
 
-def test_poll_surfaces_care_line_calmly():
+def _acct(name="alice"):
+    class _Acct:
+        username = name
+    return _Acct()
+
+
+def test_poll_surfaces_care_line_calmly(monkeypatch):
+    monkeypatch.setattr(session, "get_active_account", lambda: _acct())
     app = _app({"type": "care",
                 "raw": "care msg=You matter. Please reach out to someone close.",
                 "msg": "You matter. Please reach out to someone close."})
@@ -52,7 +59,9 @@ def test_poll_warn_uses_full_screen_banner(monkeypatch):
         seen["min_seconds"] = min_seconds
         return ord(" ")
 
+    monkeypatch.setattr(session, "get_active_account", lambda: _acct())
     app = _app({"type": "warn",
+                "user": "alice",
                 "delivery": "statusbar",
                 "msg": "Minor infraction.",
                 "matched": ""})
@@ -97,8 +106,9 @@ def test_poll_lockout_redacts_file_and_logs_out(monkeypatch, tmp_path):
     monkeypatch.setattr(App, "logout_to_login", fake_logout)
     app._poll_frank()
 
-    assert "**********" in path.read_text(encoding="utf-8")  # 10 stars
-    assert "msfconsole" not in path.read_text(encoding="utf-8")
+    body = path.read_text(encoding="utf-8")
+    assert "***" in body
+    assert "msfconsole" not in body
     assert logged_out["done"] is True
     # Negotiation availability must be visible on the banner.
     flat = "\n".join(seen_lines[0])
@@ -138,6 +148,50 @@ def test_poll_none_leaves_status_untouched():
     assert app.status_message == ""
 
 
+def test_poll_ignores_other_users_session_warn(monkeypatch):
+    """Bob must not see Alice's session warn (multi-user isolation)."""
+    seen = {}
+
+    def fake_banner(self, lines, min_seconds=0, accept_keys=None):
+        seen["lines"] = lines
+        return ord(" ")
+
+    class _Acct:
+        username = "bob"
+
+    app = _app({"type": "warn",
+                "user": "alice",
+                "delivery": "statusbar",
+                "msg": "Minor infraction.",
+                "matched": ""})
+    monkeypatch.setattr(session, "get_active_account", lambda: _Acct())
+    monkeypatch.setattr(App, "_blocking_banner", fake_banner)
+    app._poll_frank()
+    assert "lines" not in seen
+    assert app.status_message == ""
+
+
+def test_poll_accepts_matching_users_warn(monkeypatch):
+    seen = {}
+
+    def fake_banner(self, lines, min_seconds=0, accept_keys=None):
+        seen["lines"] = lines
+        return ord(" ")
+
+    class _Acct:
+        username = "alice"
+
+    app = _app({"type": "warn",
+                "user": "alice",
+                "delivery": "statusbar",
+                "msg": "Minor infraction.",
+                "matched": ""})
+    monkeypatch.setattr(session, "get_active_account", lambda: _Acct())
+    monkeypatch.setattr(App, "_blocking_banner", fake_banner)
+    app._poll_frank()
+    assert "lines" in seen
+
+
 def test_poll_is_throttled():
     app = _app(None)
     app._last_frank_poll = time.monotonic()   # just polled
@@ -148,10 +202,26 @@ def test_poll_is_throttled():
 def test_redact_matched_in_text_is_case_insensitive():
     assert session.redact_matched_in_text("Foo BAR foo", "foo") == "*** BAR ***"
     assert session.redact_matched_in_text("plain", "xyz") == "plain"
+    # Longer matches also collapse to fixed *** so word-boundary rules
+    # cannot re-fire on a same-length star run.
+    assert session.redact_matched_in_text("ran msfconsole here", "msfconsole") == \
+        "ran *** here"
 
 
 def test_redact_infraction_in_file(tmp_path):
     p = tmp_path / "x.md"
     p.write_text("alpha meterpreter omega", encoding="utf-8")
     assert session.redact_infraction_in_file("meterpreter", p) is True
-    assert p.read_text(encoding="utf-8") == "alpha *********** omega"
+    assert p.read_text(encoding="utf-8") == "alpha *** omega"
+
+
+def test_redact_infraction_in_activity(tmp_path, monkeypatch):
+    spool = tmp_path / "activity.log"
+    spool.write_text(
+        '{"ts":1,"user":"alice","kind":"note-save","text":"note-save x\\nmsfconsole"}\n',
+        encoding="utf-8")
+    monkeypatch.setenv("FOUNDATIONHUB_ACTIVITY_LOG", str(spool))
+    assert session.redact_infraction_in_activity("msfconsole") is True
+    body = spool.read_text(encoding="utf-8")
+    assert "msfconsole" not in body
+    assert "***" in body

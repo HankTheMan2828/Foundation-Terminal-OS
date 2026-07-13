@@ -126,7 +126,12 @@ class AIChatScreen(Screen):
                            theme.attr(theme.PAIR_NORMAL))
             except curses.error:
                 pass
-        prompt = f"{labels.ASSISTANT_PROMPT}: {self.edit.display()}"
+        # Keep the typing end visible when the line is longer than the row —
+        # previously display() was left-truncated and characters past the
+        # edge were invisible (and looked like input was broken).
+        prefix = f"{labels.ASSISTANT_PROMPT}: "
+        edit_width = max(1, width - len(prefix))
+        prompt = prefix + self.edit.display(width=edit_width)
         try:
             win.addstr(prompt_row, left, prompt[:width],
                        theme.attr(theme.PAIR_AMBER))

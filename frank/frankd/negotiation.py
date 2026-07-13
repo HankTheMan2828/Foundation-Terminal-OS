@@ -136,16 +136,18 @@ class NegotiationEngine:
         remaining = enforcer.remaining(now)
 
         # ── deterministic gates (the model cannot cross these) ──────────────
+        # Distinct outcomes so the Hub can tell "never negotiable" from
+        # "too early" / "no attempts left" instead of a blanket refusal.
         if not self.cfg.enabled or lk is None:
             return self._result("ineligible", 0.0, remaining)
         if not lk.negotiable:                       # MACHINE / serious: Frank wins
             return self._result("ineligible", 0.0, remaining)
         if lk.attempts_used >= self.cfg.max_attempts:
-            return self._result("ineligible", 0.0, remaining)
+            return self._result("exhausted", 0.0, remaining)
         orig_duration = max(1e-9, lk.orig_end - lk.start)
         served_fraction = (now - lk.start) / orig_duration
         if served_fraction < self.cfg.min_served_fraction:
-            return self._result("ineligible", 0.0, remaining)
+            return self._result("too_early", 0.0, remaining)
 
         # Eligible: entertaining the plea consumes an attempt regardless of verdict.
         enforcer.note_negotiation_attempt(now)

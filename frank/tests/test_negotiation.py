@@ -53,16 +53,18 @@ def test_machine_lock_is_never_negotiable():
     assert enf.is_locked(90)          # untouched
 
 
-def test_too_soon_is_ineligible():
+def test_too_soon_is_too_early_not_ineligible():
+    """Before min_served, refuse with too_early — not 'never negotiable'."""
     enf = _locked(end=100.0)          # orig 100s, must serve 30% => now>=30
     res = _engine(min_served_fraction=0.3).negotiate(enf, SINCERE, now=10)
-    assert res.outcome == "ineligible"
+    assert res.outcome == "too_early"
+    assert "later" in res.message.lower() or "portion" in res.message.lower()
 
 
 def test_attempt_cap_is_enforced():
     enf = _locked(attempts=3)
     res = _engine(max_attempts=3).negotiate(enf, SINCERE, now=90)
-    assert res.outcome == "ineligible"
+    assert res.outcome == "exhausted"
 
 
 def test_disabled_negotiation_is_ineligible():
@@ -137,7 +139,8 @@ def test_model_advisor_defers_to_heuristic_when_clean():
 # ── baked lines exist for every outcome ──────────────────────────────────────
 
 def test_every_outcome_has_a_baked_line():
-    for outcome in ("ineligible", "denied", "accepted", "released"):
+    for outcome in ("ineligible", "too_early", "exhausted",
+                    "denied", "accepted", "released"):
         assert mistral.negotiation_line(outcome)
 
 

@@ -141,6 +141,11 @@ def get_active_account():
 # infraction string from the source file when a lockout fires.
 _last_content_path: Path | None = None
 
+# Replacement for matched infraction text. Fixed "***" (not same-length
+# stars) so regex word-boundary rules cannot re-fire on the redacted form
+# after a lockout expires and the user re-opens/re-saves the content.
+_REDACT_TOKEN = "***"
+
 
 def note_content_path(path) -> None:
     """Remember the most recently saved content path (editor on save)."""
@@ -156,7 +161,7 @@ def last_content_path() -> Path | None:
 
 
 def redact_matched_in_text(text: str, matched: str) -> str:
-    """Replace every case-insensitive occurrence of `matched` with same-length *."""
+    """Replace every case-insensitive occurrence of `matched` with ***."""
     if not matched or not text:
         return text
     out: list[str] = []
@@ -170,13 +175,13 @@ def redact_matched_in_text(text: str, matched: str) -> str:
             out.append(text[i:])
             break
         out.append(text[i:j])
-        out.append("*" * n)
+        out.append(_REDACT_TOKEN)
         i = j + n
     return "".join(out)
 
 
 def redact_infraction_in_file(matched: str, path: Path | None = None) -> bool:
-    """Replace the matched infraction text in a content file with * per character.
+    """Replace the matched infraction text in a content file with ***.
 
     Returns True if the file was modified. Best-effort: missing path, missing
     match, or IO errors are silent no-ops (the lockout still proceeds).
@@ -196,6 +201,33 @@ def redact_infraction_in_file(matched: str, path: Path | None = None) -> bool:
         return False
     try:
         p.write_text(redacted, encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+def redact_infraction_in_activity(matched: str) -> bool:
+    """Scrub `matched` from the Hub activity spool so a frankd restart cannot
+    re-classify the same line after a lockout expires.
+
+    Best-effort; returns True if the spool was modified.
+    """
+    if not matched:
+        return False
+    path = Path(os.environ.get(
+        "FOUNDATIONHUB_ACTIVITY_LOG",
+        os.environ.get("FRANK_ACTIVITY_SPOOL", "/run/foundationhub/activity.log")))
+    try:
+        if not path.is_file():
+            return False
+        original = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    redacted = redact_matched_in_text(original, matched)
+    if redacted == original:
+        return False
+    try:
+        path.write_text(redacted, encoding="utf-8")
         return True
     except OSError:
         return False

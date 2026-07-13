@@ -85,7 +85,12 @@ def _center(win, y: int, text: str, attr: int) -> None:
 
 class LineEdit:
     """Minimal single-line editor for curses prompts. ASCII, bounded.
-    Shared by the login prompts and the notes suite's name/search prompts."""
+    Shared by the login prompts and the notes suite's name/search prompts.
+
+    When the line is longer than the screen allows, ``display(width=...)``
+    keeps the caret end visible (horizontal scroll) so typing past the edge
+    no longer runs off-screen.
+    """
 
     def __init__(self, *, mask: bool = False, limit: int = 32, value: str = ""):
         self.value = value
@@ -104,9 +109,23 @@ class LineEdit:
             self.value += chr(key)
         return None
 
-    def display(self) -> str:
+    def display(self, width: int | None = None) -> str:
+        """Render the edit buffer with a trailing caret.
+
+        If ``width`` is set and the full line would exceed it, keep the
+        right-hand end (where the user is typing) and prefix with ``…``
+        when content was clipped on the left.
+        """
         shown = "•" * len(self.value) if self.mask else self.value
-        return shown + "_"
+        full = shown + "_"
+        if width is None or width <= 0 or len(full) <= width:
+            return full
+        # Keep the caret end visible. Reserve one cell for a left-clip marker
+        # when we have to scroll (width 1 → just the caret).
+        if width == 1:
+            return "_"
+        body = full[-(width - 1):]
+        return "…" + body
 
 
 class MenuItem:
