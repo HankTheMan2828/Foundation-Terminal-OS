@@ -9,16 +9,21 @@ AREA is a folder-of-notes chooser over the notes suite's in-house editor
 FILE MANAGER and SYSTEM MONITOR are now native too (queue §2/§3) — ranger and
 btop are both retired. MEDIA now launches the in-house foundationmedia (§4) —
 still a Launch by design (hybrid model: media is a separate program).
+
+WEB ACCESS (post-v0.1.0): DuckDuckGo via a graphical browser when a display
+session exists, otherwise a text browser (w3m). Needs network — see Settings
+→ NETWORK for ethernet / WiFi.
 """
 from __future__ import annotations
 
-from .. import labels
+from .. import labels, webaccess
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
 from .aichat import AIChatScreen
 from .files import FileManagerScreen
 from .monitor import MonitorScreen
 from .notes import NotesScreen, NotesSearchScreen
+from .webaccess import open_web_access
 
 
 def screen():
@@ -42,5 +47,9 @@ def screen():
         # Native Hub screen (in-house monitor) — btop retired, queue §3.
         MenuItem(labels.PROG_MONITOR, lambda a: MonitorScreen(),
                  hint="in-house"),
+        # Internet via DuckDuckGo (graphical when available, text otherwise).
+        MenuItem(labels.PROG_WEB, open_web_access,
+                 hint="DuckDuckGo",
+                 status=webaccess.status_hint),
     ]
     return MenuScreen(labels.PROGRAMS, items)

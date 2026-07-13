@@ -9,7 +9,7 @@ from __future__ import annotations
 from .. import consolefont, labels, session, updates as updates_backend
 from ..app import MenuScreen, Launch
 from ..ui import MenuItem
-from . import status, updates
+from . import network, status, updates
 
 
 def _set_status(msg: str):
@@ -65,9 +65,11 @@ def screen():
         MenuItem(labels.FN_SOUND, lambda a: Launch(["alsamixer"]), hint="alsamixer"),
         MenuItem(labels.FN_TEXT_SIZE, lambda a: _text_size_screen(),
                  status=consolefont.current_label),
-        # Moved in from the old top-level Status entry (feedback #8): NETWORK is
-        # a real config action; SYSTEM STATUS is the read-only readout.
-        MenuItem(labels.STATUS_NETWORK, lambda a: Launch(["nmtui"]), hint="nmtui"),
+        # NETWORK: status + WiFi radio + nmtui (general connectivity). Ethernet
+        # works when plugged in; WiFi needs the radio on then CONFIGURE.
+        # (System-update wireless policy stays under SYSTEM UPDATE — separate.)
+        MenuItem(labels.STATUS_NETWORK, lambda a: network.screen(),
+                 hint="WiFi / ethernet"),
         # SYSTEM UPDATE (docs/UPDATE-SYSTEM.md §5): on-demand check/apply +
         # the transport policy — including the wireless opt-in.
         MenuItem(labels.UPDATE, lambda a: updates.screen(),

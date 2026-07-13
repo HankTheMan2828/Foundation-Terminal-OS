@@ -65,11 +65,12 @@ Working off-device today (no target machine required for the TUIs and tests):
   ([`docs/USERS.md`](docs/USERS.md)).
 - **Home Hub** — top level: **Programs · Recreation · Settings · Logs · Power**.
   - **Programs:** Notes (tabbed journal/notes + search), File Manager
-    (quota-scoped), Media, System Monitor, Text Editor, on-device **Assistant**
-    (same local model stack as Frank, separate trust domain).
+    (quota-scoped), Media, System Monitor, on-device **Assistant**
+    (same local model stack as Frank, separate trust domain), **Web Access**
+    (DuckDuckGo — graphical browser when a display session exists, else w3m).
   - **Recreation:** Arcade, Chess, Rogue (1981), High Scores.
-  - **Settings:** System Status, network (`nmtui`), system update, hardware
-    functions where present.
+  - **Settings:** System Status, **Network** (link status, WiFi radio, nmtui
+    configure), system update, hardware functions where present.
   - **Logs:** public Frank surfaces (timestamps / lock status only — never
     findings detail).
 - **Frank** — rule engine + Overseer Rulebook (deterministic verdicts), Hub

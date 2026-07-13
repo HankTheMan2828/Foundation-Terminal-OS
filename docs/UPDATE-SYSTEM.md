@@ -266,8 +266,9 @@ For §12 sign-off, stated as testable invariants:
 - No delta/binary-diff packages; payload replace is the mechanism.
 - No downgrade flow (reinstall via ERASE covers rollback; `.prev` payload
   is crash-safety, not a feature).
-- No in-OS wireless *provisioning* work beyond the existing `nmtui` — the
-  policy toggle governs whether it's reachable.
+- Wireless *provisioning* stays on `nmtui` (Settings → NETWORK → CONFIGURE);
+  that screen also has link status + WiFi radio for everyday use (Web Access).
+  The update-policy toggle still governs whether *updates* may use wireless.
 - Base-package upgrades over the network (USB path owns those in v1 — §5).
 
 ## 8. Implementation plan — status (built 2026-07-04)

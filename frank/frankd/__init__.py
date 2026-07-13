@@ -16,4 +16,4 @@ Design invariants enforced in code (do not blur these):
   * the visible ledger is TIMESTAMPS ONLY
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

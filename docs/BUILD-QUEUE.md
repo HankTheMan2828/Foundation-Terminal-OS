@@ -253,7 +253,9 @@ Procedure (follow verbatim):
 ## Parked (not in this queue, decisions already recorded)
 
 - **NETWORK ARCHIVE** (retrieval-terminal web area, Kagi or Brave search
-  API) — post-v1, see OPEN-QUESTIONS.md §10.
+  API) — optional evolution; **WEB ACCESS** (DuckDuckGo via gui/text browser)
+  + Settings → NETWORK (WiFi radio + nmtui) landed as the post-v0.1.0 path
+  (see OPEN-QUESTIONS.md §10).
 - **User-ID provisioning system** (replaces setup code `1234`) — see
   docs/USERS.md.
 - **Real per-account Linux sessions + quota enforcement** — TODO(hardware),

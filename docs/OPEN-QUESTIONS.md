@@ -22,10 +22,11 @@ decisions.
 **✅ Settings → System Status, approved and applied.** The user decided the
 old Settings/Configuration area shouldn't exist as an operator-facing settings
 surface at all — resource limits and user/auth actions (`passwd`) are removed
-outright. What's left under `SYSTEM STATUS`: NETWORK (still launches `nmtui`),
-a read-only USER line (username + uid), and a FUNCTIONS list of basic
-functioning/not-functioning checks (network, audio, the Frank overseer).
-THEME & SOUND moved to `FUNCTIONS` alongside the other real hardware toggles.
+outright. What's left under `SYSTEM STATUS`: a read-only USER line
+(username + uid), and a FUNCTIONS list of basic functioning/not-functioning
+checks (network, audio, the Frank overseer, local AI). NETWORK config lives
+under **Settings → NETWORK** (status + WiFi radio + `nmtui` configure).
+THEME & SOUND moved to Settings alongside the other real hardware toggles.
 
 ## 2. Recreation game list (spec §5, §10) — ✅ SUPERSEDED by the in-house mandate
 
@@ -233,12 +234,17 @@ The operator's finalized vision, decided in one pass:
   curses editor plus a note browser — dated journal, tagged notes, search by
   tag/text — all inside the Hub. No external editor. *Built 2026-07-01
   (BUILD-QUEUE §1); nvim retired — see STATUS row 12.*
-- ✅ **Web integration: none in v1.** The terminal stays offline-first. The
-  chosen future direction is a **retrieval terminal** backed by a search API
-  — operator's candidates: **Kagi API or Brave Search API** (AI-mediated
-  access was considered and is less likely). Both are plain HTTPS+JSON, so
-  the feature stays viable on the console-mode portability tier. Design the
-  Hub so a NETWORK ARCHIVE area can be added without rework.
+- ✅ **Web integration — WEB ACCESS landed post-v0.1.0 direction (2026-07-13).**
+  v0.1 stayed offline-first; the next stage adds:
+  - **Settings → NETWORK:** link status, WiFi radio on/off, CONFIGURE via
+    `nmtui`. Ethernet: plug in, NetworkManager handles the rest. General
+    connectivity (any online link) is enough for everyday use — *not* gated
+    by the stricter system-update wireless policy.
+  - **Programs → WEB ACCESS:** opens **DuckDuckGo**. Prefers a graphical
+    browser when a display session exists (firefox/chromium…); falls back to
+    **w3m** (shipped in core) on the kernel VT / under kitty.
+  A later **retrieval terminal** (search-API archive: Kagi/Brave) remains a
+  possible evolution; WEB ACCESS is the real browser path for now.
 - ✅ **Multi-user login + tiers + per-user Frank** — see §6 and
   [`docs/USERS.md`](USERS.md).
 - ✅ Per-tier quota amounts (GUEST 64 MB / EMPLOYEE 5 GB / SENIOR 15 GB /

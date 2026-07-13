@@ -80,7 +80,13 @@ ffmpeg          # foundationmedia's optional decode engine (mp3/flac/ogg/…)
 # btop RETIRED (BUILD-QUEUE §3): the in-house system monitor
 # (hub/foundationhub/screens/monitor.py + hub/foundationhub/sysinfo.py) reads /proc
 # directly, stdlib only — view-only, no kill/renice.
-networkmanager  # nmtui network config
+networkmanager  # nmtui network config (Settings → NETWORK → CONFIGURE)
+# w3m: text-browser baseline for Programs → WEB ACCESS (DuckDuckGo HTML).
+# Always works on the kernel VT kiosk. Graphical browsers (firefox/chromium)
+# are optional extras — install on a profile with a display stack when you
+# want a full GUI browser; webaccess.py prefers them automatically when a
+# WAYLAND_DISPLAY/DISPLAY session is present.
+w3m
 
 # --- AI features (spec §5, §6) ---
 python-requests   # Frank/AI-Chat HTTP clients (also used to reach the LOCAL server)

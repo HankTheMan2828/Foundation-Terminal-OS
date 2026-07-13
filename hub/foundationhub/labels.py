@@ -74,12 +74,18 @@ ASSISTANT_ERROR_EMPTY = "Model returned an empty reply. Try again."
 ASSISTANT_ERROR_BAD = "Model reply was unreadable. Try again."
 ASSISTANT_HINT = "type   ↵ send   Esc back"
 
-# ── Programs (order: Notes · Notes Search · Files · Media · Monitor) ──────────
+# ── Programs (order: Assistant · Notes · … · Monitor · Web Access) ───────────
 NOTES = "NOTES"                 # the single notes home (feedback #8)
 NOTES_SEARCH = "NOTES SEARCH"   # separate search program — Work-only by default
 PROG_FILES = "FILE MANAGER"
 PROG_MEDIA = "MEDIA"
 PROG_MONITOR = "SYSTEM MONITOR"
+PROG_WEB = "WEB ACCESS"         # DuckDuckGo — needs network (Settings → NETWORK)
+
+# ── Web Access (Programs — DuckDuckGo when online) ───────────────────────────
+WEB_SUBTITLE = "DuckDuckGo — graphical when available, text browser otherwise"
+WEB_NO_BROWSER = "NO BROWSER AVAILABLE"
+WEB_OFFLINE = "NO NETWORK — SETTINGS → NETWORK"
 
 # ── Functions Control (real toggles only — spec §5) ──────────────────────────
 FN_BRIGHTNESS = "DISPLAY BRIGHTNESS"
@@ -115,6 +121,16 @@ STATUS_CHECK_FRANK = "OVERSEER (FRANK)"
 STATUS_CHECK_AI = "LOCAL AI (ASSISTANT)"
 STATUS_FUNCTIONING = "FUNCTIONING"
 STATUS_NOT_FUNCTIONING = "NOT FUNCTIONING"
+
+# ── Network (Settings — general connectivity, separate from update policy) ──
+NET_SUBTITLE = "ethernet: plug in · WiFi: radio on, then configure"
+NET_STATUS_HEADING = "LINK"
+NET_WIFI_ON = "WiFi RADIO · ON"
+NET_WIFI_OFF = "WiFi RADIO · OFF"
+NET_CONFIGURE = "CONFIGURE NETWORK"
+NET_REFRESH = "REFRESH STATUS"
+NET_ETHERNET_HINT = "Ethernet: plug in a cable — NetworkManager handles the rest"
+NET_NMTUI_MISSING = "[ nmtui not installed — networkmanager package ]"
 # NOTE: there is intentionally no overseer/Frank setting. The operator has no
 # power over Frank, ever — nothing to expose here.
 
