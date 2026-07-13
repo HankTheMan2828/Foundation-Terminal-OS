@@ -24,7 +24,8 @@ path double-fetches the ISO (~1.5 GB) and often re-downloads the AI model
    will also hold:
    - `foundation-terminalos-*.iso` — installer (refreshed when outdated)
    - `model.gguf` — Frank AI weights (keep forever)
-   - `llama-server` — AI server binary (keep forever)
+   - `ai-runtime.tar.gz` — llama-server **+ libllama/libggml** (keep forever;
+     a bare `llama-server` ELF alone will **not** start on the target)
 
 ### Every new version
 

@@ -114,11 +114,10 @@ _install_runtime_blob() {
     return 0
   fi
   if _is_elf "$staged"; then
-    install -m 0755 "$staged" "$BIN"
-    chmod 0755 "$BIN"
-    c_warn "staged bare ELF llama-server (no bundled libs) — may fail to start"
-    c_warn "prefer foundation-ai-runtime-*.tar.gz from the release"
-    return 0
+    # Bare ELF is never enough (needs libllama/libggml). Refuse so we don't
+    # paper over a broken install.
+    c_warn "staged bare ELF llama-server (no libs) — refusing; need runtime tarball"
+    return 1
   fi
   c_warn "staged server at $staged is neither gzip runtime nor ELF — ignoring"
   return 1
@@ -319,17 +318,42 @@ EOF
   c_ok "wrote $AICHAT_ENV (local-only defaults)"
 fi
 
+# Operator-readable status for Hub System Status (session.local_ai_health).
+_write_ai_status() {
+  local state="$1" detail="$2"
+  local dir=/var/lib/foundationhub
+  install -d -m 0755 "$dir" 2>/dev/null || true
+  cat > "$dir/ai-status" <<EOF
+# Written by install/11-frank-ai.sh — Hub Settings → SYSTEM STATUS reads this.
+state=$state
+detail=$detail
+bin=$BIN
+model=$MODEL
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)
+EOF
+  chmod 0644 "$dir/ai-status" 2>/dev/null || true
+}
+
 if _runtime_ok && [[ -f "$MODEL" ]] && _is_gguf "$MODEL"; then
   c_ok "local AI assets in place: runtime under $AI_LIB + $MODEL"
   c_ok "on boot, frank-ai.service serves OpenAI-compat chat on 127.0.0.1:8080"
   c_ok "Hub ASSISTANT + Frank's sensor both use that endpoint (offline, no cloud)"
+  _write_ai_status "ready" "runtime+model installed; service starts on boot"
 else
   c_warn "frank-ai.service enabled but IDLE — runtime and/or model incomplete"
   c_warn "Hub ASSISTANT will report 'local model not reachable' until fixed"
   c_info "missing:"
-  _runtime_ok || c_info "  - AI runtime (llama-server + libllama/libggml under $AI_LIB)"
-  [[ -f "$MODEL" ]] && _is_gguf "$MODEL" || c_info "  - model GGUF ($MODEL)"
+  miss_bits=""
+  if ! _runtime_ok; then
+    c_info "  - AI runtime (llama-server + libllama.so + libggml.so under $AI_LIB)"
+    miss_bits="${miss_bits}runtime "
+  fi
+  if ! { [[ -f "$MODEL" ]] && _is_gguf "$MODEL"; }; then
+    c_info "  - model GGUF ($MODEL)"
+    miss_bits="${miss_bits}model "
+  fi
   c_info "fix: rewrite the USB WITHOUT -NoModel (full AI staging), then"
   c_info "      UPDATE from that stick (docs/FRANK-LOCAL-AI.md)"
+  _write_ai_status "idle" "missing: ${miss_bits:-unknown}"
 fi
 c_ok "Frank local AI step complete"

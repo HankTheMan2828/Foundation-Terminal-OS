@@ -174,9 +174,12 @@ prepare_ai() {
     c_info "downloading the AI runtime…"
     curl -fL --progress-bar -o "$dest" "$surl" || { rm -f "$dest"; fail_ai "runtime download failed"; }
   fi
+  # Require gzip runtime tarball — bare ELF alone cannot start (missing libs).
+  if [[ -f "$AI_SERVER" ]] && ! _is_gzip_file "$AI_RUNTIME"; then
+    c_warn "legacy bare llama-server ELF present; delete it and re-run to fetch the runtime tarball"
+  fi
   if _is_gzip_file "$AI_RUNTIME"; then STAGE_SERVER="$AI_RUNTIME"
-  elif [[ -f "$AI_SERVER" ]]; then STAGE_SERVER="$AI_SERVER"
-  else fail_ai "AI runtime missing (foundation-ai-runtime-*.tar.gz)"
+  else fail_ai "AI runtime tarball missing (foundation-ai-runtime-*.tar.gz from the release)"
   fi
   (( ISO_BYTES < STAGE_OFFSET )) || fail_ai "ISO exceeds the 2 GiB staging offset"
   local magic

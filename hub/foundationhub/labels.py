@@ -66,8 +66,8 @@ ASSISTANT_THINKING = "… thinking"
 # Offline / failure notices. Short enough for a 80-col CRT line; detail lives
 # in docs/FRANK-LOCAL-AI.md and INSTALL.md §2.
 ASSISTANT_OFFLINE = (
-    "Local model not reachable (frank-ai.service on 127.0.0.1:8080). "
-    "Need runtime tarball (llama-server+libs) + model.gguf on the install USB, then UPDATE.")
+    "Local model not reachable (127.0.0.1:8080). "
+    "See SETTINGS → SYSTEM STATUS → LOCAL AI for why; fix with a full-AI USB UPDATE.")
 ASSISTANT_ERROR_HTTP = (
     "Model server answered with an error. Check frank-ai.service / model name.")
 ASSISTANT_ERROR_EMPTY = "Model returned an empty reply. Try again."
@@ -112,6 +112,7 @@ STATUS_FUNCTIONS_HEADING = "FUNCTIONS"
 STATUS_CHECK_NETWORK = "NETWORK"
 STATUS_CHECK_AUDIO = "AUDIO"
 STATUS_CHECK_FRANK = "OVERSEER (FRANK)"
+STATUS_CHECK_AI = "LOCAL AI (ASSISTANT)"
 STATUS_FUNCTIONING = "FUNCTIONING"
 STATUS_NOT_FUNCTIONING = "NOT FUNCTIONING"
 # NOTE: there is intentionally no overseer/Frank setting. The operator has no

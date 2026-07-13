@@ -311,15 +311,20 @@ if ($requireAI) {
         try { Invoke-WebRequest -UseBasicParsing $srvUrl -OutFile $dest } catch {}
       }
     }
-    # What we actually stage: gzip runtime preferred; bare ELF only as last resort.
+    # Require the gzip runtime tarball (binary + libllama + libggml). A bare
+    # ELF alone cannot start on the target — refuse it even if present from an
+    # older download.
+    if ((Test-Path $serverPath) -and -not (Test-GzipFile $runtimePath)) {
+      Bad 'Found legacy bare llama-server ELF next to this script.'
+      Bad 'Delete it and re-run so the creator downloads ai-runtime.tar.gz instead.'
+    }
     $stageServerPath = $null
     if (Test-GzipFile $runtimePath) { $stageServerPath = $runtimePath }
-    elseif (Test-Path $serverPath) { $stageServerPath = $serverPath }
 
     if (-not (Test-Path $modelPath)) {
       FailAi 'AI model download failed.'
     } elseif (-not $stageServerPath) {
-      FailAi 'AI runtime missing (foundation-ai-runtime-*.tar.gz from the release).'
+      FailAi 'AI runtime tarball missing (foundation-ai-runtime-*.tar.gz from the release).'
     } elseif ($IsoSize -ge $STAGE_OFFSET) {
       FailAi 'ISO is larger than the 2 GiB staging offset — cannot stage AI past it.'
     } else {

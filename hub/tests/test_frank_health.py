@@ -29,3 +29,18 @@ def test_hint_when_no_health_file(tmp_path, monkeypatch):
     monkeypatch.setattr(session.FrankClient, "is_alive", lambda self: False)
     monkeypatch.setattr(session, "FRANK_HEALTH", tmp_path / "absent")
     assert "no health file" in session.frank_health()
+
+
+def test_local_ai_health_empty_when_up(monkeypatch):
+    monkeypatch.setattr(session, "check_local_ai", lambda: True)
+    assert session.local_ai_health() == ""
+
+
+def test_local_ai_health_reads_status_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(session, "check_local_ai", lambda: False)
+    p = tmp_path / "ai-status"
+    p.write_text("state=idle\ndetail=missing: runtime\n")
+    monkeypatch.setattr(session, "AI_STATUS_PATHS", (p,))
+    reason = session.local_ai_health()
+    assert "idle" in reason
+    assert "runtime" in reason

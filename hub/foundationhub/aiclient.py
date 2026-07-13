@@ -45,11 +45,12 @@ SYSTEM_PROMPT = (
     "overseer (Frank); you have no role in monitoring or restricting the user."
 )
 
-# Keep replies snappy on a small local model, and don't wedge the Hub UI if the
-# server hangs: a bounded timeout means the worst case is a "not reachable" line.
+# Keep replies bounded on a small local model, and don't wedge the Hub UI if the
+# server hangs. BitNet on a mini-PC CPU can be slow on the first tokens after a
+# cold start — 30s was too tight and looked like "offline" during generation.
 _MAX_TOKENS = 512
-_TIMEOUT_S = 30
-_PROBE_TIMEOUT_S = 2
+_TIMEOUT_S = 120
+_PROBE_TIMEOUT_S = 3
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -140,24 +141,33 @@ class AssistantClient:
         self.last_error: str | None = None
 
     def reachable(self) -> bool:
-        """Cheap probe: can we open a TCP connection to the configured host?
+        """Cheap probe: is the local model server answering?
 
-        Not a full chat call — just enough for the intro line to say whether
-        the model server looks up. Never raises.
+        Prefers llama-server's `/health` endpoint (derived from the chat URL).
+        Falls back to GET on the chat path (405/404 still count as "up").
+        Only connection failures count as offline. Never raises.
         """
-        try:
-            req = urllib.request.Request(
-                self.url, method="GET",
-                headers={"Accept": "application/json"})
-            # GET on /v1/chat/completions often 405/404 — that still means the
-            # server is up. Only connection failures count as offline.
+        candidates = []
+        # http://127.0.0.1:8080/v1/chat/completions → http://127.0.0.1:8080/health
+        base = self.url
+        if "/v1/chat/completions" in base:
+            candidates.append(base.replace("/v1/chat/completions", "/health"))
+        elif base.rstrip("/").endswith("/v1"):
+            candidates.append(base.rstrip("/") + "/health")
+        candidates.append(self.url)
+        for url in candidates:
             try:
-                urllib.request.urlopen(req, timeout=_PROBE_TIMEOUT_S)
-            except urllib.error.HTTPError:
+                req = urllib.request.Request(
+                    url, method="GET",
+                    headers={"Accept": "application/json"})
+                try:
+                    urllib.request.urlopen(req, timeout=_PROBE_TIMEOUT_S)
+                except urllib.error.HTTPError:
+                    return True
                 return True
-            return True
-        except (urllib.error.URLError, OSError, ValueError):
-            return False
+            except (urllib.error.URLError, OSError, ValueError):
+                continue
+        return False
 
     def chat(self, history: list[dict]) -> str | None:
         """Send the conversation and return the assistant reply, or None.

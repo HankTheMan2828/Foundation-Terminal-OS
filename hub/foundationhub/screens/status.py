@@ -25,6 +25,7 @@ class StatusScreen(Screen):
             (labels.STATUS_CHECK_NETWORK, session.check_network),
             (labels.STATUS_CHECK_AUDIO, session.check_audio),
             (labels.STATUS_CHECK_FRANK, session.check_frank),
+            (labels.STATUS_CHECK_AI, session.check_local_ai),
         ]
 
     def handle_key(self, key, app):
@@ -73,15 +74,18 @@ class StatusScreen(Screen):
                 win.addstr(row, left, f"{label:<24}{state}",
                            theme.attr(pair, bold=not ok))
                 row += 1
-                # When Frank is down, show WHY right under the line — the only
-                # way to diagnose a dead overseer on a no-shell locked kiosk.
+                # When Frank / local AI is down, show WHY under the line — the
+                # only way to diagnose on a no-shell locked kiosk.
+                reason = ""
                 if check is session.check_frank and not ok:
                     reason = session.frank_health()
-                    if reason:
-                        _, w = win.getmaxyx()
-                        win.addstr(row, left + 2, f"↳ {reason}"[: w - left - 4],
-                                   theme.attr(theme.PAIR_DIM, dim=True))
-                        row += 1
+                elif check is session.check_local_ai and not ok:
+                    reason = session.local_ai_health()
+                if reason:
+                    _, w = win.getmaxyx()
+                    win.addstr(row, left + 2, f"↳ {reason}"[: w - left - 4],
+                               theme.attr(theme.PAIR_DIM, dim=True))
+                    row += 1
         except curses.error:
             pass
 

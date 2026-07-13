@@ -7,13 +7,13 @@
 # >=2 GB for the OS).
 #
 # Current model: BitNet b1.58 2B4T, served by bitnet.cpp's `llama-server` (a
-# llama.cpp fork with the 1-bit kernels). The binary + model are laid down by
-# install/11-frank-ai.sh. The model is swappable — point the paths at any GGUF a
-# compatible llama-server can serve.
+# llama.cpp fork with the 1-bit kernels). Runtime is a DIRECTORY under
+# /usr/local/lib/foundation-ai/: llama-server + libllama.so + libggml.so
+# (RPATH=$ORIGIN), laid down by install/11-frank-ai.sh from the USB runtime
+# tarball. A bare ELF without those libs will not start.
 #
-# ExecCondition means: if the server binary or model file isn't present (e.g. an
-# offline install that didn't stage them) the unit stays inactive and Frank's
-# sensor / the Hub assistant safely no-op — the rules keep running either way.
+# ExecCondition means: if binary, libs, or model are missing the unit stays
+# inactive (not a crash loop) and the Hub Assistant shows offline.
 [Unit]
 Description=Frank local AI sensor (BitNet) inference server
 Documentation=file:///opt/terminal-os/docs/FRANK-LOCAL-AI.md
@@ -21,52 +21,62 @@ Documentation=file:///opt/terminal-os/docs/FRANK-LOCAL-AI.md
 # /var/lib/frank/models is mounted.
 After=local-fs.target
 Before=frankd.service
-Wants=frankd.service
 
 [Service]
 Type=simple
 User=frank
 Group=frank
-# Both assets required. Missing either → unit never starts (not a crash loop).
-# Runtime is a directory: llama-server + libllama/libggml (RPATH=$ORIGIN); the
-# LD_LIBRARY_PATH is belt-and-braces if patchelf wasn't applied on the build host.
+# Writable scratch for the process (cwd, any temp files). Model + binary stay RO.
+RuntimeDirectory=foundation-ai
+RuntimeDirectoryMode=0755
+WorkingDirectory=/run/foundation-ai
+# Assets required. Missing any → unit never starts (not a crash loop).
 ExecCondition=/usr/bin/test -x /usr/local/lib/foundation-ai/llama-server
+ExecCondition=/usr/bin/test -f /usr/local/lib/foundation-ai/libllama.so
+ExecCondition=/usr/bin/test -f /usr/local/lib/foundation-ai/libggml.so
 ExecCondition=/usr/bin/test -f /var/lib/frank/models/model.gguf
+# Belt-and-braces if RPATH was stripped; private .so live next to the binary.
 Environment=LD_LIBRARY_PATH=/usr/local/lib/foundation-ai
-WorkingDirectory=/usr/local/lib/foundation-ai
-# Quiet, single-slot server on loopback. --threads left default so bitnet.cpp
-# picks a sane core count; MemoryMax caps the process either way.
+# Quiet, single-slot server on loopback only. MemoryMax caps the process.
+# --threads left default so bitnet.cpp picks a sane core count.
 ExecStart=/usr/local/lib/foundation-ai/llama-server \
   --model /var/lib/frank/models/model.gguf \
   --host 127.0.0.1 \
   --port 8080 \
-  --ctx-size 2048
+  --ctx-size 2048 \
+  --parallel 1
 # Model load can take tens of seconds on first boot; don't mark the unit failed
-# while weights are still mapping.
+# while weights are still mapping (Type=simple: process must stay alive).
 TimeoutStartSec=180
+TimeoutStopSec=30
 Restart=on-failure
 RestartSec=5
 # Prefer killing the AI under memory pressure over the Hub / frankd.
 OOMScoreAdjust=500
-
 # Keep the model within the operator's RAM budget (<=6 GB for AI, >=2 GB free).
 MemoryMax=6G
+SyslogIdentifier=frank-ai
 
-# Isolation / hardening. The operator has no path to this process; it also can
-# only ever talk to loopback — the sensor must never phone home.
+# Isolation / hardening. The operator has no path to this process; it only
+# ever binds loopback via --host (no outbound phone-home needed).
+# NOTE: do NOT set IPAddressDeny=any here — on some systemd builds that BPF
+# filter has blocked local accept() and left the Assistant permanently offline
+# even with a healthy binary.
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadOnlyPaths=/var/lib/frank/models /usr/local/lib/foundation-ai
+ReadWritePaths=/run/foundation-ai
 ProtectHome=true
 PrivateTmp=true
+# Allow only local IPC + IP (loopback listen). No raw sockets.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-IPAddressAllow=localhost
-IPAddressDeny=any
 ProtectControlGroups=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
 RestrictSUIDSGID=true
 LockPersonality=true
+# No new privileges into other namespaces.
+RestrictNamespaces=true
 
 [Install]
 WantedBy=multi-user.target

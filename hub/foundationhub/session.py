@@ -191,6 +191,60 @@ def check_frank() -> bool:
     return FrankClient().is_alive()
 
 
+def check_local_ai() -> bool:
+    """Is the on-device model server (frank-ai / llama-server) answering?"""
+    try:
+        from .aiclient import AssistantClient
+        return AssistantClient().reachable()
+    except Exception:
+        return False
+
+
+# Operator-readable breadcrumb written by install/11 and frank-ai wrapper paths.
+AI_STATUS_PATHS = (
+    Path(os.environ.get("FOUNDATIONHUB_AI_STATUS",
+                        "/var/lib/foundationhub/ai-status")),
+    Path("/run/foundation-ai/status"),
+)
+
+
+def local_ai_health() -> str:
+    """Short reason when LOCAL AI is down — for System Status on a kiosk.
+
+    Prefer a live TCP/HTTP probe; fall back to the install-time status file
+    (missing binary/libs/model) when the port is closed.
+    """
+    if check_local_ai():
+        return ""
+    for path in AI_STATUS_PATHS:
+        try:
+            text = path.read_text().strip()
+        except OSError:
+            continue
+        if not text:
+            continue
+        # Prefer a state= line if present; else first non-comment line.
+        state = ""
+        detail = ""
+        for ln in text.splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            if ln.startswith("state="):
+                state = ln.split("=", 1)[1].strip()
+            elif ln.startswith("detail="):
+                detail = ln.split("=", 1)[1].strip()
+            elif not detail:
+                detail = ln
+        if state and detail:
+            return f"{state}: {detail}"[:72]
+        if state:
+            return state[:72]
+        if detail:
+            return detail[:72]
+    return "not listening on 127.0.0.1:8080 (runtime/model missing or service down)"
+
+
 def frank_health() -> str:
     """A short reason when Frank is down, for System Status to display on a
     locked kiosk. '' means healthy/reachable; otherwise a one-line summary from
