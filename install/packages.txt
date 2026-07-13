@@ -85,12 +85,18 @@ networkmanager  # nmtui network config (Settings → NETWORK → CONFIGURE)
 # via foundationhub-web (install/04). Bounded session — Ctrl+Q or close
 # Firefox returns to the Hub (fixes the v0.1.1 stuck-GUI report). Keyboard
 # pointer (Alt+arrows / Alt+Enter) until a hardware mouse is system-wide.
-# Seat management for the kiosk compositor:
+# Seat / session for the kiosk compositor (logind preferred at runtime;
+# seatd is the fallback backend + package).
 seatd
 sway
+# xwayland: lets Firefox run if pure-Wayland fails on some iGPUs.
+xorg-xwayland
+# cage: simpler single-app compositor fallback if sway cannot take the seat.
+cage
 firefox
-# w3m: text fallback only when the GUI stack is missing (dev boxes, lean
-# installs). Still useful; keep shipping it.
+# Session bus — Firefox often aborts instantly without dbus on a raw VT.
+dbus
+# w3m: text fallback when the GUI stack fails or is missing.
 w3m
 
 # --- AI features (spec §5, §6) ---

@@ -12,5 +12,8 @@ pac "${PKGS[@]}"
 if is_arch; then
   systemctl enable NetworkManager.service bluetooth.service \
     power-profiles-daemon.service 2>/dev/null || true
+  # seatd: libseat backend for Programs → WEB ACCESS (sway/cage kiosk).
+  # Harmless when the runtime prefers logind (getty session) instead.
+  systemctl enable seatd.service 2>/dev/null || true
 fi
 c_ok "base packages done"

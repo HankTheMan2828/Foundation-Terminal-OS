@@ -28,6 +28,30 @@ POP = object()
 QUIT = object()
 LOGOUT = object()   # return to the users/login page without killing the process
 
+
+def _web_launch_status(log_path: str, returncode: int) -> str:
+    """Build a short status-bar line from foundationhub-web's diagnostic log."""
+    last_err = ""
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                s = line.strip()
+                if "ERROR:" in s or "FAIL" in s:
+                    last_err = s
+                elif "falling back" in s.lower():
+                    last_err = s
+    except OSError:
+        pass
+    if last_err:
+        # Strip leading timestamps so the bar stays readable on 80 cols.
+        parts = last_err.split("ERROR:", 1)
+        msg = parts[-1].strip() if len(parts) > 1 else last_err
+        if len(msg) > 72:
+            msg = msg[:69] + "..."
+        return msg
+    return f"WEB ACCESS exited ({returncode}) — see foundationhub-web.log"
+
+
 # How long getch() blocks before the loop wakes on its own (ms). Without a
 # timeout the loop only wakes on a keypress, so a Frank warning or the
 # harm-to-user care message — produced asynchronously by frankd — would never
@@ -141,6 +165,7 @@ class App:
 
     # -- external programs --
     def launch(self, launch: Launch) -> None:
+        import os
         import shutil
         import subprocess
 
@@ -154,7 +179,18 @@ class App:
         curses.def_prog_mode()
         curses.endwin()
         try:
-            subprocess.run(launch.argv)
+            env = os.environ.copy()
+            # Web Access writes a diagnostic log; surface the last ERROR line if
+            # the session dies immediately (one-frame flash / seat failure).
+            web_log = None
+            base = os.path.basename(exe)
+            if base == "foundationhub-web" or exe.endswith("foundationhub-web"):
+                runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+                web_log = os.path.join(runtime, "foundationhub-web.log")
+                env["FOUNDATIONHUB_WEB_LOG"] = web_log
+            result = subprocess.run(launch.argv, env=env)
+            if result.returncode not in (0, None) and web_log:
+                self.status_message = _web_launch_status(web_log, result.returncode)
         except Exception as exc:  # keep the Hub alive no matter what a child does
             self.status_message = f"launch failed: {exc}"
         finally:

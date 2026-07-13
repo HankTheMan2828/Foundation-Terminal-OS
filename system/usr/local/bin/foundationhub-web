@@ -2,11 +2,10 @@
 # foundationhub-web — temporary Firefox session for Programs → WEB ACCESS.
 #
 # Why this exists:
-#   The Hub is console-first (curses on the kernel VT, or a profile's
-#   cage+kitty stack). Auto-launching a bare GUI browser left operators
-#   unable to type or exit (v0.1.1 report). This wrapper opens a *bounded*
-#   Wayland kiosk (sway + Firefox), always returns when Firefox exits, and
-#   provides keyboard pointer control until a real mouse is wired system-wide.
+#   The Hub is console-first (curses on the kernel VT). Auto-launching a bare
+#   GUI browser left operators unable to type or exit (v0.1.1). This wrapper
+#   opens a *bounded* Wayland kiosk, always returns when the browser exits, and
+#   provides keyboard pointer control until a real mouse is system-wide.
 #
 # Pointer (no hardware mouse yet):
 #   Alt+←/→/↑/↓     move pointer (coarse)
@@ -15,148 +14,334 @@
 #   Alt+Backspace    right click
 #   Alt+PgUp/PgDn    scroll wheel
 # Quit:
-#   Ctrl+Q           end session (kill Firefox + exit sway)
+#   Ctrl+Q           end session
 #   closing Firefox  also ends the session
+#
+# If the GUI stack fails (common on first hardware bring-up), falls back to
+# w3m so the operator still gets the web, and writes a short log the Hub can
+# surface on the status bar.
 #
 # Usage: foundationhub-web [URL]
 # Env:
-#   FOUNDATIONHUB_WEB_URL   default URL if argv empty
-#   FOUNDATIONHUB_WEB_NESTED=1  force nested Wayland (parent compositor)
-set -euo pipefail
+#   FOUNDATIONHUB_WEB_URL     default URL if argv empty
+#   FOUNDATIONHUB_WEB_LOG     log path (default: $XDG_RUNTIME_DIR/foundationhub-web.log)
+#   FOUNDATIONHUB_WEB_NESTED=1  force nested Wayland
+#   FOUNDATIONHUB_WEB_NO_FALLBACK=1  do not fall back to w3m
+set -u
 
 URL="${1:-${FOUNDATIONHUB_WEB_URL:-https://duckduckgo.com}}"
 
-die() { printf 'foundationhub-web: %s\n' "$*" >&2; exit 1; }
-
-need() {
-  command -v "$1" >/dev/null 2>&1 || die "missing '$1' — install packages: firefox sway seatd"
-}
-
-need firefox
-need sway
-
-# Runtime dir for the Wayland socket (getty+pam usually sets this; belt+suspenders).
+# ── logging (Hub reads the last ERROR/FAIL line after a non-zero exit) ──────
 if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
   export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 fi
-if [[ ! -d "$XDG_RUNTIME_DIR" ]]; then
-  mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || die "no XDG_RUNTIME_DIR ($XDG_RUNTIME_DIR)"
-  chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+if [[ ! -d "${XDG_RUNTIME_DIR}" ]]; then
+  mkdir -p "${XDG_RUNTIME_DIR}" 2>/dev/null || true
+  chmod 700 "${XDG_RUNTIME_DIR}" 2>/dev/null || true
 fi
 
-export XDG_SESSION_TYPE=wayland
-export XDG_CURRENT_DESKTOP=sway
+LOG="${FOUNDATIONHUB_WEB_LOG:-${XDG_RUNTIME_DIR}/foundationhub-web.log}"
+# If runtime dir still unusable, fall back to /tmp.
+if ! ( : >>"$LOG" ) 2>/dev/null; then
+  LOG="/tmp/foundationhub-web-$UID.log"
+fi
+export FOUNDATIONHUB_WEB_LOG="$LOG"
+: >"$LOG" 2>/dev/null || true
+
+log()  { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" | tee -a "$LOG" >&2; }
+fail() { log "ERROR: $*"; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# ── prerequisites ──────────────────────────────────────────────────────────
+if ! have firefox && ! have firefox-esr; then
+  fail "firefox not installed (pacman -S firefox sway seatd)"
+  FIREFOX=""
+else
+  FIREFOX="$(command -v firefox 2>/dev/null || command -v firefox-esr)"
+fi
+
+# Prefer logind for getty/autologin sessions. Forcing seatd here was a common
+# cause of "one-frame flash": sway starts, cannot take the seat, exits.
+if [[ -z "${LIBSEAT_BACKEND:-}" ]]; then
+  if [[ -S /run/systemd/private ]] || [[ -d /run/systemd/seats ]]; then
+    export LIBSEAT_BACKEND=logind
+  elif have seatd; then
+    export LIBSEAT_BACKEND=seatd
+  fi
+fi
+log "start url=$URL user=$(id -un) vt=${XDG_VTNR:-?} seat_backend=${LIBSEAT_BACKEND:-auto} runtime=$XDG_RUNTIME_DIR"
+
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}"
 export MOZ_ENABLE_WAYLAND=1
-# Prefer seatd when available (package enabled by install/04).
-export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
+# First-run / headless-ish environments: avoid hard GPU requirements.
+export MOZ_WEBRENDER="${MOZ_WEBRENDER:-0}"
+export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-}"
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/foundation-web.XXXXXX")"
-CONF="$WORKDIR/sway.conf"
-URLFILE="$WORKDIR/url.txt"
-RUNFF="$WORKDIR/run-firefox.sh"
-printf '%s' "$URL" >"$URLFILE"
-cleanup() { rm -rf "$WORKDIR"; }
+cleanup() { rm -rf "$WORKDIR" 2>/dev/null || true; }
 trap cleanup EXIT
 
-# Small runner so the URL never has to be shell-escaped into the sway config.
-cat >"$RUNFF" <<'RUN'
+URLFILE="$WORKDIR/url.txt"
+printf '%s' "$URL" >"$URLFILE"
+
+FFRC_FILE="$WORKDIR/firefox.rc"
+RUNFF="$WORKDIR/run-firefox.sh"
+# Embed paths so the runner can report Firefox's real exit code to the parent
+# (sway itself often exits 0 even when Firefox dies on first frame).
+cat >"$RUNFF" <<RUN
 #!/bin/sh
-set -eu
-URL=$(cat "$1")
-firefox --new-window "$URL" || true
-swaymsg exit 2>/dev/null || true
+set -u
+LOG="\${FOUNDATIONHUB_WEB_LOG:-/dev/null}"
+URL=\$(cat "\$1")
+FF="\${FIREFOX_BIN:-firefox}"
+FFRC_FILE="$FFRC_FILE"
+{
+  echo "firefox-launch: \$FF --new-window \$URL"
+  echo "WAYLAND_DISPLAY=\${WAYLAND_DISPLAY:-} DISPLAY=\${DISPLAY:-} XDG_RUNTIME_DIR=\${XDG_RUNTIME_DIR:-}"
+} >>"\$LOG" 2>&1
+
+# dbus: Firefox often aborts immediately without a session bus when launched
+# from a raw VT (not a desktop).
+run_ff() {
+  if [ -n "\${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    "\$FF" --new-window "\$URL"
+  elif command -v dbus-run-session >/dev/null 2>&1; then
+    dbus-run-session -- "\$FF" --new-window "\$URL"
+  else
+    "\$FF" --new-window "\$URL"
+  fi
+}
+
+run_ff >>"\$LOG" 2>&1
+rc=\$?
+echo "\$rc" >"\$FFRC_FILE"
+if [ "\$rc" -ne 0 ]; then
+  echo "ERROR: firefox exited rc=\$rc" >>"\$LOG"
+else
+  echo "firefox-exit: clean" >>"\$LOG"
+fi
+# Leave the compositor whether Firefox lived or died.
+if command -v swaymsg >/dev/null 2>&1; then
+  swaymsg exit 2>/dev/null || true
+fi
+if command -v killall >/dev/null 2>&1; then
+  killall -q cage 2>/dev/null || true
+fi
+exit "\$rc"
 RUN
 chmod 700 "$RUNFF"
+export FIREFOX_BIN="${FIREFOX:-firefox}"
 
-# Sway kiosk config: one fullscreen Firefox, keyboard pointer, clean exit.
-# Paths are from mktemp — safe to embed literally.
-cat >"$CONF" <<EOF
-# Generated by foundationhub-web — do not edit by hand.
+write_sway_conf() {
+  local conf="$1"
+  # Minimal config — no version-sensitive titlebar_* keys. Keyboard pointer via
+  # seat cursor moves (works without a physical mouse).
+  cat >"$conf" <<EOF
+# Generated by foundationhub-web — do not edit.
 font pango:monospace 12
 default_border none
 default_floating_border none
 focus_follows_mouse no
-titlebar_padding 0
-titlebar_border_thickness 0
 output * bg #0a0a0a solid_color
 
-# ── Keyboard pointer (hardware mouse is TODO system-wide) ───────────────────
-# Coarse
-bindsym Alt+Left       seat - cursor move -28 0
-bindsym Alt+Right      seat - cursor move 28 0
-bindsym Alt+Up         seat - cursor move 0 -28
-bindsym Alt+Down       seat - cursor move 0 28
-# Fine
+bindsym Alt+Left        seat - cursor move -28 0
+bindsym Alt+Right       seat - cursor move 28 0
+bindsym Alt+Up          seat - cursor move 0 -28
+bindsym Alt+Down        seat - cursor move 0 28
 bindsym Alt+Shift+Left  seat - cursor move -6 0
 bindsym Alt+Shift+Right seat - cursor move 6 0
 bindsym Alt+Shift+Up    seat - cursor move 0 -6
 bindsym Alt+Shift+Down  seat - cursor move 0 6
-# Clicks / scroll
-bindsym Alt+Return     seat - cursor press button1, seat - cursor release button1
-bindsym Alt+KP_Enter   seat - cursor press button1, seat - cursor release button1
-bindsym Alt+BackSpace  seat - cursor press button3, seat - cursor release button3
-bindsym Alt+Prior      seat - cursor press button4, seat - cursor release button4
-bindsym Alt+Next       seat - cursor press button5, seat - cursor release button5
+bindsym Alt+Return      seat - cursor press button1, seat - cursor release button1
+bindsym Alt+KP_Enter    seat - cursor press button1, seat - cursor release button1
+bindsym Alt+BackSpace   seat - cursor press button3, seat - cursor release button3
+bindsym Alt+Prior       seat - cursor press button4, seat - cursor release button4
+bindsym Alt+Next        seat - cursor press button5, seat - cursor release button5
 
-# Quit the whole Web Access session
-bindsym Ctrl+q exec killall -q firefox firefox-bin firefox-esr 2>/dev/null; swaymsg exit
-bindsym Ctrl+Q exec killall -q firefox firefox-bin firefox-esr 2>/dev/null; swaymsg exit
+bindsym Ctrl+q exec sh -c 'killall -q firefox firefox-bin firefox-esr 2>/dev/null; swaymsg exit'
+bindsym Ctrl+Q exec sh -c 'killall -q firefox firefox-bin firefox-esr 2>/dev/null; swaymsg exit'
 
-# Firefox fills the output; when it exits, leave sway so the Hub resumes.
 for_window [app_id="firefox"] border none, fullscreen enable
 for_window [app_id="firefox-esr"] border none, fullscreen enable
 for_window [class="(?i)firefox"] border none, fullscreen enable
 
-exec $RUNFF $URLFILE
+exec env FIREFOX_BIN=$FIREFOX_BIN FOUNDATIONHUB_WEB_LOG=$LOG $RUNFF $URLFILE
 EOF
+}
 
-# Decide nested vs native seat.
-# - From the kernel VT (normal core path): no WAYLAND_DISPLAY → native DRM.
-# - From a profile display-stack (cage+kitty): prefer a free VT so we do not
-#   fight cage for the only client slot; fall back to nested Wayland.
-run_sway() {
-  # Do not exec — trap must remove $WORKDIR after sway exits.
-  # --unsupported-gpu: some iGPU setups need it; harmless when not.
-  local rc=0
-  if sway --help 2>&1 | grep -q -- '--unsupported-gpu'; then
-    sway --unsupported-gpu -c "$CONF" || rc=$?
+run_with_dbus() {
+  # Whole compositor under one session bus when possible.
+  if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    "$@"
+  elif have dbus-run-session; then
+    dbus-run-session -- "$@"
   else
-    sway -c "$CONF" || rc=$?
+    "$@"
   fi
+}
+
+try_sway() {
+  have sway || { fail "sway not installed"; return 127; }
+  [[ -n "$FIREFOX" ]] || { fail "firefox not installed"; return 127; }
+
+  local conf="$WORKDIR/sway.conf"
+  write_sway_conf "$conf"
+  log "trying sway (backend=${WLR_BACKENDS:-drm} renderer=${WLR_RENDERER:-default})"
+
+  local -a cmd=(sway)
+  if sway --help 2>&1 | grep -q -- '--unsupported-gpu'; then
+    cmd+=(--unsupported-gpu)
+  fi
+  cmd+=(-c "$conf")
+
+  # Validate config before taking the seat when sway supports -C.
+  if sway --help 2>&1 | grep -qE -- '(^|[[:space:]])-C([[:space:]]|,|$)'; then
+    if ! sway -C -c "$conf" >>"$LOG" 2>&1; then
+      fail "sway config invalid (see log)"
+      return 1
+    fi
+    log "sway config OK"
+  fi
+
+  rm -f "$FFRC_FILE"
+  run_with_dbus "${cmd[@]}" >>"$LOG" 2>&1
+  local rc=$?
+  # Prefer Firefox's exit code when we have it — sway often returns 0 after
+  # a one-frame crash (the "flash" the operator reported).
+  if [[ -f "$FFRC_FILE" ]]; then
+    local ffrc
+    ffrc="$(cat "$FFRC_FILE" 2>/dev/null || echo 1)"
+    log "sway exit rc=$rc firefox rc=$ffrc"
+    if [[ "$ffrc" != "0" ]]; then
+      fail "firefox failed (rc=$ffrc) under sway"
+      return "$ffrc"
+    fi
+    return 0
+  fi
+  log "sway exit rc=$rc (firefox never reported status)"
+  [[ $rc -eq 0 ]] || fail "sway failed (rc=$rc)"
   return "$rc"
 }
 
+try_cage() {
+  # Simpler single-app compositor — no keyboard pointer binds, but often works
+  # when a full sway session fails on DRM/seat edge cases.
+  have cage || return 127
+  [[ -n "$FIREFOX" ]] || return 127
+  log "trying cage -- firefox"
+  unset WAYLAND_DISPLAY DISPLAY 2>/dev/null || true
+  rm -f "$FFRC_FILE"
+  run_with_dbus cage -- \
+    env FIREFOX_BIN="$FIREFOX" FOUNDATIONHUB_WEB_LOG="$LOG" \
+    "$RUNFF" "$URLFILE" >>"$LOG" 2>&1
+  local rc=$?
+  if [[ -f "$FFRC_FILE" ]]; then
+    local ffrc
+    ffrc="$(cat "$FFRC_FILE" 2>/dev/null || echo 1)"
+    log "cage exit rc=$rc firefox rc=$ffrc"
+    if [[ "$ffrc" != "0" ]]; then
+      fail "firefox failed (rc=$ffrc) under cage"
+      return "$ffrc"
+    fi
+    return 0
+  fi
+  log "cage exit rc=$rc"
+  return "$rc"
+}
+
+fallback_w3m() {
+  [[ "${FOUNDATIONHUB_WEB_NO_FALLBACK:-0}" == "1" ]] && return 1
+  local html="https://html.duckduckgo.com/html/"
+  # If the requested URL is DDG home, use the text endpoint; else pass through.
+  local target="$URL"
+  case "$URL" in
+    https://duckduckgo.com|https://duckduckgo.com/|http://duckduckgo.com|http://duckduckgo.com/)
+      target="$html" ;;
+  esac
+  for b in w3m lynx links elinks; do
+    if have "$b"; then
+      fail "GUI browser failed — falling back to $b (log: $LOG)"
+      log "fallback: $b $target"
+      "$b" "$target"
+      return $?
+    fi
+  done
+  fail "no GUI and no text browser (install firefox+sway or w3m)"
+  return 1
+}
+
+# ── launch strategy ─────────────────────────────────────────────────────────
 NESTED="${FOUNDATIONHUB_WEB_NESTED:-0}"
 PARENT_WL="${WAYLAND_DISPLAY:-}"
+GUI_RC=1
 
-if [[ "$NESTED" == "1" ]]; then
-  export WLR_BACKENDS=wayland
-  run_sway
-fi
-
-if [[ -n "$PARENT_WL" ]]; then
-  # Already under a compositor. Try a dedicated VT so cage (single-client)
-  # is not asked to host a second app.
-  if command -v openvt >/dev/null 2>&1; then
-    # openvt -s switches; -w waits. -- clears openvt flags for the child.
-    # Strip parent display so the child owns DRM on the new VT.
-    if openvt -s -w -- env -u WAYLAND_DISPLAY -u DISPLAY \
-         FOUNDATIONHUB_WEB_NESTED=0 \
-         XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-         MOZ_ENABLE_WAYLAND=1 \
-         LIBSEAT_BACKEND="$LIBSEAT_BACKEND" \
-         "$0" "$URL"
-    then
+# Nested path when already under a compositor (profile display-stack).
+if [[ "$NESTED" == "1" || -n "$PARENT_WL" ]]; then
+  if [[ -n "$PARENT_WL" && "$NESTED" != "1" ]] && have openvt; then
+    log "parent WAYLAND_DISPLAY=$PARENT_WL — trying openvt dedicated session"
+    openvt -s -w -- env -u WAYLAND_DISPLAY -u DISPLAY \
+      FOUNDATIONHUB_WEB_NESTED=0 \
+      FOUNDATIONHUB_WEB_LOG="$LOG" \
+      XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+      LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-}" \
+      MOZ_ENABLE_WAYLAND=1 \
+      "$0" "$URL" >>"$LOG" 2>&1
+    GUI_RC=$?
+    if [[ $GUI_RC -eq 0 ]]; then
       exit 0
     fi
-    # openvt often needs root — fall through to nested attempt.
+    log "openvt path failed rc=$GUI_RC — trying nested"
   fi
-  # Nested sway as a Wayland client of the parent (works on multi-client
-  # compositors; may fail under cage — error is visible, Hub still resumes).
   export WLR_BACKENDS=wayland
-  run_sway
+  if try_sway; then
+    exit 0
+  fi
+  fallback_w3m
+  exit $?
 fi
 
-# Core path: Hub on kernel VT, Launch suspended curses — take the seat.
-unset WAYLAND_DISPLAY DISPLAY || true
-run_sway
+# Core path: Hub on kernel VT → take DRM on this seat.
+unset WAYLAND_DISPLAY DISPLAY 2>/dev/null || true
+unset WLR_BACKENDS 2>/dev/null || true
+
+last_ffrc() {
+  [[ -f "$FFRC_FILE" ]] || return 1
+  cat "$FFRC_FILE" 2>/dev/null
+}
+
+# Attempt 1: normal sway (GPU/DRM via logind|seatd).
+if try_sway; then
+  exit 0
+fi
+
+# If Firefox itself crashed, more compositors will not help — go to text.
+ffrc="$(last_ffrc || true)"
+if [[ -n "${ffrc:-}" && "$ffrc" != "0" ]]; then
+  log "firefox crashed under compositor (rc=$ffrc) — skip alternate compositors"
+  fallback_w3m
+  exit $?
+fi
+
+# Attempt 2: software renderer (broken/missing GPU drivers still get a frame).
+log "retry sway with WLR_RENDERER=pixman"
+export WLR_RENDERER=pixman
+if try_sway; then
+  exit 0
+fi
+unset WLR_RENDERER
+
+ffrc="$(last_ffrc || true)"
+if [[ -n "${ffrc:-}" && "$ffrc" != "0" ]]; then
+  fallback_w3m
+  exit $?
+fi
+
+# Attempt 3: cage (simpler kiosk compositor) when sway could not take the seat.
+if try_cage; then
+  exit 0
+fi
+
+# Attempt 4: text browser so the feature still does something useful.
+fallback_w3m
+exit $?
