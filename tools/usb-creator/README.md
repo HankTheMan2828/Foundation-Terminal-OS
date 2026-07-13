@@ -37,9 +37,31 @@ path double-fetches the ISO (~1.5 GB) and often re-downloads the AI model
 3. The creator:
    - reuses a local ISO if it matches the current GitHub release (SHA checked);
    - downloads a **new** ISO only when yours is missing or stale;
-   - reuses `model.gguf` / `llama-server` once they exist (no re-download).
+   - reuses `model.gguf` / `ai-runtime.tar.gz` once they exist (no re-download);
+   - **probes the stick** and picks the cheapest safe write mode (below).
 4. On the mini PC: boot the stick → **UPDATE** → type `UPDATE`  
    (use **INSTALL** / `ERASE` only for a full wipe).
+
+### Stick-aware write modes (automatic)
+
+Before writing, the creator compares the stick to the local ISO and AI files:
+
+| Stick state | Mode | Confirm word | What happens |
+|---|---|---|---|
+| ISO + AI already match | **skip** | — | Nothing written |
+| ISO matches, AI missing/stale | **ai_only** | `STAGE` | Write AI sidecar only (~1.2 GB) |
+| ISO stale, AI still good | **iso_only** | `UPDATE` | Rewrite ISO only; keep AI past 2 GiB |
+| Blank / both need update | **full** | `ERASE` | `diskpart clean` + ISO + AI |
+
+Force a full wipe anytime:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -ForceFull
+```
+
+```sh
+FOUNDATION_FORCE_FULL=1 sudo ./create-foundation-usb.sh
+```
 
 ### Faster write when the mini PC already has Frank AI
 
@@ -49,14 +71,16 @@ Skip re-staging the ~1.2 GB model onto the stick:
 powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -NoModel
 ```
 
+With `-NoModel`, probe still applies: matching ISO → skip; stale ISO →
+ISO-only rewrite (no AI touch).
+
 Use full staging (default, no `-NoModel`) for a **first install** or when the
 target has no working local AI yet.
 
 ### Fix "idle: missing: runtime model" without re-imaging the ISO
 
-If the stick already boots the installer but UPDATE reports no staged AI,
-write **only** the AI sidecar (keeps the ISO, needs `model.gguf` +
-`ai-runtime.tar.gz` next to the scripts):
+The main creator now chooses **ai_only** automatically when the ISO matches
+but the AI sidecar is missing. You can still run the dedicated helper:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Stage-FoundationAI.ps1
@@ -78,7 +102,8 @@ upgrades still need the USB path — see [`docs/UPDATE-SYSTEM.md`](../../docs/UP
 | Delete all TerminalOS files from Downloads each time | Keep a permanent cache folder |
 | Manually download the ISO, then run the creator (it may download again) | Let the creator fetch/refresh the ISO |
 | Re-download the AI model every release | Keep `model.gguf` next to the scripts |
-| Full AI staging for every stick refresh | `-NoModel` once AI is already on the PC |
+| Full AI staging for every stick refresh | Let probe pick `iso_only` / `skip`, or `-NoModel` |
+| Force-rewriting an already-current stick | Run again — probe should **skip** |
 | USB for every Hub/Frank code change | Settings → SYSTEM UPDATE when possible |
 
 ---
@@ -92,8 +117,9 @@ upgrades still need the USB path — see [`docs/UPDATE-SYSTEM.md`](../../docs/UP
 2. Plug in the USB stick.
 3. Double-click `FoundationUSBCreator.cmd` and follow the prompts. It asks
    Windows for administrator rights (needed to write a raw disk), shows only
-   USB sticks — internal drives are never offered — and requires typing
-   `ERASE` before it touches anything.
+   USB sticks — internal drives are never offered — probes what is already
+   on the stick, and gates the write with `ERASE` / `UPDATE` / `STAGE`
+   depending on mode.
 
 Point at a specific ISO (skip discovery):
 
@@ -106,12 +132,13 @@ powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -Iso C:\path
 ```sh
 sudo ./create-foundation-usb.sh                # auto-finds/downloads the ISO
 sudo ./create-foundation-usb.sh path/to.iso    # or point it at one
-FOUNDATION_NO_MODEL=1 sudo ./create-foundation-usb.sh   # ISO only
+FOUNDATION_NO_MODEL=1 sudo ./create-foundation-usb.sh   # never stage AI
+FOUNDATION_FORCE_FULL=1 sudo ./create-foundation-usb.sh # always full wipe
 ```
 
-Same behavior: only removable/USB disks are offered, `ERASE` gate before the
-write. Keep `model.gguf` and `llama-server` next to the script so later runs
-do not re-download them.
+Same stick-aware modes as Windows: only removable/USB disks are offered;
+confirm with `ERASE` / `UPDATE` / `STAGE` as prompted. Keep `model.gguf` and
+`ai-runtime.tar.gz` next to the script so later runs do not re-download them.
 
 ## Then, on the target machine
 
