@@ -122,8 +122,10 @@ serves the OpenAI endpoint on `127.0.0.1:8080` as user `frank`, bound to loopbac
 and RAM-capped (`MemoryMax=6G`). The shipped default is `[sift] backend = "local"`.
 
 ## Model + server delivery — the offline story (raw-offset staging)
-The installed mini PCs have **no network** (until ~v0.1.0), so the model + server
-binary can't be fetched on the target — they must ride on the USB stick. But the
+Installed machines are often offline by policy (transport default is USB or
+wired-only; see [`UPDATE-SYSTEM.md`](UPDATE-SYSTEM.md)), so the model + server
+binary can't be assumed fetchable on the target — they must ride on the USB
+stick. But the
 GGUF is ~1.2 GB, too big to bake into the ISO (GitHub's 2 GiB asset cap), and
 **Windows won't surface a volume for a 2nd partition on a removable ISO stick**
 (both the Storage cmdlets and diskpart fail). So delivery uses a **raw-offset

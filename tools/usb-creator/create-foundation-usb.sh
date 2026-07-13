@@ -65,7 +65,7 @@ find_iso() {
     else
       c_warn "no GitHub release of $GITHUB_REPO has an ISO attached"
     fi
-    c_warn "a maintainer publishes one by pushing a TerminalOS-v* tag (CI attaches the ISO);"
+    c_warn "a maintainer publishes one by pushing a v0.1.x (semver) tag (CI attaches the ISO);"
     c_warn "until then, build it with image/build-iso.sh and pass its path as an argument"
     exit 1
   }

@@ -8,13 +8,13 @@ from foundationhub import updates
 class ReleaseFileTests(unittest.TestCase):
     def test_full_file(self):
         info = updates.parse_release(
-            "version=TerminalOS-v0.0.3\n"
-            "built=2026-07-04\n"
+            "version=v0.1.0\n"
+            "built=2026-07-13\n"
             "profile=zenbook-duo-2024\n"
-            "history=installed 2026-07-04 TerminalOS-v0.0.3\n"
-            "history=updated 2026-07-19 TerminalOS-v0.0.4\n")
-        self.assertEqual(info["version"], "TerminalOS-v0.0.3")
-        self.assertEqual(info["built"], "2026-07-04")
+            "history=installed 2026-07-13 v0.1.0\n"
+            "history=updated 2026-07-20 v0.1.1\n")
+        self.assertEqual(info["version"], "v0.1.0")
+        self.assertEqual(info["built"], "2026-07-13")
         self.assertEqual(info["profile"], "zenbook-duo-2024")
         self.assertEqual(len(info["history"]), 2)
         self.assertTrue(info["history"][1].startswith("updated"))
@@ -31,23 +31,28 @@ class ReleaseFileTests(unittest.TestCase):
 
 class VersionCompareTests(unittest.TestCase):
     def test_tuple(self):
-        self.assertEqual(updates.version_tuple("TerminalOS-v0.0.3"), (0, 0, 3))
+        # Current scheme (v0.1.x first stable line).
+        self.assertEqual(updates.version_tuple("v0.1.0"), (0, 1, 0))
         self.assertEqual(updates.version_tuple("v1.2.10"), (1, 2, 10))
+        # Legacy pre-stable tags remain readable for upgrade compare.
+        self.assertEqual(updates.version_tuple("TerminalOS-v0.0.24"), (0, 0, 24))
         self.assertIsNone(updates.version_tuple("unversioned"))
 
     def test_newer(self):
-        self.assertTrue(updates.is_newer("TerminalOS-v0.0.4", "TerminalOS-v0.0.3"))
-        self.assertFalse(updates.is_newer("TerminalOS-v0.0.3", "TerminalOS-v0.0.3"))
-        self.assertFalse(updates.is_newer("TerminalOS-v0.0.2", "TerminalOS-v0.0.3"))
-        # 0.0.10 > 0.0.9 — numeric, not lexicographic.
-        self.assertTrue(updates.is_newer("TerminalOS-v0.0.10", "TerminalOS-v0.0.9"))
+        self.assertTrue(updates.is_newer("v0.1.1", "v0.1.0"))
+        self.assertFalse(updates.is_newer("v0.1.0", "v0.1.0"))
+        self.assertFalse(updates.is_newer("v0.1.0", "v0.1.1"))
+        # 0.1.10 > 0.1.9 — numeric, not lexicographic.
+        self.assertTrue(updates.is_newer("v0.1.10", "v0.1.9"))
+        # First stable supersedes any legacy 0.0.x install.
+        self.assertTrue(updates.is_newer("v0.1.0", "TerminalOS-v0.0.24"))
 
     def test_unversioned_machine_takes_any_release(self):
-        self.assertTrue(updates.is_newer("TerminalOS-v0.0.3", "unversioned"))
-        self.assertTrue(updates.is_newer("TerminalOS-v0.0.3", "dev-89fcdba"))
+        self.assertTrue(updates.is_newer("v0.1.0", "unversioned"))
+        self.assertTrue(updates.is_newer("v0.1.0", "dev-89fcdba"))
 
     def test_unparsable_release_never_offered(self):
-        self.assertFalse(updates.is_newer("garbage", "TerminalOS-v0.0.3"))
+        self.assertFalse(updates.is_newer("garbage", "v0.1.0"))
         self.assertFalse(updates.is_newer("", "unversioned"))
 
 

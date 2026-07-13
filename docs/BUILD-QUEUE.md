@@ -1,6 +1,12 @@
 # Foundation TerminalOS — Build Queue: In-House Application Sessions
 
-Instructions for future working sessions. Each § below is a self-contained
+> **Mostly complete as of v0.1.0.** §§1–5 (notes, file manager, system
+> monitor, media, arcade, chess) and the Frank voice pass landed; this file
+> remains as the original session specs + the remaining/parked work
+> (Foundation Depths roguelike, portability tiers, parked items). Do not
+> re-build completed sections. Live status: [`STATUS.md`](STATUS.md).
+
+Instructions for working sessions. Each § below is a self-contained
 spec: a session prompt will name one section; read GLOBAL CONSTRAINTS plus
 that section and build exactly that. Each section carries a **recommended
 Claude model** (set in the model picker before starting the chat) sized to

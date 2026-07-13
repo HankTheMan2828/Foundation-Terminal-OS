@@ -76,7 +76,13 @@ _VERSION_RE = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
 
 
 def version_tuple(tag: str) -> tuple | None:
-    """TerminalOS-v0.0.3 → (0, 0, 3); None when unparsable."""
+    """Parse a release tag into a comparable triple.
+
+    Current scheme: ``v0.1.0`` → ``(0, 1, 0)``.
+    Legacy scheme (still readable on installed machines):
+    ``TerminalOS-v0.0.24`` → ``(0, 0, 24)``.
+    Returns None when unparsable.
+    """
     m = _VERSION_RE.search(tag or "")
     return tuple(int(g) for g in m.groups()) if m else None
 

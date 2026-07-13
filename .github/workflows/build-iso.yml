@@ -4,8 +4,8 @@
 #
 #   - every manual run ("Run workflow" button) uploads the ISO as a build
 #     artifact you can download from the run page
-#   - pushing a tag like TerminalOS-v0.0.1 (the operator's release naming
-#     convention) additionally creates a GitHub Release with the ISO, its
+#   - pushing a tag like v0.1.0 (semver: vMAJOR.MINOR.PATCH, first stable
+#     line is 0.1.x) additionally creates a GitHub Release with the ISO, its
 #     SHA256SUMS, and the USB-creator programs attached — that release page
 #     is the end-user download, see tools/usb-creator/README.md
 name: build-iso
@@ -18,7 +18,9 @@ on:
         type: boolean
         default: false
   push:
-    tags: ["TerminalOS-v*"]
+    # First stable line: v0.1.x. Also match v1+ when that day comes.
+    # Legacy TerminalOS-v0.0.x tags are frozen history and no longer trigger CI.
+    tags: ["v0.*", "v1.*"]
 
 permissions:
   contents: write # release creation
@@ -92,7 +94,7 @@ jobs:
       # overwrite never applies — without this prune, every rebuild leaves
       # the previous ISO/payload on the release beside the new one.
       - name: Prune stale release assets (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/TerminalOS-v')
+        if: startsWith(github.ref, 'refs/tags/v0.') || startsWith(github.ref, 'refs/tags/v1.')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -110,20 +112,23 @@ jobs:
         # ONLY prunes this job's own assets. The AI server binary is owned by
         # build-ai-binary.yml (which runs concurrently on the same tag and
         # replaces its own same-named asset) — pruning it here would race-delete
-        # the binary that job just uploaded, which is exactly what bit v0.0.6.
+        # the binary that job just uploaded.
 
       - name: Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/TerminalOS-v')
+        if: startsWith(github.ref, 'refs/tags/v0.') || startsWith(github.ref, 'refs/tags/v1.')
         uses: softprops/action-gh-release@v2
         with:
           body: |
-            Foundation TerminalOS installer.
+            Foundation TerminalOS **${{ github.ref_name }}** — first stable line is `0.1.x`.
 
             **To install:** download the ISO plus the USB creator for your
             computer (`FoundationUSBCreator.cmd` + `Create-FoundationUSB.ps1`
             on Windows, `create-foundation-usb.sh` on macOS/Linux), run the
             creator to write a USB stick, then boot the target machine from
             it. Details: `tools/usb-creator/README.md` in the repo.
+
+            Machines on the legacy `TerminalOS-v0.0.x` line can upgrade to this
+            release via USB UPDATE or Settings → SYSTEM UPDATE (numeric compare).
           files: |
             image/out/foundation-terminalos-*.iso
             image/out/terminalos-payload-*.tar.gz

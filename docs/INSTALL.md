@@ -1,5 +1,8 @@
 # Install Guide
 
+> First stable line: **`v0.1.x`** ([`VERSIONING.md`](VERSIONING.md)).
+> Get a release ISO from GitHub Releases, or build with `image/build-iso.sh`.
+
 > ⚠️ This turns a machine into a locked-down, no-shell kiosk with an overseer
 > that can restrict access. **Not on a machine you need a normal shell on.**
 > Do a dry read of every script first; they print what they'll do.

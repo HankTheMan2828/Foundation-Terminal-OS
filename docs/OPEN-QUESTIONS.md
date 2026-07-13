@@ -1,9 +1,9 @@
 # Open Decisions — Drafted for Your Review
 
-Everything here is a **draft awaiting your approval** (spec §5 and §10). Nothing
-in this file is locked. Where I had to pick something to make the scaffold run,
-I picked a sensible default and marked it **[DEFAULT — change freely]**. Reply
-with edits and I'll apply them.
+Remaining product decisions for Foundation TerminalOS (**v0.1.x** first stable
+line). Many items below are already ✅ locked; open ⬜/🟨 rows are what still
+need operator sign-off. Where a default was required to ship, it is marked
+**[DEFAULT — change freely]**. Reply with edits and they will be applied.
 
 Legend: ⬜ needs your decision · 🟨 drafted, awaiting sign-off · ✅ approved
 

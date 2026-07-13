@@ -15,10 +15,11 @@ The ISO embeds two things at build time:
 ## Getting the ISO without building it
 
 CI builds the ISO automatically (`.github/workflows/build-iso.yml`): every
-tagged release has it attached on the GitHub Releases page, next to the USB
-creator programs from [`tools/usb-creator/`](../tools/usb-creator/README.md),
-and the workflow can be run by hand ("Run workflow") to get it as a build
-artifact. End users should start there — no Arch machine involved anywhere.
+semver tag (`v0.1.x`, … — see [`docs/VERSIONING.md`](../docs/VERSIONING.md))
+gets a GitHub Release with the ISO attached, next to the USB creator programs
+from [`tools/usb-creator/`](../tools/usb-creator/README.md). The workflow can
+also be run by hand ("Run workflow") for a build artifact. End users should
+start on the Releases page — no Arch machine involved anywhere.
 
 ## Building the ISO
 

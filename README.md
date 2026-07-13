@@ -24,11 +24,12 @@ built in-house (notes, files, monitor, media, arcade, chess); the few remaining
 upstream stand-ins are intentional exceptions (classic Rogue) and are documented
 as such.
 
-> **Status:** software-complete scaffold, pre–hardware soak. The deployable
+> **Status:** **v0.1.0 — first stable line** (`0.1.x`). The deployable
 > source, install scripts, ISO pipeline, Home Hub, Frank, games, media, and
-> update system are in-tree and unit-tested off-device (~450 tests). Full
-> installer boots and long-running soak still need real hardware. See
-> [`docs/STATUS.md`](docs/STATUS.md) for the honest working-vs-stub table, and
+> update system are in-tree and unit-tested off-device (~450 tests). Hardware
+> soak and a few polish items remain open; see [`docs/STATUS.md`](docs/STATUS.md)
+> for the working-vs-stub table, [`docs/VERSIONING.md`](docs/VERSIONING.md) for
+> the release naming scheme, and
 > [`tools/screenshots/preview/`](tools/screenshots/preview/) for CRT-styled
 > captures of the live Hub (dev harness — not part of the OS).
 
@@ -53,7 +54,7 @@ flashable installer:
 | Theme + sound | `theme/`, `sounds/` | CRT phosphor look (console font/palette + Plymouth text) and retro soundscape hooks. |
 | Update system | `install/10`, Hub Settings | USB UPDATE mode in the installer + on-demand network updates from Settings (technician-gated). See [`docs/UPDATE-SYSTEM.md`](docs/UPDATE-SYSTEM.md). |
 | Tools | `tools/` | USB creators (Windows / Unix) and off-device screenshot harness. |
-| Docs | `docs/` | Spec, architecture, install guide, status, profiles, open decisions. |
+| Docs | `docs/` | Spec, architecture, install guide, status, versioning, profiles, open decisions. |
 
 ## What's in the box (software)
 
@@ -229,6 +230,7 @@ tools/       USB creators + temporary off-device screenshot harness
 | Doc | Contents |
 |-----|----------|
 | [`docs/STATUS.md`](docs/STATUS.md) | What’s real vs. stubbed, build-order table |
+| [`docs/VERSIONING.md`](docs/VERSIONING.md) | Release tags (`v0.1.x`) and legacy scheme |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Boot chain, processes, Frank isolation |
 | [`docs/BUILD-SPEC.md`](docs/BUILD-SPEC.md) | Requirements / original build spec |
 | [`docs/INSTALL.md`](docs/INSTALL.md) | USB and manual install walkthrough |
@@ -237,4 +239,4 @@ tools/       USB creators + temporary off-device screenshot harness
 | [`docs/UPDATE-SYSTEM.md`](docs/UPDATE-SYSTEM.md) | USB + network update design |
 | [`docs/FRANK-LOCAL-AI.md`](docs/FRANK-LOCAL-AI.md) | On-device BitNet sensor + negotiation |
 | [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | Decisions awaiting sign-off |
-| [`docs/BUILD-QUEUE.md`](docs/BUILD-QUEUE.md) | In-house app session specs |
+| [`docs/BUILD-QUEUE.md`](docs/BUILD-QUEUE.md) | In-house app session specs (mostly landed) |

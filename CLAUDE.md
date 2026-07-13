@@ -25,5 +25,12 @@ branch that would have regressed `foundationhub` naming back to `zenhub`). Do no
 - The OS is **Foundation TerminalOS**. Current in-house app namespace is `foundationhub` (NOT the old
   `zenhub` — that name was renamed away and should not reappear).
 
+## Release tags
+- Semver: **`vMAJOR.MINOR.PATCH`**. First stable line is **`v0.1.x`** (e.g. `v0.1.0`).
+- Pushing a `v0.*` / `v1.*` tag triggers CI release builds (ISO + payload + AI runtime).
+- Legacy pre-stable tags were `TerminalOS-v0.0.N` — frozen history; do not cut new ones.
+- Details: `docs/VERSIONING.md`.
+
 ## See also
-- `docs/ARCHITECTURE.md`, `docs/BUILD-SPEC.md`, `docs/STATUS.md`, `docs/OPEN-QUESTIONS.md`
+- `docs/ARCHITECTURE.md`, `docs/BUILD-SPEC.md`, `docs/STATUS.md`, `docs/VERSIONING.md`,
+  `docs/OPEN-QUESTIONS.md`

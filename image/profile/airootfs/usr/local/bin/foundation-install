@@ -360,7 +360,7 @@ do_update() {
   fi
   mount "$part" "$MNT"
 
-  local cur_ver="unknown (pre-v0.0.3)" new_ver="unversioned"
+  local cur_ver="unknown" new_ver="unversioned"
   [[ -f "$MNT/etc/foundation-release" ]] && \
     cur_ver="$(sed -n 's/^version=//p' "$MNT/etc/foundation-release" | head -1)"
   [[ -f "$REPO/VERSION" ]] && \

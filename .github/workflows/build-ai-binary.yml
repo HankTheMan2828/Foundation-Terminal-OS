@@ -20,10 +20,11 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to attach the binary to (blank = latest TerminalOS-v*)"
+        description: "Release tag to attach the binary to (blank = latest v0.*/v1.* semver tag)"
         required: false
   push:
-    tags: ["TerminalOS-v*"]
+    # Match build-iso.yml: first stable line is v0.1.x (semver).
+    tags: ["v0.*", "v1.*"]
 
 permissions:
   contents: write
@@ -41,7 +42,7 @@ jobs:
             echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
           else
             latest=$(curl -fsSL "https://api.github.com/repos/${{ github.repository }}/releases" \
-              | jq -r '[.[] | .tag_name | select(startswith("TerminalOS-v"))][0]')
+              | jq -r '[.[] | .tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))][0]')
             echo "tag=$latest" >> "$GITHUB_OUTPUT"
           fi
 

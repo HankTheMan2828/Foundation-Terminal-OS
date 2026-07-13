@@ -39,7 +39,7 @@ machines: boot lands on a **login screen**, not the Hub.
 - **Auth is password now, ID-card/user-ID later** (decided). Three failed
   passwords = a 30-second cooldown on that account.
 
-## How it's built (scaffold reality)
+## How it's built (current implementation)
 
 - **Registry:** `/etc/foundationhub/users.json` — root writes, the Hub reads
   (`root:operator 0640`). Password + setup-code hashes are salted
@@ -60,8 +60,8 @@ machines: boot lands on a **login screen**, not the Hub.
   (the hook that per-user sessions will use).
 - **Hardening note (future):** with the registry group-readable, one user
   could offline-attack teammates' password hashes. Acceptable for the
-  scaffold; the fix (verification moving into a root auth helper, registry
-  going `0600`) should ride along with the PAM work.
+  current shared-console design; the fix (verification moving into a root
+  auth helper, registry going `0600`) should ride along with the PAM work.
 
 ## Frank in a multi-user world (decided)
 

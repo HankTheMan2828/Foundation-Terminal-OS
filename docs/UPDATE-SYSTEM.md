@@ -37,21 +37,23 @@ ethernet; wireless exists but only as an opt-in configured from Settings).
 
 ## 2. Version identity (prerequisite for both paths)
 
-Today an installed system has no version marker (`profiledef.sh` stamps the
-ISO with a build *date* only). Both update paths need "what am I running"
-vs. "what is available":
+Release tags follow **semver** `vMAJOR.MINOR.PATCH` — first stable line is
+**`v0.1.x`**. Full scheme: [`VERSIONING.md`](VERSIONING.md). Both update
+paths need "what am I running" vs. "what is available":
 
 - `image/build-iso.sh` writes a `VERSION` file into the embedded repo copy
   at build time, containing `git describe --tags --always` (in CI on a tag
-  build this is exactly `TerminalOS-v0.0.3`) plus the build date.
-- `install/run-all.sh` (a small new final step) records
-  **`/etc/foundation-release`** on the target: version, build date, the
-  hardware profile applied (so an update never has to re-ask), and an
-  append-only history line per install/update (`installed 2026-07-04
-  TerminalOS-v0.0.3`, `updated 2026-07-19 TerminalOS-v0.0.4`, …).
+  build this is exactly `v0.1.0`) plus the build date.
+- `install/10-update-system.sh` records **`/etc/foundation-release`** on the
+  target: version, build date, the hardware profile applied (so an update
+  never has to re-ask), and an append-only history line per install/update
+  (`installed 2026-07-13 v0.1.0`, `updated 2026-07-20 v0.1.1`, …).
 - A dev-tree install without `VERSION` records `dev-<git describe>` or
   `unversioned` — honest, never faked.
-- Settings → SYSTEM STATUS gains a read-only VERSION line from this file.
+- Settings → SYSTEM STATUS shows a read-only VERSION line from this file.
+- **Legacy installs** still carry `TerminalOS-v0.0.N` in
+  `/etc/foundation-release`; compare is numeric on the triple, so
+  `v0.1.0` is correctly offered over `TerminalOS-v0.0.24`.
 
 ## 3. Transport policy (per-machine setting)
 
@@ -97,7 +99,7 @@ it is really ours (`/opt/terminal-os/install/run-all.sh` +
 
 ```
   1) UPDATE the existing Foundation TerminalOS on /dev/sda2
-       currently: TerminalOS-v0.0.2   this medium: TerminalOS-v0.0.3
+       currently: v0.1.0   this medium: v0.1.1
   2) INSTALL fresh (ERASES a disk completely)
 ```
 
@@ -292,9 +294,10 @@ For §12 sign-off, stated as testable invariants:
    + Settings → SYSTEM UPDATE screen (`screens/updates.py`): on-demand
    CHECK, technician-gated APPLY and UPDATE POLICY. Backend unit-tested
    (`hub/tests/test_updates.py`).
-7. ⬜ **Hardware pass — the remaining step:** run a real v0.0.x → v0.0.y
-   USB update on the mini PC testbed; verify the preservation contract
-   table row by row; verify an active lockout survives; exercise the
-   network path end-to-end against a real release.
+7. ⬜ **Hardware pass — the remaining step:** run a real `v0.1.x` →
+   `v0.1.y` (or legacy `TerminalOS-v0.0.x` → `v0.1.0`) USB update on the
+   mini PC testbed; verify the preservation contract table row by row;
+   verify an active lockout survives; exercise the network path
+   end-to-end against a real release.
 
 Each landed on `Terminal-OS-Main` directly, per the single-mainline policy.

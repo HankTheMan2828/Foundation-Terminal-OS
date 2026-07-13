@@ -1,5 +1,10 @@
 # Operator feedback — first successful hardware run (2026-07-03, mini PC)
 
+> **Archive.** Historical operator feedback from the first hardware session.
+> Items here drove product work that has since landed (see
+> [`STATUS.md`](STATUS.md)). Kept for decision context — do not treat as a
+> live backlog. Live tracking is STATUS + [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md).
+
 The first end-to-end hardware install (USB creator → boot → installer →
 Home Hub) succeeded on the mini PC testbed. This is the operator's raw
 feedback from that first session, itemized for follow-up work. Items are
