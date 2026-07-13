@@ -550,6 +550,10 @@ try {
   Bad 'disk writes, or something reopened the stick mid-write. Try excluding'
   Bad 'PowerShell in your AV for a moment, or write the same ISO with Rufus'
   Bad 'or balenaEtcher instead - the ISO itself is fine.'
+  Bad 'NOTE: Rufus/Etcher/Ventoy write the ISO ONLY — they do NOT stage the'
+  Bad 'local AI sidecar. Sticks made that way leave Hub ASSISTANT as:'
+  Bad '  idle: missing: runtime model'
+  Bad 'Re-run THIS creator (without -NoModel) for offline AI on the target.'
   Read-Host 'Press ENTER to close'
   exit 1
 } finally {
@@ -575,6 +579,56 @@ try {
     Bad 'Try a different USB stick or port and run this again.'
     Read-Host 'Press ENTER to close'
     exit 1
+  }
+  # AI sidecar: confirm FOUNDATIONAI2 header + GGUF magic at model_offset.
+  # Without this, a silent seek/write failure shipped sticks that left every
+  # offline install as "idle: missing: runtime model".
+  if ($stageAI) {
+    $null = $check.Seek([long]$STAGE_OFFSET, [IO.SeekOrigin]::Begin)
+    $hdrBuf = New-Object byte[] 4096
+    $got = $check.Read($hdrBuf, 0, 4096)
+    if ($got -lt 64) {
+      Bad 'AI sidecar verification FAILED - could not read header at 2 GiB offset.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
+    $hdrEnd = [Array]::IndexOf($hdrBuf, [byte]0)
+    if ($hdrEnd -lt 0) { $hdrEnd = $hdrBuf.Length }
+    $hdrTextRb = [Text.Encoding]::ASCII.GetString($hdrBuf, 0, $hdrEnd)
+    if (-not $hdrTextRb.StartsWith('FOUNDATIONAI2')) {
+      Bad 'AI sidecar verification FAILED - FOUNDATIONAI2 header missing after write.'
+      Bad 'The ISO is fine, but the local AI was not staged. Re-run this creator.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
+    $moRb = 0L; $msRb = 0L; $soRb = 0L; $ssRb = 0L
+    foreach ($ln in ($hdrTextRb -split "`n")) {
+      $t = $ln.Trim()
+      if ($t.StartsWith('model_offset=')) { [void][long]::TryParse($t.Substring(13), [ref]$moRb) }
+      elseif ($t.StartsWith('model_size=')) { [void][long]::TryParse($t.Substring(11), [ref]$msRb) }
+      elseif ($t.StartsWith('server_offset=')) { [void][long]::TryParse($t.Substring(14), [ref]$soRb) }
+      elseif ($t.StartsWith('server_size=')) { [void][long]::TryParse($t.Substring(12), [ref]$ssRb) }
+    }
+    if ($moRb -lt ([long]$STAGE_OFFSET + 4096) -or $msRb -le 0 -or $ssRb -le 0) {
+      Bad ("AI sidecar verification FAILED - bad header fields (mo={0} ms={1} ss={2})." -f $moRb, $msRb, $ssRb)
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
+    $null = $check.Seek($moRb, [IO.SeekOrigin]::Begin)
+    $gguf = New-Object byte[] 4
+    if ($check.Read($gguf, 0, 4) -lt 4 -or [Text.Encoding]::ASCII.GetString($gguf) -ne 'GGUF') {
+      Bad 'AI sidecar verification FAILED - model GGUF magic not at model_offset.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
+    $null = $check.Seek($soRb, [IO.SeekOrigin]::Begin)
+    $srvMag = New-Object byte[] 2
+    if ($check.Read($srvMag, 0, 2) -lt 2 -or $srvMag[0] -ne 0x1f -or $srvMag[1] -ne 0x8b) {
+      Bad 'AI sidecar verification FAILED - runtime is not a gzip tarball at server_offset.'
+      Read-Host 'Press ENTER to close'
+      exit 1
+    }
+    Good ("AI sidecar verified (model {0:N0} MB + runtime {1:N0} KB)." -f ($msRb / 1MB), ($ssRb / 1KB))
   }
 } finally {
   $check.Close()

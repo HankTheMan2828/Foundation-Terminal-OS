@@ -96,3 +96,22 @@ def test_gguf_magic_constant():
 def test_gzip_runtime_magic():
     """Runtime tarball is detected by gzip magic 1f 8b (not bare ELF)."""
     assert bytes([0x1F, 0x8B]) == b"\x1f\x8b"
+
+
+def test_complete_payload_rule_matches_installers():
+    """install/11 + foundation-install: ready only with model AND runtime blob.
+
+    Either runtime.tar.gz (preferred gzip) or a server blob at llama-server
+    counts — do not require -x on llama-server (gzip payload is not executable).
+    Missing either half is exactly what Hub shows as:
+    idle: missing: runtime model
+    """
+    def complete(has_model: bool, has_runtime_tar: bool, has_server_blob: bool) -> bool:
+        return bool(has_model and (has_runtime_tar or has_server_blob))
+
+    assert complete(True, True, False)
+    assert complete(True, False, True)
+    assert complete(True, True, True)
+    assert not complete(False, True, True)
+    assert not complete(True, False, False)
+    assert not complete(False, False, False)

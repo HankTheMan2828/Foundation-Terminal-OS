@@ -26,6 +26,9 @@ path double-fetches the ISO (~1.5 GB) and often re-downloads the AI model
    - `model.gguf` — Frank AI weights (keep forever)
    - `ai-runtime.tar.gz` — llama-server **+ libllama/libggml** (keep forever;
      a bare `llama-server` ELF alone will **not** start on the target)
+   After a successful write the creator **verifies** the AI sidecar
+   (`FOUNDATIONAI2` header + GGUF + gzip magic). If you do not see
+   `AI sidecar verified`, do not use that stick for a first AI install.
 
 ### Every new version
 
@@ -48,6 +51,18 @@ powershell -ExecutionPolicy Bypass -File .\Create-FoundationUSB.ps1 -NoModel
 
 Use full staging (default, no `-NoModel`) for a **first install** or when the
 target has no working local AI yet.
+
+### Fix "idle: missing: runtime model" without re-imaging the ISO
+
+If the stick already boots the installer but UPDATE reports no staged AI,
+write **only** the AI sidecar (keeps the ISO, needs `model.gguf` +
+`ai-runtime.tar.gz` next to the scripts):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Stage-FoundationAI.ps1
+```
+
+Confirm it prints `AI sidecar verified`, then boot the mini PC → **UPDATE**.
 
 ### Even faster: no USB (code-only updates)
 

@@ -246,6 +246,18 @@ server_size=$ssize
   dd if="$STAGE_SERVER" of="$WRITE_DEV" bs="$BS" seek=$(( srv_off / 1048576 )) conv=notrunc 2>/dev/null \
     && c_ok "staged the AI runtime onto the stick ($ssize bytes)."
   sync
+  # Read-back: header + GGUF + gzip magic so silent write failures never ship
+  # a stick that leaves the target as "idle: missing: runtime model".
+  local rb magic
+  rb="$(dd if="$WRITE_DEV" bs=4096 skip=$(( STAGE_OFFSET / 4096 )) count=1 2>/dev/null | tr -d '\000')"
+  if [[ "$rb" != FOUNDATIONAI2* ]]; then
+    fail_ai "AI sidecar verification failed — FOUNDATIONAI2 header missing after write"
+  fi
+  magic="$(dd if="$WRITE_DEV" bs=1 skip="$model_off" count=4 2>/dev/null || true)"
+  [[ "$magic" == "GGUF" ]] || fail_ai "AI sidecar verification failed — GGUF magic missing at model_offset"
+  magic="$(dd if="$WRITE_DEV" bs=1 skip="$srv_off" count=2 2>/dev/null || true)"
+  [[ "$magic" == $'\x1f\x8b' ]] || fail_ai "AI sidecar verification failed — runtime is not gzip at server_offset"
+  c_ok "AI sidecar verified on the stick (model + runtime tarball)"
 }
 write_ai_sidecar
 [[ "$OS" == "Darwin" ]] && { diskutil eject "$DEV" >/dev/null 2>&1 || true; }

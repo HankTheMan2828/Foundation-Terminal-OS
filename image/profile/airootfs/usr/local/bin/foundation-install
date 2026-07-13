@@ -77,13 +77,43 @@ trap on_error ERR
 
 # The disk we booted from — never a target for anything.
 detect_live_disk() {
-  local live_src live_disk=""
+  local live_src live_disk="" cand
+  # Primary: archiso bootmnt (normal live ISO boot).
   live_src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
   if [[ -n "$live_src" && -b "$live_src" ]]; then
     live_disk="$(lsblk -no pkname "$live_src" 2>/dev/null | head -1 || true)"
     # A dd'd ISO may be mounted from the whole device, not a partition —
     # pkname is empty then, and the device itself is the disk to exclude.
     [[ -z "$live_disk" ]] && live_disk="$(basename "$live_src")"
+  fi
+  # Fallbacks: some firmwares / Ventoy / odd mounts leave bootmnt empty even
+  # though the stick is present. Without a live disk name, stage_frank_ai
+  # never runs → every offline install ends as "idle: missing: runtime model".
+  if [[ -z "$live_disk" ]]; then
+    for cand in /run/archiso/bootmnt /run/archiso/copytoram /iso; do
+      live_src="$(findmnt -no SOURCE "$cand" 2>/dev/null || true)"
+      [[ -n "$live_src" && -b "$live_src" ]] || continue
+      live_disk="$(lsblk -no pkname "$live_src" 2>/dev/null | head -1 || true)"
+      [[ -z "$live_disk" ]] && live_disk="$(basename "$live_src")"
+      [[ -n "$live_disk" ]] && break
+    done
+  fi
+  if [[ -z "$live_disk" ]]; then
+    # Last resort: whole USB disks that carry a FOUNDATIONAI2 header at the
+    # fixed AI staging offset (USB creator sidecar). TYPE=disk so we never
+    # probe partitions; nvme0n1 (whole) is included, sda1 is not.
+    local dev name
+    while read -r name; do
+      [[ -n "$name" ]] || continue
+      dev="/dev/$name"
+      [[ -b "$dev" ]] || continue
+      if dd if="$dev" bs=4096 skip=$((2147483648 / 4096)) count=1 2>/dev/null \
+           | tr -d '\000' | head -c 16 | grep -q '^FOUNDATIONAI2'; then
+        live_disk="$name"
+        break
+      fi
+    done < <(lsblk -dn -o NAME,TYPE,TRAN 2>/dev/null \
+               | awk '$2=="disk" && $3=="usb" {print $1}')
   fi
   echo "$live_disk"
 }
@@ -101,11 +131,31 @@ detect_live_disk() {
 STAGE_OFFSET=2147483648   # 2 GiB — keep in sync with the USB creators
 stage_frank_ai() {
   local disk_name="$1" dest="$2"
+  [[ -n "$dest" && -d "$dest" ]] || {
+    c_warn "AI stage dest missing ($dest) — skipping"; return 0; }
+
+  # Multi-disk scan helper (install/stage-frank-ai.sh). Prefer the payload
+  # being installed so a USB UPDATE can pick up the fix without the live
+  # foundation-install binary itself being rebuilt into airootfs… when the
+  # payload is new enough to ship the helper. Scans every whole disk for
+  # FOUNDATIONAI2 (bootmnt-only misses caused "idle: missing: runtime model").
+  local helper=""
+  for helper in \
+    "$dest/install/stage-frank-ai.sh" \
+    "$REPO/install/stage-frank-ai.sh" \
+    "/opt/terminal-os/install/stage-frank-ai.sh"
+  do
+    if [[ -f "$helper" ]]; then
+      c_info "AI stage helper: $helper"
+      bash "$helper" "$dest" "${disk_name:-}" || true
+      return 0
+    fi
+  done
+
+  # Inline fallback for older embeds without the helper script.
   local disk="/dev/${disk_name}"
   [[ -n "$disk_name" && -b "$disk" ]] || {
     c_info "live USB device not found — Frank runs rule-based (AI idle)"; return 0; }
-  [[ -n "$dest" && -d "$dest" ]] || {
-    c_warn "AI stage dest missing ($dest) — skipping"; return 0; }
 
   local hdr
   # Header lives at the fixed offset; first 4 KiB always carries the text
@@ -656,10 +706,15 @@ EOF
   # then picks vendor/ up from $REPO_ROOT on the installed system.
   c_step "Frank local AI (staged model, if present)"
   stage_frank_ai "$live_disk" "$MNT$REPO"
-  if [[ ! -f "$MNT$REPO/vendor/models/model.gguf" \
-     || ! -x "$MNT$REPO/vendor/bitnet/llama-server" ]]; then
-    c_warn "This USB has no complete AI payload (model + llama-server)."
-    c_warn "Fresh offline installs need a stick written WITHOUT -NoModel."
+  # Complete payload = GGUF model + (gzip runtime tarball OR server blob).
+  # Do NOT require -x on llama-server: the preferred path is runtime.tar.gz
+  # (gzip); the file at llama-server may also be that tarball (not +x).
+  if [[ ! -f "$MNT$REPO/vendor/models/model.gguf" ]] \
+     || { [[ ! -f "$MNT$REPO/vendor/bitnet/runtime.tar.gz" ]] \
+          && [[ ! -f "$MNT$REPO/vendor/bitnet/llama-server" ]]; }; then
+    c_warn "This USB has no complete AI payload (model + runtime tarball)."
+    c_warn "Fresh offline installs need a stick written by the Foundation USB"
+    c_warn "creator WITHOUT -NoModel (Rufus/Etcher alone skip the AI sidecar)."
     c_warn "Continuing — rules work; Hub ASSISTANT stays offline until AI is staged."
   fi
 

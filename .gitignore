@@ -18,3 +18,10 @@ aichat.env
 # Flashable-ISO build scratch + output (image/build-iso.sh)
 image/work/
 image/out/
+
+# Local AI staging cache (USB creator; never ship in git)
+tools/usb-creator/model.gguf
+tools/usb-creator/ai-runtime.tar.gz
+tools/usb-creator/llama-server
+tools/usb-creator/*.tmp
+

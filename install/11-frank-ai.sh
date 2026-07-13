@@ -352,8 +352,11 @@ else
     c_info "  - model GGUF ($MODEL)"
     miss_bits="${miss_bits}model "
   fi
-  c_info "fix: rewrite the USB WITHOUT -NoModel (full AI staging), then"
-  c_info "      UPDATE from that stick (docs/FRANK-LOCAL-AI.md)"
+  c_info "fix: rewrite the USB with the Foundation USB creator (NOT Rufus/"
+  c_info "      Etcher) WITHOUT -NoModel, then UPDATE (docs/FRANK-LOCAL-AI.md)."
+  c_info "      Confirm the creator prints 'AI sidecar verified' before unplugging."
+  # Trim trailing space so Hub shows "missing: runtime model" cleanly.
+  miss_bits="${miss_bits%"${miss_bits##*[![:space:]]}"}"
   _write_ai_status "idle" "missing: ${miss_bits:-unknown}"
 fi
 c_ok "Frank local AI step complete"
