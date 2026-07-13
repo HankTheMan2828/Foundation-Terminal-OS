@@ -38,7 +38,7 @@ class TestPlanLaunch:
         assert "NO NETWORK" in plan.error
 
     def test_prefers_text_even_when_firefox_and_display(self):
-        """cage kiosk: never auto-launch GUI — that left operators stuck."""
+        """Text wins even if firefox + Wayland exist — never auto-launch GUI."""
         plan = webaccess.plan_launch(
             online=True,
             which=_which_map({"firefox", "w3m"}),

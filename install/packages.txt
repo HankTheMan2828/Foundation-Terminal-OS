@@ -82,9 +82,9 @@ ffmpeg          # foundationmedia's optional decode engine (mp3/flac/ogg/…)
 # directly, stdlib only — view-only, no kill/renice.
 networkmanager  # nmtui network config (Settings → NETWORK → CONFIGURE)
 # w3m: Programs → WEB ACCESS (DuckDuckGo HTML). Runs in the Hub terminal via
-# Launch — q quits back to Programs. Graphical browsers are NOT the default:
-# cage is single-client and a second GUI browser freezes input (v0.1.1
-# hardware report). Experimental GUI remains opt-in (FOUNDATIONHUB_WEB_GUI).
+# Launch — q quits back to Programs. Graphical browsers are NOT the default
+# (v0.1.1 hardware report: auto-GUI was unusable — no typing, no exit; not
+# zenbook-specific). Experimental GUI remains opt-in (FOUNDATIONHUB_WEB_GUI).
 w3m
 
 # --- AI features (spec §5, §6) ---

@@ -84,8 +84,8 @@ PROG_WEB = "WEB ACCESS"         # DuckDuckGo — needs network (Settings → NET
 
 # ── Web Access (Programs — DuckDuckGo when online) ───────────────────────────
 # Text browser in the Hub terminal (w3m). Graphical browsers are opt-in only
-# (FOUNDATIONHUB_WEB_GUI) — cage kiosks cannot hand keyboard focus to a second
-# Wayland client, so Firefox launches into a stuck surface.
+# (FOUNDATIONHUB_WEB_GUI) and untested — auto-GUI left operators unable to
+# type or exit (v0.1.1 hardware report; not zenbook-specific).
 WEB_SUBTITLE = "DuckDuckGo — text browser (q quit · / search · Esc menu)"
 WEB_NO_BROWSER = "NO BROWSER AVAILABLE"
 WEB_OFFLINE = "NO NETWORK — SETTINGS → NETWORK"

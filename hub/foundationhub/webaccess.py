@@ -3,18 +3,18 @@
 Curses-free launch planner used by Programs → WEB ACCESS.
 
 Why text-first (operator report after v0.1.1):
-  The zenbook (and any cage-based) stack is a *single-app* Wayland kiosk
-  (cage → kitty → Hub). Spawning Firefox/Chromium as a second Wayland client
-  leaves a graphical surface that does not receive keyboard focus and cannot
-  be exited cleanly — the operator is stuck. The reliable path is a text
-  browser *inside the same terminal* the Hub already owns: Launch suspends
+  This OS is console-first (Hub on the kernel VT / a terminal). Auto-picking
+  a graphical browser left the operator in a UI they could neither type in
+  nor exit. That report was *not* from the zenbook profile — GUI browsers
+  are simply not the verified path for this product. The supported path is
+  a text browser *inside the same terminal* the Hub owns: Launch suspends
   curses, runs w3m, and resumes when the user quits (q).
 
 Preference order:
   1. Text browser (w3m / lynx / links / elinks) → DuckDuckGo HTML.
   2. Graphical browser only when explicitly opted in via
      FOUNDATIONHUB_WEB_GUI=1 *and* a display is available (experimental;
-     not used on the default kiosk).
+     untested on target hardware).
   3. Clear offline / not-installed messages otherwise.
 
 General connectivity (any online link — ethernet or WiFi) is enough; this is
@@ -34,11 +34,11 @@ from . import session
 DDG_HOME = "https://duckduckgo.com"
 DDG_HTML = "https://html.duckduckgo.com/html/"
 
-# Opt-in only. Default kiosk must never auto-pick GUI (cage is single-client).
+# Opt-in only — never auto-pick GUI after the v0.1.1 stuck-browser report.
 _GUI_OPT_IN_ENV = "FOUNDATIONHUB_WEB_GUI"
 
-# Graphical candidates (only when opt-in + display). Kept for future multi-app
-# display stacks; not the supported Web Access path today.
+# Graphical candidates (only when opt-in + display). Experimental / untested
+# on target hardware; not the supported Web Access path.
 _GUI_BROWSERS: Sequence[tuple[str, tuple[str, ...]]] = (
     ("firefox", ("firefox", "--new-window")),
     ("firefox-esr", ("firefox-esr", "--new-window")),

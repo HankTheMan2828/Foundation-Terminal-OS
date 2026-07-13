@@ -10,9 +10,10 @@ FILE MANAGER and SYSTEM MONITOR are now native too (queue §2/§3) — ranger an
 btop are both retired. MEDIA now launches the in-house foundationmedia (§4) —
 still a Launch by design (hybrid model: media is a separate program).
 
-WEB ACCESS: DuckDuckGo via a text browser (w3m) in the Hub terminal — the
-only path that works under the cage kiosk. Graphical browsers are opt-in
-(FOUNDATIONHUB_WEB_GUI) and experimental. Needs network — Settings → NETWORK.
+WEB ACCESS: DuckDuckGo via a text browser (w3m) in the Hub terminal —
+console-safe, q to quit. Graphical browsers are opt-in
+(FOUNDATIONHUB_WEB_GUI) and experimental/untested. Needs network —
+Settings → NETWORK.
 """
 from __future__ import annotations
 
