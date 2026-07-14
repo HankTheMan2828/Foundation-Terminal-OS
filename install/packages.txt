@@ -88,12 +88,17 @@ networkmanager  # nmtui network config (Settings → NETWORK → CONFIGURE)
 # Seat / session for the kiosk compositor.
 seatd
 sway
-# Xorg path is the reliable "GUI from a raw VT" launcher (xinit + Xorg).
-# Wayland (sway/cage) is still tried; xwayland helps Firefox as an X11 client.
+# Xorg path is the last-resort "GUI from a raw VT" launcher (xinit + Xorg).
+# sway is preferred (it carries the keyboard-pointer + Ctrl+Q contract);
+# xwayland helps Firefox as an X11 client under the Wayland compositors.
 xorg-server
 xorg-xinit
 xorg-xwayland
 xorg-xsetroot
+# X INPUT DRIVER — xorg-server does NOT depend on it, and without it the X
+# server comes up with no keyboard/mouse at all (v0.1.6 hardware report:
+# Firefox displayed, operator had zero control, not even Ctrl+Q).
+xf86-input-libinput
 # cage: simple single-app Wayland compositor fallback.
 cage
 firefox

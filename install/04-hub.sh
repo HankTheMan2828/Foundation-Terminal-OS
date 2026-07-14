@@ -52,15 +52,20 @@ fi
 # Packages: firefox + sway + seatd (install/packages.txt). The wrapper owns
 # the enter/exit contract and keyboard pointer binds — see its header.
 pac firefox sway seatd cage xorg-server xorg-xinit xorg-xwayland xorg-xsetroot \
-  dbus w3m || pac w3m || true
+  xf86-input-libinput dbus w3m || pac w3m || true
 install_file "usr/local/bin/foundationhub-web" "/usr/local/bin/foundationhub-web" 0755
-# seatd + video/input/seat groups for DRM when launching Xorg/sway/cage from
-# the Hub. seatd-launch is used at runtime when available.
+# Xorg escape hatch: the Xorg path has no WM, so Ctrl+Alt+Backspace killing a
+# wedged X server is the guaranteed way back to the Hub (wrapper vt_reset's).
+install_file "etc/X11/xorg.conf.d/90-foundationhub-zap.conf" \
+  "/etc/X11/xorg.conf.d/90-foundationhub-zap.conf" 0644
+# seatd + video/input/seat groups for DRM when launching sway/cage/Xorg from
+# the Hub. The wrapper talks to THIS system seatd (seatd-launch only if it's
+# somehow not running — a second seatd beside it kills every GUI attempt).
 if is_arch; then
   usermod -aG seat,video,input "$OPERATOR" 2>/dev/null || true
   systemctl enable seatd.service 2>/dev/null || true
   systemctl start seatd.service 2>/dev/null || true
-  c_ok "Web Access: foundationhub-web (Xorg/sway Firefox; w3m last resort)"
+  c_ok "Web Access: foundationhub-web (sway Firefox preferred; w3m last resort)"
 fi
 
 # Register the shell and set it (spec §4). After this the operator has NO bash.

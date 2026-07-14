@@ -7,10 +7,12 @@
 #   3. Provide keyboard pointer control when the compositor supports it
 #   4. Fall back to w3m only after every graphical path has failed
 #
-# Pointer (sway path):
+# Pointer (sway path — preferred, tried first):
 #   Alt+arrows move · Alt+Shift+arrows fine · Alt+Enter click · Ctrl+Q quit
-# On the Xorg path, use Firefox's own keyboard UI (Ctrl+L, Tab, Enter) until
-# a system-wide mouse exists.
+# On the last-resort Xorg path there is no WM: Firefox runs --kiosk
+# (fullscreen, so it owns keyboard focus); drive it with Firefox's own
+# keyboard UI (Ctrl+L, Tab, Enter), Ctrl+Q quits, Ctrl+Alt+Backspace
+# force-kills the server if it wedges (zap conf, install/04).
 #
 # Usage: foundationhub-web [URL]
 # Env:
@@ -107,6 +109,10 @@ trap cleanup EXIT
 
 URLFILE="$WORKDIR/url.txt"
 FFRC_FILE="$WORKDIR/firefox.rc"
+# Touched by the sway Ctrl+Q bind: "the operator chose to leave". Checked
+# before rc so a quit is never mistaken for a failure (which would cascade
+# into the next GUI path and reopen a browser the operator just closed).
+QUITFILE="$WORKDIR/user-quit"
 printf '%s' "$URL" >"$URLFILE"
 
 # Shared Firefox launcher used by sway/cage/xorg paths.
@@ -171,7 +177,15 @@ export LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE:-1}"
 
 run_ff() {
   # Prefer an existing session bus (parent may already be under dbus-run-session).
-  set -- "\$FF" --profile "\$PROFILE" --new-instance "\$URL"
+  # Bare-Xorg path sets FOUNDATIONHUB_FF_KIOSK=1: with no window manager, X
+  # keyboard focus follows the pointer, so Firefox must cover the whole
+  # screen (--kiosk) or keystrokes land on the root window and the operator
+  # has no control at all (v0.1.6 hardware report).
+  if [ "\${FOUNDATIONHUB_FF_KIOSK:-0}" = "1" ]; then
+    set -- "\$FF" --profile "\$PROFILE" --new-instance --kiosk "\$URL"
+  else
+    set -- "\$FF" --profile "\$PROFILE" --new-instance "\$URL"
+  fi
   if [ -n "\${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     "\$@"
   elif command -v dbus-run-session >/dev/null 2>&1; then
@@ -270,8 +284,9 @@ bindsym Alt+BackSpace   seat - cursor press button3, seat - cursor release butto
 bindsym Alt+Prior       seat - cursor press button4, seat - cursor release button4
 bindsym Alt+Next        seat - cursor press button5, seat - cursor release button5
 
-bindsym Ctrl+q exec sh -c 'killall -q firefox firefox-bin firefox-esr 2>/dev/null; swaymsg exit'
-bindsym Ctrl+Q exec sh -c 'killall -q firefox firefox-bin firefox-esr 2>/dev/null; swaymsg exit'
+# pkill (procps-ng, always in base) not killall (psmisc, not guaranteed).
+bindsym Ctrl+q exec sh -c 'touch $QUITFILE; pkill firefox 2>/dev/null; swaymsg exit'
+bindsym Ctrl+Q exec sh -c 'touch $QUITFILE; pkill firefox 2>/dev/null; swaymsg exit'
 
 for_window [app_id="firefox"] border none, fullscreen enable
 for_window [app_id="firefox-esr"] border none, fullscreen enable
@@ -304,13 +319,17 @@ try_sway() {
     fi
   fi
 
-  rm -f "$FFRC_FILE"
+  rm -f "$FFRC_FILE" "$QUITFILE"
   # -d debug logs to stderr → our log
   run_gui "${scmd[@]}" >>"$LOG" 2>&1
   local rc=$?
   local ffrc
   ffrc="$(read_ffrc)"
   log "sway done mode=$mode sway_rc=$rc firefox_rc=${ffrc:-none}"
+  if [[ -e "$QUITFILE" ]]; then
+    log "operator quit (Ctrl+Q) — session over"
+    return 0
+  fi
   if [[ -n "$ffrc" ]]; then
     if [[ "$ffrc" == "0" ]]; then
       return 0
@@ -388,6 +407,8 @@ export MOZ_WEBRENDER=0
 export MOZ_ACCELERATED=0
 export LIBGL_ALWAYS_SOFTWARE=1
 export FOUNDATIONHUB_WEB_LOG="$LOG"
+# No WM on this path — Firefox must own the whole screen for focus (run_ff).
+export FOUNDATIONHUB_FF_KIOSK=1
 # Optional: X11 mousekeys on keypad (NumLock) if xkbset exists.
 command -v xkbset >/dev/null 2>&1 && xkbset m 2>/dev/null || true
 # Keep a black root so a failed client is obvious.
@@ -466,24 +487,29 @@ fi
 unset WAYLAND_DISPLAY DISPLAY 2>/dev/null || true
 unset WLR_BACKENDS 2>/dev/null || true
 
-# 1) Xorg first — historically the most reliable "GUI from a VT" path.
-try_xorg && exit 0
-
-# 2) cage + XWayland (simple single-app compositor).
-try_cage x11 && exit 0
-try_cage wayland && exit 0
-
-# 3) sway with keyboard pointer (native Wayland, then X11 client).
+# 1) sway FIRST — it is the only path that implements the operator contract
+#    (Alt+arrows pointer, Alt+Enter click, Ctrl+Q quit). v0.1.5 demoted it
+#    behind Xorg, but sway's failures were the seatd-launch collision fixed
+#    in v0.1.6 — and bare Xorg left the operator with no controls at all.
 try_sway wayland && exit 0
 try_sway x11 && exit 0
 
-# 4) sway software renderer.
+# 2) sway software renderer (GPU-less boxes) — contract still intact.
 log "retry sway with WLR_RENDERER=pixman"
 export WLR_RENDERER=pixman
 export LIBGL_ALWAYS_SOFTWARE=1
-try_sway x11 && exit 0
 try_sway wayland && exit 0
+try_sway x11 && exit 0
 unset WLR_RENDERER
+
+# 3) cage + XWayland: keyboard reaches Firefox (Ctrl+Q quits), no pointer.
+try_cage x11 && exit 0
+try_cage wayland && exit 0
+
+# 4) bare Xorg, last GUI resort: no WM, so Firefox runs --kiosk fullscreen
+#    for keyboard focus. Ctrl+Q quits Firefox; Ctrl+Alt+Backspace force-kills
+#    the server (zap conf from install/04) if it ever wedges.
+try_xorg && exit 0
 
 # 5) Text only after every graphical attempt failed.
 fallback_w3m
