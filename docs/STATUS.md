@@ -1,19 +1,19 @@
 # Status — what's real vs. stubbed
 
 Honest tracking against the spec's build order (§11). **Stable line:
-`v0.1.x`** (first cut `v0.1.0`; current feature cut **`v0.1.7`** gives Web
-Access working controls: v0.1.6 got Firefox on screen via bare Xorg, but the
-X input driver (`xf86-input-libinput`) was never in the package set — the
-operator had zero keyboard/mouse, not even Ctrl+Q. The driver ships now;
-sway (keyboard pointer + Ctrl+Q contract) is preferred again ahead of
-cage/Xorg since its real blocker was the seatd collision fixed in v0.1.6;
-the WM-less Xorg path runs Firefox `--kiosk` so it owns keyboard focus, with
-Ctrl+Alt+Backspace as the guaranteed exit. v0.1.6 fixed the always-w3m
-regression itself: seatd-launch beside the system seatd killed every GUI
-attempt, failed attempts stranded the VT in graphics mode (console looked
-dead until power-cycle), diagnostics now persist at
-`~/.local/state/foundationhub-web.log` and a silent w3m fallback reports in
-the status bar) — see [`VERSIONING.md`](VERSIONING.md).
+`v0.1.x`** (first cut `v0.1.0`; current feature cut **`v0.1.8`** makes the
+sway Firefox session actually usable: the generated sway config's inline
+`exec sh -c '…'` quote-splicing never survived the heredoc, so Firefox
+silently never launched under sway (latent since v0.1.3 — masked until
+v0.1.6/v0.1.7 fixed the seatd collision, shipped the missing X input driver
+`xf86-input-libinput`, and made sway the preferred path). The config now
+execs generated helper scripts (nothing to mis-parse), the duplicate Ctrl+Q
+bind that raised sway's config nagbar is gone, `ttf-dejavu` ships (there was
+NO scalable font on the whole system — every browser glyph rendered blank),
+a watchdog logs whether a Firefox window ever appeared, and Logs → WEB
+ACCESS LOG views the persistent diagnostic log
+(`~/.local/state/foundationhub-web.log`) from the kiosk itself) — see
+[`VERSIONING.md`](VERSIONING.md).
 The OS is
 software-complete for the intended console product: Hub, Frank, games, media,
 install/ISO, and updates are in-tree and unit-tested off-device. Rows still

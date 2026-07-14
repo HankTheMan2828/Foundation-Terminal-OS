@@ -52,7 +52,7 @@ fi
 # Packages: firefox + sway + seatd (install/packages.txt). The wrapper owns
 # the enter/exit contract and keyboard pointer binds — see its header.
 pac firefox sway seatd cage xorg-server xorg-xinit xorg-xwayland xorg-xsetroot \
-  xf86-input-libinput dbus w3m || pac w3m || true
+  xf86-input-libinput dbus ttf-dejavu w3m || pac w3m || true
 install_file "usr/local/bin/foundationhub-web" "/usr/local/bin/foundationhub-web" 0755
 # Xorg escape hatch: the Xorg path has no WM, so Ctrl+Alt+Backspace killing a
 # wedged X server is the guaranteed way back to the Hub (wrapper vt_reset's).

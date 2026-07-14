@@ -138,9 +138,10 @@ NET_NMTUI_MISSING = "[ nmtui not installed — networkmanager package ]"
 # NOTE: there is intentionally no overseer/Frank setting. The operator has no
 # power over Frank, ever — nothing to expose here.
 
-# ── Logs (two distinct sections — spec §5) ───────────────────────────────────
+# ── Logs (spec §5) ────────────────────────────────────────────────────────────
 LOG_SYSTEM = "SYSTEM RECORDS"           # journald/kernel/auth, raw
 LOG_OVERSEER = "OVERSEER LEDGER"        # Frank's ledger — timestamps only (§6)
+LOG_WEB = "WEB ACCESS LOG"              # foundationhub-web diagnostics (persistent)
 
 # ── Notes — one home in Programs: a tabbed, command-driven note list ──────────
 # A single screen with a WORK | PERSONAL tab switch, one numbered "available

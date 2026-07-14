@@ -104,6 +104,11 @@ cage
 firefox
 # Session bus — Firefox often aborts instantly without dbus on a raw VT.
 dbus
+# Scalable fonts — the ONLY fonts elsewhere in the core are console bitmaps
+# (terminus), which fontconfig/GTK cannot use: without this every glyph in
+# Firefox (UI and pages) renders blank (v0.1.7 hardware report: "browser
+# does not work"). DejaVu covers sans/serif/mono in one small package.
+ttf-dejavu
 # w3m: last-resort text fallback only after every GUI path fails.
 w3m
 

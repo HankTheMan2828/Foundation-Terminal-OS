@@ -220,3 +220,26 @@ def status_hint(*,
 def connectivity_summary() -> str:
     """One-line network status for a pre-launch screen / message."""
     return netmod.network_status().summary
+
+
+def web_log_path(env: Optional[dict] = None) -> str:
+    """The persistent foundationhub-web diagnostic log.
+
+    Keep in sync with the wrapper's default and app.launch(): XDG state dir,
+    NOT /run/user — it must survive the reboot a stuck console forces.
+    """
+    e = env if env is not None else os.environ
+    state = e.get("XDG_STATE_HOME") or os.path.join(
+        os.path.expanduser("~"), ".local", "state")
+    return os.path.join(state, "foundationhub-web.log")
+
+
+def read_web_log(limit: int = 500, env: Optional[dict] = None) -> list[str]:
+    """Last `limit` lines of the web diagnostic log; [] if none. Never raises."""
+    try:
+        with open(web_log_path(env), "r", encoding="utf-8",
+                  errors="replace") as fh:
+            lines = [ln.rstrip("\n") for ln in fh]
+    except OSError:
+        return []
+    return lines[-limit:]

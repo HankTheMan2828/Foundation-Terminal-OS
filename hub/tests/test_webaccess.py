@@ -146,6 +146,25 @@ class TestPlanLaunch:
         ) == "text browser · q quit"
 
 
+class TestWebLog:
+    """Persistent diagnostic log reader behind Logs → WEB ACCESS LOG."""
+
+    def test_path_honors_xdg_state_home(self, tmp_path):
+        p = webaccess.web_log_path({"XDG_STATE_HOME": str(tmp_path)})
+        assert p == str(tmp_path / "foundationhub-web.log")
+
+    def test_missing_log_is_empty(self, tmp_path):
+        assert webaccess.read_web_log(env={"XDG_STATE_HOME": str(tmp_path)}) == []
+
+    def test_reads_tail(self, tmp_path):
+        (tmp_path / "foundationhub-web.log").write_text(
+            "\n".join(f"line {i}" for i in range(10)) + "\n")
+        env = {"XDG_STATE_HOME": str(tmp_path)}
+        assert webaccess.read_web_log(env=env)[-1] == "line 9"
+        assert webaccess.read_web_log(limit=3, env=env) == [
+            "line 7", "line 8", "line 9"]
+
+
 class TestWebLaunchStatus:
     """Status-bar line built from the foundationhub-web diagnostic log."""
 
